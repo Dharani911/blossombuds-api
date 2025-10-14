@@ -1,0 +1,38 @@
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.3.xsd">
+
+    <changeSet id="0017-checkout-intent" author="bb">
+        <createTable tableName="checkout_intent">
+            <column name="id" type="BIGSERIAL">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="customer_id" type="BIGINT"/>
+            <column name="order_draft_json" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="items_json" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="amount" type="NUMERIC(14,2)"/>
+            <column name="currency" type="VARCHAR(8)"/>
+            <column name="rzp_order_id" type="VARCHAR(64)"/>
+            <column name="status" type="VARCHAR(16)" defaultValue="PENDING">
+                <constraints nullable="false"/>
+            </column>
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+            <column name="expires_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="created_by" type="VARCHAR(64)"/>
+            <column name="modified_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="modified_by" type="VARCHAR(64)"/>
+        </createTable>
+
+        <createIndex tableName="checkout_intent" indexName="idx_ci_rzp_order_id">
+            <column name="rzp_order_id"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

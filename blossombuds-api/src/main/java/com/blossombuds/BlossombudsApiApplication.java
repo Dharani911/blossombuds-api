@@ -1,4 +1,4 @@
-package com.blossombuds.blossombuds_api;
+package com.blossombuds;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

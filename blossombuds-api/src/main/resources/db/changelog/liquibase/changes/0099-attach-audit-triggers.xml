@@ -1,0 +1,32 @@
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+  https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- Attach set_modified_at() BEFORE UPDATE to all new tables -->
+    <!-- Ref: audit on every table. :contentReference[oaicite:9]{index=9} -->
+
+    <changeSet id="0099-01-attach-audit" author="dharani" runAlways="true">
+        <sql splitStatements="false">
+            DO $$
+            DECLARE t TEXT;
+            BEGIN
+            FOR t IN SELECT unnest(ARRAY[
+            'categories','product_categories','product_options','product_option_values',
+            'admins','customers','addresses',
+            'coupons','coupon_redemptions',
+            'delivery_partners',
+            'order_year_counters','orders','order_items','payments','order_events',
+            'product_reviews','product_review_images',
+            'settings','cms_pages','cms_page_revisions'
+            ]) LOOP
+            IF EXISTS (SELECT 1 FROM pg_class WHERE relname = t) THEN
+            EXECUTE format('DROP TRIGGER IF EXISTS trg_%1$s_mod ON %1$I', t);
+            EXECUTE format('CREATE TRIGGER trg_%1$s_mod BEFORE UPDATE ON %1$I FOR EACH ROW EXECUTE FUNCTION set_modified_at()', t);
+            END IF;
+            END LOOP;
+            END $$;
+        </sql>
+    </changeSet>
+</databaseChangeLog>

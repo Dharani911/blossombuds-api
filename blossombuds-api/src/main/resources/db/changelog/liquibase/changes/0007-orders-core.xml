@@ -1,0 +1,125 @@
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+  https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- order_year_counters + next_public_code() returns YYNNNN (CHAR(6)) and orders table -->
+    <!-- DB stores YYNNNN per spec; app/prints will show 'BB' || public_code. :contentReference[oaicite:5]{index=5}turn2file2 -->
+
+    <changeSet id="0007-01-order-year-counters" author="dharani">
+        <createTable tableName="order_year_counters">
+            <column name="year" type="SMALLINT"><constraints primaryKey="true"/></column>
+            <column name="last_seq" type="INT" defaultValueNumeric="0"/>
+            <!-- audit -->
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true"/>
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="0007-02-next-public-code-fn" author="dharani">
+        <sql splitStatements="false">
+            CREATE OR REPLACE FUNCTION next_public_code()
+            RETURNS CHAR(6)
+            LANGUAGE plpgsql
+            AS $$
+            DECLARE
+            yr SMALLINT := EXTRACT(YEAR FROM NOW())::SMALLINT;
+            new_seq INT;
+            yy TEXT;
+            nnnn TEXT;
+            BEGIN
+            LOOP
+            BEGIN
+            INSERT INTO order_year_counters(year, last_seq, active, created_at)
+            VALUES (yr, 1, true, NOW())
+            ON CONFLICT (year) DO UPDATE SET last_seq = order_year_counters.last_seq + 1
+            RETURNING last_seq INTO new_seq;
+            EXIT;
+            EXCEPTION WHEN unique_violation THEN
+            -- retry
+            END;
+            END LOOP;
+
+            yy := TO_CHAR((yr % 100), 'FM00');
+            nnnn := TO_CHAR(new_seq, 'FM0000');
+            RETURN (yy || nnnn)::CHAR(6);
+            END;
+            $$;
+        </sql>
+    </changeSet>
+
+    <changeSet id="0007-03-orders" author="dharani">
+        <createTable tableName="orders">
+            <column name="id" type="BIGSERIAL"><constraints primaryKey="true"/></column>
+
+            <column name="public_code" type="CHAR(6)"/>
+            <column name="customer_id" type="BIGINT"/>
+            <column name="status" type="order_status_enum"/>
+
+            <!-- Totals (tax-inclusive) -->
+            <column name="items_subtotal" type="NUMERIC(12,2)"/>
+            <column name="shipping_fee" type="NUMERIC(12,2)" defaultValueNumeric="0.00"/>
+            <column name="discount_total" type="NUMERIC(12,2)" defaultValueNumeric="0.00"/>
+            <column name="grand_total" type="NUMERIC(12,2)"/>
+            <column name="currency" type="CHAR(3)" defaultValue="INR"/>
+
+            <!-- Checkout selections & notes -->
+            <column name="courier_name" type="VARCHAR(40)"/>
+            <column name="order_notes" type="TEXT"/>
+
+            <!-- Tracking -->
+            <column name="delivery_partner_id" type="BIGINT"/>
+            <column name="tracking_number" type="VARCHAR(80)"/>
+            <column name="tracking_url" type="TEXT"/>
+            <column name="dispatched_at" type="TIMESTAMPTZ"/>
+            <column name="delivered_at" type="TIMESTAMPTZ"/>
+            <column name="cancelled_at" type="TIMESTAMPTZ"/>
+            <column name="refunded_at" type="TIMESTAMPTZ"/>
+            <column name="tracking_email_sent_at" type="TIMESTAMPTZ"/>
+
+            <!-- Payment snapshot -->
+            <column name="paid_at" type="TIMESTAMPTZ"/>
+            <column name="payment_method" type="VARCHAR(40)"/>
+            <column name="rzp_order_id" type="VARCHAR(100)"/>
+            <column name="rzp_payment_id" type="VARCHAR(100)"/>
+
+            <!-- Shipping address snapshot -->
+            <column name="ship_name" type="VARCHAR(120)"/>
+            <column name="ship_phone" type="VARCHAR(20)"/>
+            <column name="ship_line1" type="VARCHAR(200)"/>
+            <column name="ship_line2" type="VARCHAR(200)"/>
+            <column name="ship_city" type="VARCHAR(100)"/>
+            <column name="ship_state" type="VARCHAR(100)"/>
+            <column name="ship_pincode" type="VARCHAR(10)"/>
+            <column name="ship_country" type="CHAR(2)" defaultValue="IN"/>
+
+            <!-- audit -->
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true"/>
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+
+        <addUniqueConstraint tableName="orders" columnNames="public_code" constraintName="uk_orders_public_code"/>
+
+        <addForeignKeyConstraint baseTableName="orders" baseColumnNames="customer_id"
+                                 referencedTableName="customers" referencedColumnNames="id"
+                                 constraintName="fk_orders_customer" onDelete="SET NULL"/>
+
+        <addForeignKeyConstraint baseTableName="orders" baseColumnNames="delivery_partner_id"
+                                 referencedTableName="delivery_partners" referencedColumnNames="id"
+                                 constraintName="fk_orders_dpartner" onDelete="SET NULL"/>
+
+        <createIndex tableName="orders" indexName="idx_orders_status"><column name="status"/></createIndex>
+        <createIndex tableName="orders" indexName="idx_orders_created_at"><column name="created_at"/></createIndex>
+        <createIndex tableName="orders" indexName="idx_orders_courier_dispatched">
+            <column name="courier_name"/>
+            <column name="dispatched_at"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

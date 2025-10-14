@@ -3,5 +3,43 @@
         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
   https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
-    <!-- Step 5 will add real changesets here -->
+
+    <!-- order_status_enum -->
+    <changeSet id="0001-01-order-enum" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM pg_type WHERE typname = 'order_status_enum'
+            </sqlCheck>
+        </preConditions>
+        <sql>
+            CREATE TYPE order_status_enum AS ENUM
+            ('ORDERED','DISPATCHED','DELIVERED','CANCELLED','REFUNDED','RETURNED_REFUNDED');
+        </sql>
+    </changeSet>
+
+    <!-- payment_status_enum -->
+    <changeSet id="0001-02-payment-enum" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM pg_type WHERE typname = 'payment_status_enum'
+            </sqlCheck>
+        </preConditions>
+        <sql>
+            CREATE TYPE payment_status_enum AS ENUM
+            ('CREATED','AUTHORIZED','CAPTURED','FAILED','REFUNDED');
+        </sql>
+    </changeSet>
+
+    <!-- Audit trigger function: use splitStatements="false" to keep $$ body intact -->
+    <changeSet id="0001-03-audit-trigger-fn" author="dharani">
+        <sql splitStatements="false">
+            CREATE OR REPLACE FUNCTION set_modified_at()
+            RETURNS TRIGGER AS $$
+            BEGIN
+            NEW.modified_at := NOW();
+            RETURN NEW;
+            END; $$ LANGUAGE plpgsql;
+        </sql>
+    </changeSet>
+
 </databaseChangeLog>

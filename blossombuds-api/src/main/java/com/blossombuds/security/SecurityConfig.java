@@ -1,0 +1,145 @@
+package com.blossombuds.security;
+
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
+
+/** Central Spring Security setup: JWT, CORS, stateless, and route rules. */
+@Configuration
+@EnableMethodSecurity
+@RequiredArgsConstructor
+public class SecurityConfig {
+
+    private final JwtAuthFilter jwtAuthFilter;
+
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http
+                // CORS + CSRF
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .csrf(AbstractHttpConfigurer::disable)
+
+                // stateless (JWT only)
+                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+
+                // exception → JSON
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint((req, res, e) -> {
+                            res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                            res.setContentType("application/json");
+                            res.getWriter().write("{\"error\":\"unauthorized\"}");
+                        })
+                        .accessDeniedHandler((req, res, e) -> {
+                            res.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                            res.setContentType("application/json");
+                            res.getWriter().write("{\"error\":\"forbidden\"}");
+                        })
+                )
+
+                // route rules
+                .authorizeHttpRequests(auth -> auth
+                        // ----- PUBLIC GETs -----
+                        .requestMatchers(HttpMethod.GET, "/api/catalog/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/search/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/cms/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/reviews/product/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
+
+                        // If you want settings readable without auth:
+                        .requestMatchers(HttpMethod.GET, "/api/settings/**").permitAll()
+
+                        .requestMatchers("/error").permitAll()
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/**").permitAll()
+
+                        // ----- AUTH (PUBLIC) -----
+                        .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/customers/auth/register").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/customers/auth/verify").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/customers/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/customers/auth/password-reset/request").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/customers/auth/password-reset/confirm").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/payments/razorpay/webhook").permitAll()
+
+                        .requestMatchers(HttpMethod.POST, "/api/auth/logout").authenticated()
+
+                        // Catalog mutations
+                        .requestMatchers(HttpMethod.POST,   "/api/catalog/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT,    "/api/catalog/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/catalog/**").hasRole("ADMIN")
+
+                        // ----- CUSTOMER / ADMIN mixed -----
+                        .requestMatchers(HttpMethod.GET, "/api/orders/**").hasAnyRole("CUSTOMER","ADMIN")
+                        //.requestMatchers("/api/settings/**").hasAnyRole("ADMIN","CUSTOMER")   // <-- fixed
+                        .requestMatchers("/api/promotions/**").hasAnyRole("ADMIN","CUSTOMER") // <-- fixed
+                        .requestMatchers("/api/partners/**").hasAnyRole("ADMIN","CUSTOMER")   // <-- fixed
+                        .requestMatchers("/api/orders/**").hasAnyRole("ADMIN","CUSTOMER")     // <-- fixed
+                        .requestMatchers("/api/shipping/**").hasAnyRole("ADMIN","CUSTOMER")   // <-- fixed
+                        .requestMatchers(HttpMethod.POST, "/api/reviews").hasAnyRole("CUSTOMER","ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/reviews/**").hasAnyRole("CUSTOMER","ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/payments/razorpay/orders/**").hasAnyRole("CUSTOMER","ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/payments/razorpay/verify").hasAnyRole("CUSTOMER","ADMIN")
+
+                        .requestMatchers(HttpMethod.GET, "/api/list").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/locations").permitAll()
+                        .requestMatchers("/api/customers/**").hasAnyRole("ADMIN","CUSTOMER")
+
+
+                        // anything else
+                        .anyRequest().authenticated()
+                )
+
+
+                // JWT filter
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+
+        return http.build();
+    }
+
+    /** Permissive CORS for dev (adjust for prod). */
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration cfg = new CorsConfiguration();
+        cfg.setAllowedOrigins(List.of(
+                "http://localhost:3000",
+                "http://localhost:5173",
+                "http://localhost:5174", // dev sometimes auto-bumps
+                "http://127.0.0.1:3000"
+        ));
+        cfg.setAllowedMethods(List.of("GET","POST","PUT","DELETE","PATCH","OPTIONS"));
+        cfg.setAllowedHeaders(List.of("Authorization","Content-Type","X-Requested-With"));
+        cfg.setExposedHeaders(List.of("Authorization"));
+        cfg.setAllowCredentials(true);
+        cfg.setMaxAge(3600L);
+
+        UrlBasedCorsConfigurationSource src = new UrlBasedCorsConfigurationSource();
+        src.registerCorsConfiguration("/**", cfg);
+        return src;
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+        return config.getAuthenticationManager();
+    }
+}

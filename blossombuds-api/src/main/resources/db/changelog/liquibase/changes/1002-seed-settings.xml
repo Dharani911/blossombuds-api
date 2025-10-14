@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+    http://www.liquibase.org/xml/ns/dbchangelog
+    https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.23.xsd">
+
+    <!-- Ensure table exists (no schema specified) -->
+    <preConditions onFail="HALT" onError="HALT">
+        <tableExists tableName="settings"/>
+    </preConditions>
+
+    <!-- (Optional) Make keys unique so future upserts are easy -->
+    <changeSet id="1002-01-settings-unique-key" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <or>
+                <uniqueConstraintExists tableName="settings" columnNames="key"/>
+                <indexExists indexName="uq_settings_key"/>
+            </or>
+        </preConditions>
+        <addUniqueConstraint tableName="settings"
+                             columnNames="key"
+                             constraintName="uq_settings_key"/>
+    </changeSet>
+
+    <!-- Seed: brand.whatsapp -->
+    <changeSet id="1002-02-seed-brand-whatsapp" author="dharani" >
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM settings WHERE key = 'brand.whatsapp' AND active = true
+            </sqlCheck>
+        </preConditions>
+        <insert tableName="settings">
+            <column name="key" value="brand.whatsapp"/>
+            <column name="value" value="+91 90000 00000"/>
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+            <column name="created_at" valueDate="NOW()"/>
+            <column name="modified_by" value="liquibase"/>
+            <column name="modified_at" valueDate="NOW()"/>
+        </insert>
+        <rollback>
+            <delete tableName="settings">
+                <where>key = 'brand.whatsapp'</where>
+            </delete>
+        </rollback>
+    </changeSet>
+
+    <!-- Seed: brand.instagram -->
+    <changeSet id="1002-03-seed-brand-instagram" author="dharani" >
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM settings WHERE key = 'brand.instagram' AND active = true
+            </sqlCheck>
+        </preConditions>
+        <insert tableName="settings">
+            <column name="key" value="brand.instagram"/>
+            <!-- Replace with your actual handle URL -->
+            <column name="value" value="https://www.instagram.com/blossom_buds_floral_artistry"/>
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+            <column name="created_at" valueDate="NOW()"/>
+            <column name="modified_by" value="liquibase"/>
+            <column name="modified_at" valueDate="NOW()"/>
+        </insert>
+        <rollback>
+            <delete tableName="settings">
+                <where>key = 'brand.instagram'</where>
+            </delete>
+        </rollback>
+    </changeSet>
+
+
+
+    <!-- shipping thresholds -->
+    <changeSet id="1002-06-seed-shipping-threshold" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM settings WHERE key = 'shipping.free_threshold' AND active = true
+            </sqlCheck>
+        </preConditions>
+        <insert tableName="settings">
+            <column name="key" value="shipping.free_threshold"/>
+            <!-- e.g., use a plain number; your service can parse BigDecimal -->
+            <column name="value" value="2499.00"/>
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+            <column name="created_at" valueDate="NOW()"/>
+            <column name="modified_by" value="liquibase"/>
+            <column name="modified_at" valueDate="NOW()"/>
+        </insert>
+        <rollback>
+            <delete tableName="settings">
+                <where>key = 'shipping.free_threshold'</where>
+            </delete>
+        </rollback>
+    </changeSet>
+
+
+</databaseChangeLog>

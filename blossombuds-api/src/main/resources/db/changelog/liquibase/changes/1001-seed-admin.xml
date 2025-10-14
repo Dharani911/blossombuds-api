@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+          http://www.liquibase.org/xml/ns/dbchangelog
+          https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+<changeSet id="1001-01-sees-admin" author="dharani">
+    <insert tableName="admins">
+        <column name="email" value="blossombudsfloralartistry@gmail.com"/>
+        <column name="name" value="Ukthaa"/>
+        <column name="password_hash" value="$2a$12$faEXpvmhdhrWBIPEEbEOR.BOOdiUUQ9/L9DffbsanodNYvU6mZVxO"/>
+        <column name="role" value="ADMIN"/>
+        <column name="last_login_at" value="2025-01-01T00:00:00Z"/>
+    </insert>
+
+</changeSet>
+
+</databaseChangeLog>

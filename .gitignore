@@ -1,0 +1,27 @@
+# OS / IDE
+.DS_Store
+*.iml
+.idea/
+.vscode/
+
+# Java / Maven
+target/
+*.log
+*.tmp
+
+# Liquibase
+*.lock
+liquibase.properties
+
+# Docker / env
+infra/.env
+
+# Node (future UI, if any)
+node_modules/
+dist/
+build/
+
+# Misc
+*.env
+.env*
+*.properties

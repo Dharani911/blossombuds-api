@@ -1,0 +1,124 @@
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+  https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- categories (hierarchy), product_categories M2M, product_options, product_option_values -->
+    <!-- per spec: names, unique slug, option shapes, price_delta, etc. -->
+    <!-- Ref: categories / options in your doc. :contentReference[oaicite:1]{index=1} -->
+
+    <changeSet id="0003-01-categories" author="dharani">
+        <createTable tableName="categories">
+            <column name="id" type="BIGSERIAL">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="parent_id" type="BIGINT"/>
+            <column name="name" type="VARCHAR(100)"/>
+            <column name="slug" type="VARCHAR(120)"/>
+            <!-- audit -->
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true"/>
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+
+        <addUniqueConstraint tableName="categories" columnNames="slug" constraintName="uk_categories_slug"/>
+        <addForeignKeyConstraint baseTableName="categories" baseColumnNames="parent_id"
+                                 referencedTableName="categories" referencedColumnNames="id"
+                                 constraintName="fk_categories_parent" onDelete="SET NULL"/>
+
+        <createIndex tableName="categories" indexName="idx_categories_parent">
+            <column name="parent_id"/>
+        </createIndex>
+        <createIndex tableName="categories" indexName="idx_categories_active">
+            <column name="active"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="0003-02-product-categories" author="dharani">
+        <createTable tableName="product_categories">
+            <column name="product_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="category_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <!-- audit -->
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true"/>
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+
+        <addPrimaryKey tableName="product_categories" columnNames="product_id,category_id" constraintName="pk_product_categories"/>
+        <addForeignKeyConstraint baseTableName="product_categories" baseColumnNames="product_id"
+                                 referencedTableName="products" referencedColumnNames="id"
+                                 constraintName="fk_pc_product" onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableName="product_categories" baseColumnNames="category_id"
+                                 referencedTableName="categories" referencedColumnNames="id"
+                                 constraintName="fk_pc_category" onDelete="CASCADE"/>
+
+        <createIndex tableName="product_categories" indexName="idx_pc_product">
+            <column name="product_id"/>
+        </createIndex>
+        <createIndex tableName="product_categories" indexName="idx_pc_category">
+            <column name="category_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="0003-03-product-options" author="dharani">
+        <createTable tableName="product_options">
+            <column name="id" type="BIGSERIAL"><constraints primaryKey="true"/></column>
+            <column name="product_id" type="BIGINT"/>
+            <column name="name" type="VARCHAR(80)"/>
+            <column name="input_type" type="VARCHAR(20)"/>
+            <column name="is_required" type="BOOLEAN" defaultValueBoolean="true"/>
+            <column name="max_select" type="SMALLINT"/>
+            <column name="sort_order" type="INT" defaultValueNumeric="0"/>
+            <!-- audit -->
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true"/>
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+
+        <addForeignKeyConstraint baseTableName="product_options" baseColumnNames="product_id"
+                                 referencedTableName="products" referencedColumnNames="id"
+                                 constraintName="fk_popt_product" onDelete="CASCADE"/>
+
+        <createIndex tableName="product_options" indexName="idx_popt_product">
+            <column name="product_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="0003-04-product-option-values" author="dharani">
+        <createTable tableName="product_option_values">
+            <column name="id" type="BIGSERIAL"><constraints primaryKey="true"/></column>
+            <column name="option_id" type="BIGINT"/>
+            <column name="value_code" type="VARCHAR(80)"/>
+            <column name="value_label" type="VARCHAR(120)"/>
+            <column name="price_delta" type="NUMERIC(12,2)" defaultValueNumeric="0.00"/>
+            <column name="sort_order" type="INT" defaultValueNumeric="0"/>
+            <!-- audit -->
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true"/>
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+
+        <addForeignKeyConstraint baseTableName="product_option_values" baseColumnNames="option_id"
+                                 referencedTableName="product_options" referencedColumnNames="id"
+                                 constraintName="fk_pov_option" onDelete="CASCADE"/>
+
+        <addUniqueConstraint tableName="product_option_values" columnNames="option_id,value_code" constraintName="uk_pov_option_code"/>
+
+        <createIndex tableName="product_option_values" indexName="idx_pov_option">
+            <column name="option_id"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

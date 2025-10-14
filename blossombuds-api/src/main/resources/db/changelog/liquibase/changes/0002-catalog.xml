@@ -3,5 +3,83 @@
         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
   https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
-    <!-- Step 5 will add real changesets here -->
+
+    <!-- Products -->
+    <changeSet id="0002-01-products" author="dharani">
+        <createTable tableName="products">
+            <column name="id" type="BIGSERIAL">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="slug" type="VARCHAR(200)"/>
+            <column name="name" type="VARCHAR(200)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description" type="TEXT"/>
+            <column name="price" type="NUMERIC(12,2)"/>
+            <!-- audit -->
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true"/>
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+        <addUniqueConstraint tableName="products" columnNames="slug" constraintName="uk_products_slug"/>
+        <createIndex tableName="products" indexName="idx_products_active">
+            <column name="active"/>
+        </createIndex>
+    </changeSet>
+
+    <!-- Product images (storing external URLs + watermark variant) -->
+    <changeSet id="0002-02-product-images" author="dharani">
+        <createTable tableName="product_images">
+            <column name="id" type="BIGSERIAL">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="product_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="public_id" type="VARCHAR(255)"/>
+            <column name="url" type="TEXT"/>
+            <column name="watermark_variant_url" type="TEXT"/>
+            <column name="alt_text" type="VARCHAR(200)"/>
+            <column name="sort_order" type="INT" defaultValueNumeric="0"/>
+            <column name="width" type="INT"/>
+            <column name="height" type="INT"/>
+            <!-- audit -->
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true"/>
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+
+        <addForeignKeyConstraint baseTableName="product_images" baseColumnNames="product_id"
+                                 referencedTableName="products" referencedColumnNames="id"
+                                 constraintName="fk_product_images_product" onDelete="CASCADE"/>
+
+        <createIndex tableName="product_images" indexName="idx_product_images_product">
+            <column name="product_id"/>
+        </createIndex>
+    </changeSet>
+
+    <!-- Attach audit triggers -->
+    <changeSet id="0002-99-attach-audit" author="dharani" runAlways="true">
+        <sql splitStatements="false">
+            DO $$
+            BEGIN
+            IF EXISTS (SELECT 1 FROM pg_class WHERE relname='products') THEN
+            EXECUTE 'DROP TRIGGER IF EXISTS trg_products_mod ON products';
+            EXECUTE 'CREATE TRIGGER trg_products_mod BEFORE UPDATE ON products
+            FOR EACH ROW EXECUTE FUNCTION set_modified_at()';
+            END IF;
+
+            IF EXISTS (SELECT 1 FROM pg_class WHERE relname='product_images') THEN
+            EXECUTE 'DROP TRIGGER IF EXISTS trg_pimg_mod ON product_images';
+            EXECUTE 'CREATE TRIGGER trg_pimg_mod BEFORE UPDATE ON product_images
+            FOR EACH ROW EXECUTE FUNCTION set_modified_at()';
+            END IF;
+            END $$;
+        </sql>
+    </changeSet>
+
 </databaseChangeLog>

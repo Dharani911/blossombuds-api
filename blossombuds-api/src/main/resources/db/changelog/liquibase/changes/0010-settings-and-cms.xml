@@ -1,0 +1,104 @@
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+  https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- settings (key-value), cms_pages, cms_page_revisions -->
+    <!-- Ref: settings & cms. :contentReference[oaicite:8]{index=8} -->
+
+    <changeSet id="0010-01-settings" author="dharani">
+        <createTable tableName="settings">
+            <column name="key" type="VARCHAR(120)"><constraints primaryKey="true"/></column>
+            <column name="value" type="TEXT"/>
+            <!-- audit -->
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true"/>
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+    </changeSet>
+    <changeSet id="0010-01a-settings-recreate-simple" author="dharani"  runInTransaction="true">
+
+        <!-- 1) Drop existing table if present -->
+        <sql><![CDATA[
+      DROP TABLE IF EXISTS settings CASCADE;
+    ]]></sql>
+
+        <!-- 2) Recreate the table (no schema names) -->
+        <createTable tableName="settings">
+            <column name="id" type="BIGSERIAL"><constraints primaryKey="true"/></column>
+            <column name="key" type="VARCHAR(120)"><constraints unique="true"/></column>
+            <column name="value" type="TEXT"/>
+            <!-- audit -->
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true"/>
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+        <createIndex tableName="settings" indexName="idx_settings_active">
+            <column name="active"/>
+        </createIndex>
+        <!-- Rollback (dev-only; in prod you usually keep forward-only) -->
+        <rollback>
+            <sql><![CDATA[
+        DROP INDEX IF EXISTS uq_settings_key_active;
+      ]]></sql>
+            <dropIndex tableName="settings" indexName="idx_settings_active"/>
+            <dropPrimaryKey tableName="settings" constraintName="pk_settings_id"/>
+            <dropTable tableName="settings"/>
+        </rollback>
+    </changeSet>
+
+
+    <changeSet id="0010-02-cms-pages" author="dharani">
+        <createTable tableName="cms_pages">
+            <column name="id" type="BIGSERIAL"><constraints primaryKey="true"/></column>
+            <column name="slug" type="VARCHAR(80)"/>
+            <column name="title" type="VARCHAR(160)"/>
+            <column name="status" type="VARCHAR(10)"/>
+            <column name="current_revision_id" type="BIGINT"/>
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true"/>
+            <!-- audit -->
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+        <addUniqueConstraint tableName="cms_pages" columnNames="slug" constraintName="uk_cms_pages_slug"/>
+    </changeSet>
+
+    <changeSet id="0010-03-cms-page-revisions" author="dharani">
+        <createTable tableName="cms_page_revisions">
+            <column name="id" type="BIGSERIAL"><constraints primaryKey="true"/></column>
+            <column name="page_id" type="BIGINT"/>
+            <column name="version" type="INT"/>
+            <column name="content_md" type="TEXT"/>
+            <column name="content_html" type="TEXT"/>
+            <column name="effective_from" type="TIMESTAMPTZ"/>
+            <column name="notes" type="TEXT"/>
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true"/>
+            <!-- audit -->
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+
+        <addForeignKeyConstraint baseTableName="cms_page_revisions" baseColumnNames="page_id"
+                                 referencedTableName="cms_pages" referencedColumnNames="id"
+                                 constraintName="fk_cms_revisions_page" onDelete="CASCADE"/>
+
+        <createIndex tableName="cms_page_revisions" indexName="idx_cms_revisions_page"><column name="page_id"/></createIndex>
+        <createIndex tableName="cms_page_revisions" indexName="idx_cms_revisions_version"><column name="version"/></createIndex>
+    </changeSet>
+
+    <!-- add FK from pages.current_revision_id -> revisions.id -->
+    <changeSet id="0010-04-cms-pages-current-revision-fk" author="dharani">
+        <addForeignKeyConstraint baseTableName="cms_pages" baseColumnNames="current_revision_id"
+                                 referencedTableName="cms_page_revisions" referencedColumnNames="id"
+                                 constraintName="fk_cms_pages_current_revision" onDelete="SET NULL"/>
+    </changeSet>
+</databaseChangeLog>

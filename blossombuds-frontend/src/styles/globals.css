@@ -1,0 +1,61 @@
+:root{
+  --bb-primary:#4A4F41;          /* headings, text accents */
+  --bb-accent:#F05D8B;           /* primary buttons/highlights */
+  --bb-accent-2:#F6C320;         /* secondary CTAs/icons */
+  --bb-bg:#FAF7E7;               /* site background */
+
+  --bb-radius:16px;
+  --bb-shadow:0 10px 24px rgba(0,0,0,.08);
+}
+
+*{box-sizing:border-box}
+html,body,#root{height:100%}
+body{
+  margin:0;
+  color:#2b2b2b;
+  background:var(--bb-bg);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, "Montserrat", "Lato", sans-serif;
+}
+
+h1,h2,h3,h4,h5{
+  font-family: "Cinzel","DM Serif Display", serif;
+  color:var(--bb-primary);
+  letter-spacing:.3px;
+  margin: 0 0 .5rem;
+}
+
+a{color:inherit;text-decoration:none}
+.container{max-width:1200px;margin:0 auto;padding:0 16px}
+
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  padding:.75rem 1.25rem;border-radius:999px;border:none;cursor:pointer;
+  background:var(--bb-accent);color:#fff;font-weight:700;letter-spacing:.3px;
+  transition:transform .15s ease, box-shadow .15s ease;
+  box-shadow:var(--bb-shadow)
+}
+.btn:hover{transform:translateY(-1px)}
+.btn.secondary{background:var(--bb-accent-2);color:#2b2b2b}
+
+.card{
+  background:#fff;border-radius:var(--bb-radius);box-shadow:var(--bb-shadow);
+}
+
+.header-blur{
+  /* keep it simple to avoid transformer issues */
+  background: rgba(255,255,255,.8);
+  border-bottom:1px solid rgba(0,0,0,.06)
+}
+
+/* Simple fade/slide transitions */
+.fade-in{animation:fadeIn .5s ease both}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none)}
+
+.nav{padding:8px 10px;border-radius:12px;color:var(--bb-primary);font-weight:600}
+.nav.active{background:var(--bb-accent-2)}
+.icon-btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:40px;height:40px;border-radius:999px;border:none;background:#fff;box-shadow:var(--bb-shadow);
+  cursor:pointer;transition:transform .15s ease
+}
+.icon-btn:hover{transform:translateY(-1px)}

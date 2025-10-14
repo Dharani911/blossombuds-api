@@ -1,0 +1,67 @@
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+  https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- product_reviews + product_review_images -->
+    <!-- Ref: reviews schema. :contentReference[oaicite:7]{index=7} -->
+
+    <changeSet id="0009-01-product-reviews" author="dharani">
+        <createTable tableName="product_reviews">
+            <column name="id" type="BIGSERIAL"><constraints primaryKey="true"/></column>
+            <column name="product_id" type="BIGINT"/>
+            <column name="order_id" type="BIGINT"/>
+            <column name="order_item_id" type="BIGINT"/>
+            <column name="customer_id" type="BIGINT"/>
+            <column name="rating" type="SMALLINT"/>
+            <column name="title" type="VARCHAR(150)"/>
+            <column name="body" type="TEXT"/>
+            <column name="status" type="VARCHAR(16)"/>
+            <!-- audit -->
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true"/>
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+
+        <addForeignKeyConstraint baseTableName="product_reviews" baseColumnNames="product_id"
+                                 referencedTableName="products" referencedColumnNames="id"
+                                 constraintName="fk_reviews_product" onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableName="product_reviews" baseColumnNames="order_id"
+                                 referencedTableName="orders" referencedColumnNames="id"
+                                 constraintName="fk_reviews_order" onDelete="SET NULL"/>
+        <addForeignKeyConstraint baseTableName="product_reviews" baseColumnNames="order_item_id"
+                                 referencedTableName="order_items" referencedColumnNames="id"
+                                 constraintName="fk_reviews_item" onDelete="SET NULL"/>
+        <addForeignKeyConstraint baseTableName="product_reviews" baseColumnNames="customer_id"
+                                 referencedTableName="customers" referencedColumnNames="id"
+                                 constraintName="fk_reviews_customer" onDelete="SET NULL"/>
+
+        <createIndex tableName="product_reviews" indexName="idx_reviews_product"><column name="product_id"/></createIndex>
+        <createIndex tableName="product_reviews" indexName="idx_reviews_status"><column name="status"/></createIndex>
+    </changeSet>
+
+    <changeSet id="0009-02-product-review-images" author="dharani">
+        <createTable tableName="product_review_images">
+            <column name="id" type="BIGSERIAL"><constraints primaryKey="true"/></column>
+            <column name="review_id" type="BIGINT"/>
+            <column name="public_id" type="VARCHAR(255)"/>
+            <column name="url" type="TEXT"/>
+            <column name="sort_order" type="INT" defaultValueNumeric="0"/>
+            <!-- audit -->
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true"/>
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+
+        <addForeignKeyConstraint baseTableName="product_review_images" baseColumnNames="review_id"
+                                 referencedTableName="product_reviews" referencedColumnNames="id"
+                                 constraintName="fk_review_images_review" onDelete="CASCADE"/>
+
+        <createIndex tableName="product_review_images" indexName="idx_review_images_review"><column name="review_id"/></createIndex>
+    </changeSet>
+</databaseChangeLog>

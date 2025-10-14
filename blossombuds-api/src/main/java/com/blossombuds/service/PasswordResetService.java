@@ -1,0 +1,94 @@
+package com.blossombuds.service;
+
+import com.blossombuds.domain.Customer;
+import com.blossombuds.domain.PasswordResetToken;
+import com.blossombuds.repository.CustomerRepository;
+import com.blossombuds.repository.PasswordResetTokenRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.security.SecureRandom;
+import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.Base64;
+
+/** Handles customer password reset: issue tokens via email and confirm new passwords. */
+@Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
+public class PasswordResetService {
+
+    private final PasswordResetTokenRepository prtRepo;
+    private final CustomerRepository customerRepo;
+    private final EmailService emailService;
+    private final PasswordEncoder encoder;
+
+    @Value("${app.frontend.baseUrl}")
+    private String frontendBase;
+
+    private static final SecureRandom RNG = new SecureRandom();
+
+    /** Issues a password reset token (idempotent on email existence) and emails the link. */
+    @Transactional
+    public void requestReset(String email) {
+        if (email == null || email.isBlank()) return; // no info leak
+        var customerOpt = customerRepo.findByEmail(email.trim());
+        if (customerOpt.isEmpty()) return; // don't reveal
+
+        Customer c = customerOpt.get();
+
+        // create a fresh token (expire previous active tokens)
+        prtRepo.deactivateAllByCustomerId(c.getId());
+
+        String token = randomToken();
+        PasswordResetToken prt = new PasswordResetToken();
+        prt.setCustomerId(c.getId());
+        prt.setToken(token);
+        prt.setActive(true);
+        prt.setExpiresAt(OffsetDateTime.now().plus(1, ChronoUnit.HOURS));
+        prt.setCreatedBy("system"); prt.setCreatedAt(OffsetDateTime.now());
+        prtRepo.save(prt);
+
+        String resetUrl = frontendBase + "/reset-password?token=" + token;
+        emailService.sendPasswordResetEmail(c.getEmail(), resetUrl);
+    }
+
+    /** Confirms a new password using a valid, unexpired token, then consumes the token. */
+    @Transactional
+    public void confirmReset(String token, String newPassword) {
+        if (token == null || token.isBlank()) {
+            throw new IllegalArgumentException("Invalid token");
+        }
+        var prt = prtRepo.findByToken(token)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid token"));
+
+        if (!Boolean.TRUE.equals(prt.getActive()) ||
+                prt.getConsumedAt() != null ||
+                prt.getExpiresAt() == null ||
+                prt.getExpiresAt().isBefore(OffsetDateTime.now())) {
+            throw new IllegalArgumentException("Token expired or invalid");
+        }
+
+        Customer c = customerRepo.findById(prt.getCustomerId())
+                .orElseThrow(() -> new IllegalArgumentException("Customer not found"));
+
+        // Set new password
+        c.setPasswordHash(encoder.encode(newPassword));
+        c.setModifiedBy("system"); c.setModifiedAt(OffsetDateTime.now());
+
+        // Consume token
+        prt.setActive(false);
+        prt.setConsumedAt(OffsetDateTime.now());
+        prtRepo.save(prt);
+    }
+
+    /** Random URL-safe token generator. */
+    private static String randomToken() {
+        byte[] b = new byte[30]; // 240 bits
+        RNG.nextBytes(b);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(b);
+    }
+}

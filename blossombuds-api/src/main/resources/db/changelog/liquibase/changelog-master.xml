@@ -4,7 +4,30 @@
         xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
   https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
 
-    <include file="db/liquibase/changes/0001-audit-and-types.xml"/>
-    <include file="db/liquibase/changes/0002-catalog.xml"/>
+    <include file="db/changelog/liquibase/changes/0001-audit-and-types.xml"/>
+    <include file="db/changelog/liquibase/changes/0002-catalog.xml"/>
+    <include file="db/changelog/liquibase/changes/0003-catalog-taxonomy-variants.xml"/>
+    <include file="db/changelog/liquibase/changes/0004-security-accounts.xml"/>
+    <include file="db/changelog/liquibase/changes/0006-delivery-partners.xml"/>
 
+    <!-- orders BEFORE promotions (coupon_redemptions needs orders) -->
+    <include file="db/changelog/liquibase/changes/0007-orders-core.xml"/>
+    <include file="db/changelog/liquibase/changes/0005-promotions.xml"/>
+
+    <include file="db/changelog/liquibase/changes/0008-order-items-payments-events.xml"/>
+    <include file="db/changelog/liquibase/changes/0009-reviews.xml"/>
+    <include file="db/changelog/liquibase/changes/0010-settings-and-cms.xml"/>
+    <include file="db/changelog/liquibase/changes/0099-attach-audit-triggers.xml"/>
+    <include file="db/changelog/liquibase/changes/0011-indexes-and-uniques.xml"/>
+    <include file="db/changelog/liquibase/changes/0012-auth-tokens.xml"/>
+    <include file="db/changelog/liquibase/changes/0013-customers-email-verified.xml"/>
+    <include file="db/changelog/liquibase/changes/0014-geo-core.xml"/>
+    <include file="db/changelog/liquibase/changes/0015-delivery-fee-rules.xml"/>
+    <include file="db/changelog/liquibase/changes/0016-geo-refs-on-addresses-and-orders.xml"/>
+    <include file="db/changelog/liquibase/changes/0017-checkout-intent.xml"/>
+    <include file="db/changelog/liquibase/changes/0018-refdata-from-seed.xml"/>
+    <include file="db/changelog/liquibase/changes/1001-seed-admin.xml"/>
+    <include file="db/changelog/liquibase/changes/0019-table-updates.xml"/>
+    <include file="db/changelog/liquibase/changes/1002-seed-settings.xml"/>
+    <include file="db/changelog/liquibase/changes/0020-admin-metrics-indexes.xml"/>
 </databaseChangeLog>

@@ -1,0 +1,26 @@
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+  https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- delivery_partners with tracking_url_template -->
+    <!-- Ref: delivery partners. :contentReference[oaicite:4]{index=4} -->
+
+    <changeSet id="0006-01-delivery-partners" author="dharani">
+        <createTable tableName="delivery_partners">
+            <column name="id" type="BIGSERIAL"><constraints primaryKey="true"/></column>
+            <column name="name" type="VARCHAR(100)"/>
+            <column name="code" type="VARCHAR(40)"/>
+            <column name="tracking_url_template" type="TEXT"/>
+            <!-- audit -->
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true"/>
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+        <addUniqueConstraint tableName="delivery_partners" columnNames="name" constraintName="uk_dpartners_name"/>
+        <addUniqueConstraint tableName="delivery_partners" columnNames="code" constraintName="uk_dpartners_code"/>
+    </changeSet>
+</databaseChangeLog>

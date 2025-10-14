@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- Just the table: delivery_fee_rules -->
+    <changeSet id="0015-01-create-delivery-fee-rules" author="dharani">
+        <createTable tableName="delivery_fee_rules">
+            <column name="id" type="BIGSERIAL">
+                <constraints primaryKey="true" primaryKeyName="pk_delivery_fee_rules"/>
+            </column>
+
+            <!-- scope: DISTRICT / STATE / DEFAULT (free-form string for now) -->
+            <column name="scope" type="VARCHAR(16)"/>
+            <!-- scope_id: districts.id / states.id, NULL for DEFAULT -->
+            <column name="scope_id" type="BIGINT"/>
+
+            <!-- fee amount in INR -->
+            <column name="fee_amount" type="NUMERIC(10,2)">
+                <constraints nullable="false"/>
+            </column>
+
+            <!-- soft delete + audit -->
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true"/>
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+    </changeSet>
+
+
+
+</databaseChangeLog>

@@ -1,0 +1,74 @@
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+  https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- admins, customers, addresses as per spec -->
+    <!-- Ref: admins/customers/addresses. :contentReference[oaicite:2]{index=2} -->
+
+    <changeSet id="0004-01-admins" author="dharani">
+        <createTable tableName="admins">
+            <column name="id" type="BIGSERIAL"><constraints primaryKey="true"/></column>
+            <column name="email" type="VARCHAR(320)"/>
+            <column name="name" type="VARCHAR(120)"/>
+            <column name="password_hash" type="TEXT"/>
+            <column name="role" type="VARCHAR(30)"/>
+            <column name="last_login_at" type="TIMESTAMPTZ"/>
+            <!-- audit -->
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true"/>
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+        <addUniqueConstraint tableName="admins" columnNames="email" constraintName="uk_admins_email"/>
+    </changeSet>
+
+    <changeSet id="0004-02-customers" author="dharani">
+        <createTable tableName="customers">
+            <column name="id" type="BIGSERIAL"><constraints primaryKey="true"/></column>
+            <column name="email" type="VARCHAR(320)"/>
+            <column name="phone" type="VARCHAR(20)"/>
+            <column name="name" type="VARCHAR(120)"/>
+            <column name="password_hash" type="TEXT"/>
+            <!-- audit -->
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true"/>
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+        <addUniqueConstraint tableName="customers" columnNames="email" constraintName="uk_customers_email"/>
+        <createIndex tableName="customers" indexName="idx_customers_active"><column name="active"/></createIndex>
+    </changeSet>
+
+    <changeSet id="0004-03-addresses" author="dharani">
+        <createTable tableName="addresses">
+            <column name="id" type="BIGSERIAL"><constraints primaryKey="true"/></column>
+            <column name="customer_id" type="BIGINT"/>
+            <column name="name" type="VARCHAR(120)"/>
+            <column name="phone" type="VARCHAR(20)"/>
+            <column name="line1" type="VARCHAR(200)"/>
+            <column name="line2" type="VARCHAR(200)"/>
+            <column name="city" type="VARCHAR(100)"/>
+            <column name="state" type="VARCHAR(100)"/>
+            <column name="pincode" type="VARCHAR(10)"/>
+            <column name="country" type="CHAR(2)" defaultValue="IN"/>
+            <column name="is_default" type="BOOLEAN" defaultValueBoolean="false"/>
+            <!-- audit -->
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true"/>
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+
+        <addForeignKeyConstraint baseTableName="addresses" baseColumnNames="customer_id"
+                                 referencedTableName="customers" referencedColumnNames="id"
+                                 constraintName="fk_addresses_customer" onDelete="CASCADE"/>
+
+        <createIndex tableName="addresses" indexName="idx_addresses_customer"><column name="customer_id"/></createIndex>
+        <createIndex tableName="addresses" indexName="idx_addresses_pincode"><column name="pincode"/></createIndex>
+    </changeSet>
+</databaseChangeLog>

@@ -1,0 +1,89 @@
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+  https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- Ref: order_items, payments (Razorpay fields), order_events. :contentReference[oaicite:6]{index=6} -->
+
+    <changeSet id="0008-01-order-items" author="dharani">
+        <createTable tableName="order_items">
+            <column name="id" type="BIGSERIAL"><constraints primaryKey="true"/></column>
+            <column name="order_id" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="product_id" type="BIGINT"/>
+            <column name="product_name" type="VARCHAR(200)"/>
+            <column name="unit_price" type="NUMERIC(12,2)"/>
+            <column name="quantity" type="INT"/>
+            <column name="line_total" type="NUMERIC(12,2)"/>
+            <column name="options_json" type="JSONB"/>
+            <column name="options_text" type="VARCHAR(400)"/>
+            <!-- audit -->
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true"/>
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+
+        <addForeignKeyConstraint baseTableName="order_items" baseColumnNames="order_id"
+                                 referencedTableName="orders" referencedColumnNames="id"
+                                 constraintName="fk_items_order" onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableName="order_items" baseColumnNames="product_id"
+                                 referencedTableName="products" referencedColumnNames="id"
+                                 constraintName="fk_items_product" onDelete="SET NULL"/>
+
+        <createIndex tableName="order_items" indexName="idx_items_order"><column name="order_id"/></createIndex>
+        <createIndex tableName="order_items" indexName="idx_items_product"><column name="product_id"/></createIndex>
+    </changeSet>
+
+    <changeSet id="0008-02-payments" author="dharani">
+        <createTable tableName="payments">
+            <column name="id" type="BIGSERIAL"><constraints primaryKey="true"/></column>
+            <column name="order_id" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="provider" type="VARCHAR(40)"/>
+            <column name="amount" type="NUMERIC(12,2)"/>
+            <column name="currency" type="CHAR(3)" defaultValue="INR"/>
+            <column name="status" type="payment_status_enum"/>
+            <column name="method" type="VARCHAR(40)"/>
+            <column name="rzp_order_id" type="VARCHAR(100)"/>
+            <column name="rzp_payment_id" type="VARCHAR(100)"/>
+            <column name="rzp_signature" type="TEXT"/>
+            <column name="raw_payload" type="JSONB"/>
+            <!-- audit -->
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true"/>
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+
+        <addForeignKeyConstraint baseTableName="payments" baseColumnNames="order_id"
+                                 referencedTableName="orders" referencedColumnNames="id"
+                                 constraintName="fk_payments_order" onDelete="CASCADE"/>
+
+        <createIndex tableName="payments" indexName="idx_payments_order"><column name="order_id"/></createIndex>
+        <createIndex tableName="payments" indexName="idx_payments_status"><column name="status"/></createIndex>
+    </changeSet>
+
+    <changeSet id="0008-03-order-events" author="dharani">
+        <createTable tableName="order_events">
+            <column name="id" type="BIGSERIAL"><constraints primaryKey="true"/></column>
+            <column name="order_id" type="BIGINT"/>
+            <column name="event_type" type="VARCHAR(40)"/>
+            <column name="details" type="JSONB"/>
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <!-- audit -->
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+
+        <addForeignKeyConstraint baseTableName="order_events" baseColumnNames="order_id"
+                                 referencedTableName="orders" referencedColumnNames="id"
+                                 constraintName="fk_oevents_order" onDelete="CASCADE"/>
+
+        <createIndex tableName="order_events" indexName="idx_oevents_order"><column name="order_id"/></createIndex>
+        <createIndex tableName="order_events" indexName="idx_oevents_type"><column name="event_type"/></createIndex>
+    </changeSet>
+</databaseChangeLog>

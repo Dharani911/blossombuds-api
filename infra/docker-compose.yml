@@ -1,24 +1,38 @@
+version: "3.8"
+
 services:
   db:
     image: postgres:15
     container_name: bb-pg
-    ports: ["5432:5432"]
+    restart: unless-stopped
+    ports:
+      - "5544:5432"         # host:container
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: blossombuds_dev
       TZ: UTC
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
+  # Optional admin UI
   pgadmin:
-    image: dpage/pgadmin4
+    image: dpage/pgadmin4:latest
     container_name: bb-pgadmin
-    ports: ["5050:80"]
+    restart: unless-stopped
+    ports:
+      - "5050:80"
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
-    depends_on: [db]
+      PGADMIN_DEFAULT_EMAIL: you@example.com
+      PGADMIN_DEFAULT_PASSWORD: pgadmin
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
   pgdata:

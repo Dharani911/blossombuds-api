@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+       http://www.liquibase.org/xml/ns/dbchangelog
+       https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.26.xsd">
+
+
+
+    <!-- ============= ORDERS ============= -->
+    <changeSet id="0020-01-idx-orders-created-at" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists indexName="idx_orders_created_at" />
+            </not>
+        </preConditions>
+        <createIndex indexName="idx_orders_created_at"
+                     tableName="orders"
+                    >
+            <column name="created_at"/>
+        </createIndex>
+        <rollback>
+            <dropIndex indexName="idx_orders_created_at" tableName="orders"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="0020-02-idx-orders-status" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists indexName="idx_orders_status"/>
+            </not>
+        </preConditions>
+        <createIndex indexName="idx_orders_status"
+                     tableName="orders"
+                    >
+            <column name="status"/>
+        </createIndex>
+        <rollback>
+            <dropIndex indexName="idx_orders_status" tableName="orders"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="0020-03-idx-orders-shipping-fee" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists indexName="idx_orders_shipping_fee"/>
+            </not>
+        </preConditions>
+        <createIndex indexName="idx_orders_shipping_fee"
+                     tableName="orders"
+                    >
+            <column name="shipping_fee"/>
+        </createIndex>
+        <rollback>
+            <dropIndex indexName="idx_orders_shipping_fee" tableName="orders"/>
+        </rollback>
+    </changeSet>
+
+    <!-- ============= ORDER ITEMS ============= -->
+    <changeSet id="0020-04-idx-order-items-order-id" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists indexName="idx_order_items_order_id"/>
+            </not>
+        </preConditions>
+        <createIndex indexName="idx_order_items_order_id"
+                     tableName="order_items"
+                    >
+            <column name="order_id"/>
+        </createIndex>
+        <rollback>
+            <dropIndex indexName="idx_order_items_order_id" tableName="order_items"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="0020-05-idx-order-items-product-id" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists indexName="idx_order_items_product_id"/>
+            </not>
+        </preConditions>
+        <createIndex indexName="idx_order_items_product_id"
+                     tableName="order_items"
+                    >
+            <column name="product_id"/>
+        </createIndex>
+        <rollback>
+            <dropIndex indexName="idx_order_items_product_id" tableName="order_items"/>
+        </rollback>
+    </changeSet>
+
+    <!-- ============= CUSTOMERS ============= -->
+    <changeSet id="0020-06-idx-customers-created-at" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists indexName="idx_customers_created_at"/>
+            </not>
+        </preConditions>
+        <createIndex indexName="idx_customers_created_at"
+                     tableName="customers"
+                    >
+            <column name="created_at"/>
+        </createIndex>
+        <rollback>
+            <dropIndex indexName="idx_customers_created_at" tableName="customers"/>
+        </rollback>
+    </changeSet>
+
+    <!-- ============= PRODUCTS ============= -->
+    <changeSet id="0020-07-idx-products-active" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists indexName="idx_products_active"/>
+            </not>
+        </preConditions>
+        <createIndex indexName="idx_products_active"
+                     tableName="products"
+                    >
+            <column name="active"/>
+        </createIndex>
+        <rollback>
+            <dropIndex indexName="idx_products_active" tableName="products"/>
+        </rollback>
+    </changeSet>
+
+    <!-- ============= PRODUCT-CATEGORIES (BRIDGE) ============= -->
+    <changeSet id="0020-08-idx-product-categories" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists indexName="idx_product_categories"/>
+            </not>
+        </preConditions>
+        <createIndex indexName="idx_product_categories"
+                     tableName="product_categories"
+                    >
+            <column name="product_id"/>
+            <column name="category_id"/>
+        </createIndex>
+        <rollback>
+            <dropIndex indexName="idx_product_categories" tableName="product_categories"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

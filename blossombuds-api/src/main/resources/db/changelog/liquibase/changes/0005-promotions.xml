@@ -1,0 +1,60 @@
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+  https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- coupons and coupon_redemptions -->
+    <!-- Ref: coupons spec. :contentReference[oaicite:3]{index=3} -->
+
+    <changeSet id="0005-01-coupons" author="dharani">
+        <createTable tableName="coupons">
+            <column name="id" type="BIGSERIAL"><constraints primaryKey="true"/></column>
+            <column name="code" type="VARCHAR(40)"/>
+            <column name="type" type="VARCHAR(10)"/>
+            <column name="amount" type="NUMERIC(12,2)"/>
+            <column name="min_order_value" type="NUMERIC(12,2)"/>
+            <column name="starts_at" type="TIMESTAMPTZ"/>
+            <column name="ends_at" type="TIMESTAMPTZ"/>
+            <column name="usage_limit" type="INT"/>
+            <column name="per_customer_limit" type="INT"/>
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true"/>
+            <!-- audit -->
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+        <addUniqueConstraint tableName="coupons" columnNames="code" constraintName="uk_coupons_code"/>
+        <createIndex tableName="coupons" indexName="idx_coupons_active"><column name="active"/></createIndex>
+    </changeSet>
+
+    <changeSet id="0005-02-coupon-redemptions" author="dharani">
+        <createTable tableName="coupon_redemptions">
+            <column name="id" type="BIGSERIAL"><constraints primaryKey="true"/></column>
+            <column name="coupon_id" type="BIGINT"/>
+            <column name="order_id" type="BIGINT"/>
+            <column name="customer_id" type="BIGINT"/>
+            <column name="amount_applied" type="NUMERIC(12,2)"/>
+            <!-- audit -->
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true"/>
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+
+        <addForeignKeyConstraint baseTableName="coupon_redemptions" baseColumnNames="coupon_id"
+                                 referencedTableName="coupons" referencedColumnNames="id"
+                                 constraintName="fk_redemptions_coupon" onDelete="SET NULL"/>
+        <addForeignKeyConstraint baseTableName="coupon_redemptions" baseColumnNames="order_id"
+                                 referencedTableName="orders" referencedColumnNames="id"
+                                 constraintName="fk_redemptions_order" onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableName="coupon_redemptions" baseColumnNames="customer_id"
+                                 referencedTableName="customers" referencedColumnNames="id"
+                                 constraintName="fk_redemptions_customer" onDelete="SET NULL"/>
+
+        <createIndex tableName="coupon_redemptions" indexName="idx_redemptions_order"><column name="order_id"/></createIndex>
+        <createIndex tableName="coupon_redemptions" indexName="idx_redemptions_customer"><column name="customer_id"/></createIndex>
+    </changeSet>
+</databaseChangeLog>

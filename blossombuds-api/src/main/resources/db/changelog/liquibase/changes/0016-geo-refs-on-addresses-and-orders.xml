@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- 0016-01: addresses – add geo FK columns (nullable first) -->
+    <changeSet id="0016-01-addresses-add-geo-cols" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="addresses"/>
+        </preConditions>
+
+        <addColumn tableName="addresses">
+            <column name="country_id" type="BIGINT"/>
+            <column name="state_id"   type="BIGINT"/>
+            <column name="district_id" type="BIGINT"/>
+        </addColumn>
+    </changeSet>
+
+    <!-- 0016-02: addresses – indexes + FKs -->
+    <changeSet id="0016-02-addresses-fks" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="addresses"/>
+            <tableExists tableName="countries"/>
+            <tableExists tableName="states"/>
+            <tableExists tableName="districts"/>
+        </preConditions>
+
+        <createIndex tableName="addresses" indexName="idx_addr_country">
+            <column name="country_id"/>
+        </createIndex>
+        <createIndex tableName="addresses" indexName="idx_addr_state">
+            <column name="state_id"/>
+        </createIndex>
+        <createIndex tableName="addresses" indexName="idx_addr_district">
+            <column name="district_id"/>
+        </createIndex>
+
+        <addForeignKeyConstraint
+                baseTableName="addresses" baseColumnNames="country_id"
+                referencedTableName="countries" referencedColumnNames="id"
+                constraintName="fk_addr_country" onDelete="SET NULL"/>
+
+        <addForeignKeyConstraint
+                baseTableName="addresses" baseColumnNames="state_id"
+                referencedTableName="states" referencedColumnNames="id"
+                constraintName="fk_addr_state" onDelete="SET NULL"/>
+
+        <addForeignKeyConstraint
+                baseTableName="addresses" baseColumnNames="district_id"
+                referencedTableName="districts" referencedColumnNames="id"
+                constraintName="fk_addr_district" onDelete="SET NULL"/>
+    </changeSet>
+
+    <!-- 0016-03: orders – add shipping geo FK columns (nullable first) -->
+    <changeSet id="0016-03-orders-add-geo-cols" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="orders"/>
+        </preConditions>
+
+        <addColumn tableName="orders">
+            <column name="ship_country_id"  type="BIGINT"/>
+            <column name="ship_state_id"    type="BIGINT"/>
+            <column name="ship_district_id" type="BIGINT"/>
+        </addColumn>
+    </changeSet>
+
+    <!-- 0016-04: orders – indexes + FKs -->
+    <changeSet id="0016-04-orders-fks" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="orders"/>
+            <tableExists tableName="countries"/>
+            <tableExists tableName="states"/>
+            <tableExists tableName="districts"/>
+        </preConditions>
+
+        <createIndex tableName="orders" indexName="idx_orders_ship_country">
+            <column name="ship_country_id"/>
+        </createIndex>
+        <createIndex tableName="orders" indexName="idx_orders_ship_state">
+            <column name="ship_state_id"/>
+        </createIndex>
+        <createIndex tableName="orders" indexName="idx_orders_ship_district">
+            <column name="ship_district_id"/>
+        </createIndex>
+
+        <addForeignKeyConstraint
+                baseTableName="orders" baseColumnNames="ship_country_id"
+                referencedTableName="countries" referencedColumnNames="id"
+                constraintName="fk_orders_ship_country" onDelete="SET NULL"/>
+
+        <addForeignKeyConstraint
+                baseTableName="orders" baseColumnNames="ship_state_id"
+                referencedTableName="states" referencedColumnNames="id"
+                constraintName="fk_orders_ship_state" onDelete="SET NULL"/>
+
+        <addForeignKeyConstraint
+                baseTableName="orders" baseColumnNames="ship_district_id"
+                referencedTableName="districts" referencedColumnNames="id"
+                constraintName="fk_orders_ship_district" onDelete="SET NULL"/>
+    </changeSet>
+
+
+
+
+
+        </databaseChangeLog>

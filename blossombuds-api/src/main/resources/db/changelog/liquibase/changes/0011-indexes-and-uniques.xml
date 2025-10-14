@@ -1,0 +1,119 @@
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+      http://www.liquibase.org/xml/ns/dbchangelog
+      https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- products.slug unique -->
+    <changeSet id="0011-01-uk-products-slug" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <uniqueConstraintExists tableName="products" constraintName="uk_products_slug"/>
+            </not>
+        </preConditions>
+        <addUniqueConstraint tableName="products"
+                             columnNames="slug"
+                             constraintName="uk_products_slug"/>
+    </changeSet>
+
+    <!-- categories.slug unique -->
+    <changeSet id="0011-02-uk-categories-slug" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <uniqueConstraintExists tableName="categories" constraintName="uk_categories_slug"/>
+            </not>
+        </preConditions>
+        <addUniqueConstraint tableName="categories"
+                             columnNames="slug"
+                             constraintName="uk_categories_slug"/>
+    </changeSet>
+
+    <!-- customers.email unique (if you want it) -->
+    <changeSet id="0011-03-uk-customers-email" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <uniqueConstraintExists tableName="customers" constraintName="uk_customers_email"/>
+            </not>
+        </preConditions>
+        <addUniqueConstraint tableName="customers"
+                             columnNames="email"
+                             constraintName="uk_customers_email"/>
+    </changeSet>
+
+    <!-- product_categories (product_id, category_id) unique pair -->
+    <changeSet id="0011-04-uk-product-categories-pair" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <uniqueConstraintExists tableName="product_categories" constraintName="uk_product_categories_prod_cat"/>
+            </not>
+        </preConditions>
+        <addUniqueConstraint tableName="product_categories"
+                             columnNames="product_id,category_id"
+                             constraintName="uk_product_categories_prod_cat"/>
+    </changeSet>
+
+    <!-- product_option_values unique per option (option_id, value_code) -->
+
+    <changeSet id="0011-05B-uk-pov-option-valuecode" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <and>
+                <columnExists tableName="product_option_values" columnName="option_id"/>
+                <columnExists tableName="product_option_values" columnName="value_code"/>
+                <not>
+                    <uniqueConstraintExists tableName="product_option_values" constraintName="uk_pov_option_valuecode"/>
+                </not>
+            </and>
+        </preConditions>
+        <addUniqueConstraint tableName="product_option_values"
+                             columnNames="option_id,value_code"
+                             constraintName="uk_pov_option_valuecode"/>
+    </changeSet>
+
+
+    <!-- helpful indexes (idempotent with preconditions) -->
+    <changeSet id="0011-06-idx-products-active" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists tableName="products" indexName="idx_products_active"/>
+            </not>
+        </preConditions>
+        <createIndex tableName="products" indexName="idx_products_active">
+            <column name="active"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="0011-07-idx-product-images-product" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists tableName="product_images" indexName="idx_product_images_product"/>
+            </not>
+        </preConditions>
+        <createIndex tableName="product_images" indexName="idx_product_images_product">
+            <column name="product_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="0011-08-idx-reviews-product" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists tableName="product_reviews" indexName="idx_reviews_product"/>
+            </not>
+        </preConditions>
+        <createIndex tableName="product_reviews" indexName="idx_reviews_product">
+            <column name="product_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="0011-09-idx-reviews-status" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists tableName="product_reviews" indexName="idx_reviews_status"/>
+            </not>
+        </preConditions>
+        <createIndex tableName="product_reviews" indexName="idx_reviews_status">
+            <column name="status"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

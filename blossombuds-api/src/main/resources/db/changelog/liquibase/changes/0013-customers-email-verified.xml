@@ -1,0 +1,16 @@
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+  https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="0013-01-add-email-verified" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="customers" columnName="email_verified"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="customers">
+            <column name="email_verified" type="BOOLEAN" defaultValueBoolean="false"/>
+        </addColumn>
+    </changeSet>
+</databaseChangeLog>

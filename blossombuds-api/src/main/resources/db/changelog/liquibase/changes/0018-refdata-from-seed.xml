@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+          http://www.liquibase.org/xml/ns/dbchangelog
+          https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!-- Seed countries (id,name) -->
+    <changeSet id="0018-01-seed-countries" author="dharani" context="staging,prod,dev">
+        <preConditions onFail="HALT">
+            <tableExists tableName="countries"/>
+        </preConditions>
+
+        <!-- Upsert by primary key so reruns are safe -->
+        <loadUpdateData
+                file="classpath:db/changelog/liquibase/changes/seed/seed_countries.csv"
+                separator=","
+                quotchar="&quot;"
+                encoding="UTF-8"
+                tableName="countries"
+                primaryKey="id"/>
+    </changeSet>
+
+    <!-- Seed states (id,country_id,name) -->
+    <changeSet id="0018-02-seed-states" author="dharani" context="staging,prod,dev">
+        <preConditions onFail="HALT">
+            <tableExists tableName="states"/>
+        </preConditions>
+
+        <loadUpdateData
+                file="classpath:db/changelog/liquibase/changes/seed/seed_states.csv"
+                separator=","
+                quotchar="&quot;"
+                encoding="UTF-8"
+                tableName="states"
+                primaryKey="id"/>
+    </changeSet>
+
+    <!-- Seed districts (id,state_id,name) -->
+    <changeSet id="0018-03-seed-districts" author="dharani" context="staging,prod,dev">
+        <preConditions onFail="HALT">
+            <tableExists tableName="districts"/>
+        </preConditions>
+
+        <loadUpdateData
+                file="classpath:db/changelog/liquibase/changes/seed/seed_districts.csv"
+                separator=","
+                quotchar="&quot;"
+                encoding="UTF-8"
+                tableName="districts"
+                primaryKey="id"/>
+    </changeSet>
+
+    <!-- Bump sequences to max(id) so future inserts (SERIAL/IDENTITY) don’t collide -->
+    <changeSet id="0018-04-fix-sequences" author="dharani" runOnChange="true" context="staging,prod,dev">
+        <preConditions onFail="MARK_RAN">
+            <dbms type="postgresql"/>
+        </preConditions>
+        <sql endDelimiter=";">
+            SELECT setval(pg_get_serial_sequence('countries','id'),
+            COALESCE((SELECT MAX(id) FROM countries),0), true);
+            SELECT setval(pg_get_serial_sequence('states','id'),
+            COALESCE((SELECT MAX(id) FROM states),0), true);
+            SELECT setval(pg_get_serial_sequence('districts','id'),
+            COALESCE((SELECT MAX(id) FROM districts),0), true);
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>
