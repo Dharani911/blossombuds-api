@@ -29,6 +29,7 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
     List<Category> findActiveByProductId(Long productId);
 
     Page<Category> findByActiveTrueAndNameContainingIgnoreCase(String q, Pageable pageable);
+    boolean existsBySlug(String slug);
 
 
 }

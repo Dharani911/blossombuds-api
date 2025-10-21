@@ -13,6 +13,15 @@ import ProfilePage from "../pages/ProfilePage";
 import LoginPage from "../pages/LoginPage";
 import RegisterPage from "../pages/RegisterPage";
 import VerifyPage from "../pages/VerifyPage";
+import ShopCategoriesPage from "../pages/ShopCategoriesPage";
+import FeaturedPage from "../pages/FeaturedPage";
+import CheckoutPage from "../pages/CheckoutPage"
+import CustomerReviewsPage from "../pages/ReviewsPage";
+import CmsPage from "../pages/CmsPage";
+import PoliciesIndexPage from "../pages/PoliciesIndexPage";
+import PolicyPage from "../pages/PolicyPage";
+
+
 
 import AdminGuard from "./AdminGuard";
 import AdminLoginPage from "../pages/admin/AdminLoginPage";
@@ -21,9 +30,11 @@ import AdminLayout from "../pages/admin/AdminLayout";
 import ProductsPage from "../pages/admin/ProductsPage";
 import CategoriesPage from "../pages/admin/CategoriesPage";
 import OrdersPage from "../pages/admin/OrdersPage";
-import ReviewsPage from "../pages/admin/ReviewsPage";
+import AdminReviewsPage from "../pages/admin/ReviewsPage";
 import SettingsPage from "../pages/admin/SettingsPage";
 import CustomersPage from "../pages/admin/CustomersPage";
+
+
 
 export default function AppRoutes() {
   const location = useLocation();
@@ -38,6 +49,16 @@ export default function AppRoutes() {
           <Route path="/" element={<HomePage />} />
           <Route path="/cart" element={<CartPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/categories" element={<ShopCategoriesPage />} />
+          <Route path="/categories/:id" element={<ShopCategoriesPage />} />
+          <Route path="/featured" element={<FeaturedPage />} />
+          <Route path="/checkout" element={<CheckoutPage />} />
+          <Route path="/reviews" element={<CustomerReviewsPage />} />
+          <Route path="/pages/:slug" element={<CmsPage />} />
+          <Route path="/policies" element={<PoliciesIndexPage />} />
+          <Route path="/policies/:slug" element={<PolicyPage />} />
+
+
 
           {/* Email verification routes (support both forms if you use both) */}
           <Route path="/verify" element={<VerifyPage />} />
@@ -57,7 +78,7 @@ export default function AppRoutes() {
             <Route path="products" element={<ProductsPage />} />
             <Route path="categories" element={<CategoriesPage />} />
             <Route path="orders" element={<OrdersPage />} />
-            <Route path="reviews" element={<ReviewsPage />} />
+            <Route path="reviews" element={<AdminReviewsPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="customers" element={<CustomersPage />} />
           </Route>

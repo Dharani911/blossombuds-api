@@ -28,11 +28,9 @@ public class DeliveryPartnerService {
     public DeliveryPartner create(DeliveryPartnerDto dto, String actor) {
         if (dto == null) throw new IllegalArgumentException("DeliveryPartnerDto is required");
         DeliveryPartner p = new DeliveryPartner();
-        p.setSlug(safeTrim(dto.getSlug()));
+        p.setCode(safeTrim(dto.getCode()));                    // <— code (not slug)
         p.setName(safeTrim(dto.getName()));
         p.setTrackingUrlTemplate(safeTrim(dto.getTrackingUrlTemplate()));
-        p.setSupportEmail(safeTrim(dto.getSupportEmail()));
-        p.setSupportPhone(safeTrim(dto.getSupportPhone()));
         p.setActive(dto.getActive() != null ? dto.getActive() : Boolean.TRUE);
         p.setCreatedBy(actor);
         p.setCreatedAt(OffsetDateTime.now());
@@ -49,12 +47,10 @@ public class DeliveryPartnerService {
         DeliveryPartner p = partnerRepo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("DeliveryPartner not found: " + id));
 
-        if (dto.getSlug() != null) p.setSlug(safeTrim(dto.getSlug()));
-        if (dto.getName() != null) p.setName(safeTrim(dto.getName()));
-        if (dto.getTrackingUrlTemplate() != null) p.setTrackingUrlTemplate(safeTrim(dto.getTrackingUrlTemplate()));
-        if (dto.getSupportEmail() != null) p.setSupportEmail(safeTrim(dto.getSupportEmail()));
-        if (dto.getSupportPhone() != null) p.setSupportPhone(safeTrim(dto.getSupportPhone()));
-        if (dto.getActive() != null) p.setActive(dto.getActive());
+        if (dto.getCode() != null)               p.setCode(safeTrim(dto.getCode()));
+        if (dto.getName() != null)               p.setName(safeTrim(dto.getName()));
+        if (dto.getTrackingUrlTemplate() != null)p.setTrackingUrlTemplate(safeTrim(dto.getTrackingUrlTemplate()));
+        if (dto.getActive() != null)             p.setActive(dto.getActive());
 
         p.setModifiedBy(actor);
         p.setModifiedAt(OffsetDateTime.now());
@@ -68,11 +64,11 @@ public class DeliveryPartnerService {
                 .orElseThrow(() -> new IllegalArgumentException("DeliveryPartner not found: " + id));
     }
 
-    /** Returns a partner by unique slug. */
-    public Optional<DeliveryPartner> getBySlug(String slug) {
-        String s = safeTrim(slug);
-        if (s == null || s.isEmpty()) return Optional.empty();
-        return partnerRepo.findBySlug(s);
+    /** Returns a partner by unique code. */
+    public Optional<DeliveryPartner> getByCode(String code) {
+        String c = safeTrim(code);
+        if (c == null || c.isEmpty()) return Optional.empty();
+        return partnerRepo.findByCode(c); // Ensure repo has this method
     }
 
     /** Lists all partners (active and inactive). */

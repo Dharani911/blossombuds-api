@@ -117,51 +117,71 @@ public class CustomerService {
 
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
-    public Address addAddress(Long customerId, AddressDto dto, String actor) {
+    public AddressView addAddress(Long customerId, AddressDto dto, String actor) {
         if (customerId == null) throw new IllegalArgumentException("customerId is required");
         if (dto == null) throw new IllegalArgumentException("AddressDto is required");
 
-        // Ownership enforcement (customers can only mutate their own addresses)
+        // Ownership enforcement
         ensureActorIsAdminOrCustomerSelf(actor, customerId);
 
         Customer c = customerRepo.findById(customerId)
                 .orElseThrow(() -> new IllegalArgumentException("Customer not found: " + customerId));
 
-        District district = districtRepository.findById(dto.getDistrictId())
-                .orElseThrow(() -> new IllegalArgumentException("District not found: " + dto.getDistrictId()));
-        State state = stateRepository.findById(dto.getStateId())
-                .orElseThrow(() -> new IllegalArgumentException("State not found: " + dto.getStateId()));
-        Country country = countryRepository.findById(dto.getCountryId())
-                .orElseThrow(() -> new IllegalArgumentException("Country not found: " + dto.getCountryId()));
+        // ── Optional FKs: only resolve when ids are provided ─────────────────────
+        Country country = null;
+        if (dto.getCountryId() != null) {
+            country = countryRepository.findById(dto.getCountryId())
+                    .orElseThrow(() -> new IllegalArgumentException("Country not found: " + dto.getCountryId()));
+        }
 
+        State state = null;
+        if (dto.getStateId() != null) {
+            state = stateRepository.findById(dto.getStateId())
+                    .orElseThrow(() -> new IllegalArgumentException("State not found: " + dto.getStateId()));
+        }
+
+        District district = null;
+        if (dto.getDistrictId() != null) {
+            district = districtRepository.findById(dto.getDistrictId())
+                    .orElseThrow(() -> new IllegalArgumentException("District not found: " + dto.getDistrictId()));
+        }
+
+        // ── Build entity ────────────────────────────────────────────────────────
         Address a = new Address();
         a.setCustomer(c);
-        a.setName(dto.getName());
-        a.setPhone(dto.getPhone());
-        a.setLine1(dto.getLine1());
+        a.setName(dto.getName());                    // required in your UI
+        a.setPhone(dto.getPhone());                  // may be null for intl
+        a.setLine1(dto.getLine1());                  // required in your UI
         a.setLine2(dto.getLine2());
-        a.setDistrict(district);
-        a.setState(state);
-        a.setPincode(dto.getPincode());
-        a.setCountry(country);
-        a.setIsDefault(dto.getIsDefault() != null ? dto.getIsDefault() : Boolean.FALSE);
-        a.setActive(dto.getActive() != null ? dto.getActive() : Boolean.TRUE);
+        a.setPincode(dto.getPincode());              // may be null for intl
+        a.setCountry(country);                       // can be null if not provided
+        a.setState(state);                           // can be null if not provided
+        a.setDistrict(district);                     // can be null if not provided
+        a.setActive(Boolean.TRUE.equals(dto.getActive()) || dto.getActive() == null);
+        a.setIsDefault(Boolean.TRUE.equals(dto.getIsDefault())); // default false if null
         a.setCreatedBy(actor);
         a.setCreatedAt(OffsetDateTime.now());
 
+        // If this is the customer's FIRST address, make it default automatically
+        boolean hasAny = addressRepo.existsByCustomer_IdAndActiveTrue(customerId);
+        if (!hasAny) {
+            a.setIsDefault(true);
+        }
+
         Address saved = addressRepo.save(a);
 
-        // ensure single default per customer
-        /*if (Boolean.TRUE.equals(saved.getIsDefault())) {
-            unsetOtherDefaults(customerId, saved.getId());
-        }*/
-        return saved;
+        // Ensure single default (optional, uncomment to enforce)
+        // if (Boolean.TRUE.equals(saved.getIsDefault())) {
+        //     unsetOtherDefaults(customerId, saved.getId());
+        // }
+
+        return AddressView.of(saved);
     }
 
-    /** Updates an address; if set as default, unsets other defaults (owner or admin). */
+    /** Update address -> return view */
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
-    public Address updateAddress(Long addressId, AddressDto dto, String actor) {
+    public AddressView updateAddress(Long addressId, AddressDto dto, String actor) {
         if (addressId == null) throw new IllegalArgumentException("addressId is required");
         if (dto == null) throw new IllegalArgumentException("AddressDto is required");
 
@@ -200,22 +220,23 @@ public class CustomerService {
         if (Boolean.TRUE.equals(saved.getIsDefault())) {
             unsetOtherDefaults(saved.getCustomer().getId(), saved.getId());
         }
-        return saved;
+        return AddressView.of(saved);
     }
 
-    /** Lists addresses for a customer (owner or admin). */
+    /** List addresses for a customer -> return views */
     @Transactional(readOnly = true)
     @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
-    public List<Address> listAddresses(Long customerId, String actor) {
+    public List<AddressView> listAddresses(Long customerId, String actor) {
         if (customerId == null) throw new IllegalArgumentException("customerId is required");
         ensureActorIsAdminOrCustomerSelf(actor, customerId);
-        return addressRepo.findByCustomer_Id(customerId);
+        return addressRepo.findByCustomer_Id(customerId)
+                .stream().map(AddressView::of).toList();
     }
 
-    /** Marks an address as the default for its customer (owner or admin). */
+    /** Mark address as default -> return view */
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
-    public Address setDefaultAddress(Long addressId, String actor) {
+    public AddressView setDefaultAddress(Long addressId, String actor) {
         if (addressId == null) throw new IllegalArgumentException("addressId is required");
         Address a = addressRepo.findById(addressId)
                 .orElseThrow(() -> new IllegalArgumentException("Address not found: " + addressId));
@@ -228,10 +249,10 @@ public class CustomerService {
         Address saved = addressRepo.save(a);
 
         unsetOtherDefaults(saved.getCustomer().getId(), saved.getId());
-        return saved;
+        return AddressView.of(saved);
     }
 
-    /** Soft-deletes an address (active=false) and unsets default (owner or admin). */
+    /** Soft-delete (active=false) */
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
     public void deleteAddress(Long addressId, String actor) {
@@ -245,6 +266,7 @@ public class CustomerService {
         a.setIsDefault(Boolean.FALSE);
         a.setModifiedBy(actor);
         a.setModifiedAt(OffsetDateTime.now());
+        // flush happens on tx commit
     }
 
     // ─────────────────────────────────────────────────────────────

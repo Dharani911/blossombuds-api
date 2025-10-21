@@ -21,7 +21,6 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
-/** Central Spring Security setup: JWT, CORS, stateless, and route rules. */
 @Configuration
 @EnableMethodSecurity
 @RequiredArgsConstructor
@@ -53,7 +52,7 @@ public class SecurityConfig {
                         })
                 )
 
-                // route rules
+                // route rules (order matters: specific → general)
                 .authorizeHttpRequests(auth -> auth
                         // ----- PUBLIC GETs -----
                         .requestMatchers(HttpMethod.GET, "/api/catalog/**").permitAll()
@@ -62,49 +61,46 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/reviews/product/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
 
-                        // If you want settings readable without auth:
+                        // Settings (public read — adjust if needed)
                         .requestMatchers(HttpMethod.GET, "/api/settings/**").permitAll()
+
+                        // Geo lookups public
+                        .requestMatchers(HttpMethod.GET, "/api/locations/**").permitAll()
+
+                        // Shipping price calculation usable pre-login
+                        .requestMatchers(HttpMethod.GET,  "/api/shipping/quote").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/shipping/preview").permitAll()
 
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/**").permitAll()
 
                         // ----- AUTH (PUBLIC) -----
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/customers/auth/register").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/customers/auth/verify").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/customers/auth/login").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/customers/auth/password-reset/request").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/customers/auth/password-reset/confirm").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/customers/auth/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/payments/razorpay/webhook").permitAll()
-
                         .requestMatchers(HttpMethod.POST, "/api/auth/logout").authenticated()
 
-                        // Catalog mutations
+                        // ----- ADMIN namespace -----
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")   // 🔒 protect all admin APIs
+
+                        // Catalog mutations (admin)
                         .requestMatchers(HttpMethod.POST,   "/api/catalog/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT,    "/api/catalog/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/catalog/**").hasRole("ADMIN")
 
                         // ----- CUSTOMER / ADMIN mixed -----
                         .requestMatchers(HttpMethod.GET, "/api/orders/**").hasAnyRole("CUSTOMER","ADMIN")
-                        //.requestMatchers("/api/settings/**").hasAnyRole("ADMIN","CUSTOMER")   // <-- fixed
-                        .requestMatchers("/api/promotions/**").hasAnyRole("ADMIN","CUSTOMER") // <-- fixed
-                        .requestMatchers("/api/partners/**").hasAnyRole("ADMIN","CUSTOMER")   // <-- fixed
-                        .requestMatchers("/api/orders/**").hasAnyRole("ADMIN","CUSTOMER")     // <-- fixed
-                        .requestMatchers("/api/shipping/**").hasAnyRole("ADMIN","CUSTOMER")   // <-- fixed
+                        .requestMatchers("/api/promotions/**").hasAnyRole("ADMIN","CUSTOMER")
+                        .requestMatchers("/api/partners/**").hasAnyRole("ADMIN","CUSTOMER")
+                      //  .requestMatchers("/api/shipping/**").hasAnyRole("ADMIN","CUSTOMER") // protects other shipping endpoints (not quote/preview)
                         .requestMatchers(HttpMethod.POST, "/api/reviews").hasAnyRole("CUSTOMER","ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/reviews/**").hasAnyRole("CUSTOMER","ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/payments/razorpay/orders/**").hasAnyRole("CUSTOMER","ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/payments/razorpay/verify").hasAnyRole("CUSTOMER","ADMIN")
 
-                        .requestMatchers(HttpMethod.GET, "/api/list").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/locations").permitAll()
-                        .requestMatchers("/api/customers/**").hasAnyRole("ADMIN","CUSTOMER")
-
-
                         // anything else
                         .anyRequest().authenticated()
                 )
-
 
                 // JWT filter
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
@@ -119,8 +115,9 @@ public class SecurityConfig {
         cfg.setAllowedOrigins(List.of(
                 "http://localhost:3000",
                 "http://localhost:5173",
-                "http://localhost:5174", // dev sometimes auto-bumps
-                "http://127.0.0.1:3000"
+                "http://localhost:5174",
+                "http://127.0.0.1:3000",
+                "http://127.0.0.1:5173" // optional, handy in dev
         ));
         cfg.setAllowedMethods(List.of("GET","POST","PUT","DELETE","PATCH","OPTIONS"));
         cfg.setAllowedHeaders(List.of("Authorization","Content-Type","X-Requested-With"));

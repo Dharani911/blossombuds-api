@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../app/AuthProvider";
 import { useCart } from "../app/CartProvider";
 import Logo from "../assets/BB_Logo.svg";
+import CustomerReviewsPage from "../pages/ReviewsPage";
 
 /** Inline SVG icons */
 function ProfileSVG(props: React.SVGProps<SVGSVGElement>) {

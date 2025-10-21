@@ -113,5 +113,34 @@
       ]]></sql>
         </rollback>
     </changeSet>
+    <changeSet id="0019-04-add-min-items-to-coupons" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="coupons" columnName="min_items"/>
+            </not>
+        </preConditions>
+
+        <!-- 1) Add column (nullable) -->
+        <addColumn tableName="coupons">
+            <column name="min_items" type="integer"
+                    remarks="Minimum number of items required for coupon to apply (null = no rule)"/>
+        </addColumn>
+
+        <!-- 2) Add non-negative check constraint via SQL for max compatibility -->
+        <sql>
+            ALTER TABLE coupons
+            ADD CONSTRAINT chk_coupons_min_items_nonneg
+            CHECK (min_items IS NULL OR min_items &gt;= 0);
+        </sql>
+
+        <rollback>
+            <!-- Drop constraint then column -->
+            <sql>
+                ALTER TABLE coupons
+                DROP CONSTRAINT IF EXISTS chk_coupons_min_items_nonneg;
+            </sql>
+            <dropColumn tableName="coupons" columnName="min_items"/>
+        </rollback>
+    </changeSet>
 
 </databaseChangeLog>

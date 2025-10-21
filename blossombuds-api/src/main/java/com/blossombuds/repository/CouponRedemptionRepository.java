@@ -16,4 +16,6 @@ public interface CouponRedemptionRepository extends JpaRepository<CouponRedempti
 
     /** Total times a coupon was redeemed by a customer (for per-customer limits). */
     long countByCoupon_IdAndCustomerId(Long couponId, Long customerId);
+
+
 }

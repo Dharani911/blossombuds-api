@@ -9,8 +9,10 @@ import java.util.Optional;
 /** Repository for delivery partners. */
 public interface DeliveryPartnerRepository extends JpaRepository<DeliveryPartner, Long> {
 
-    /** Finds a partner by unique slug. */
-    Optional<DeliveryPartner> findBySlug(String slug);
+
+
+    Optional<DeliveryPartner> findByCode(String code);
+
 
     /** Lists all active partners. */
     List<DeliveryPartner> findByActiveTrue();

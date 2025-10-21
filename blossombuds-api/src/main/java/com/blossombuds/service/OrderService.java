@@ -81,7 +81,6 @@ public class OrderService {
         Country country = countryRepository.findById(dto.getShipCountryId())
                 .orElseThrow(() -> new IllegalArgumentException("Country not found: " + dto.getShipCountryId()));
 
-        // India-only enforcement at the service layer
         // India-only enforcement at the service layer (name-based)
         if (country.getName() == null || !"India".equalsIgnoreCase(country.getName().trim())) {
             throw new IllegalArgumentException("International orders are not accepted via website");
@@ -100,20 +99,39 @@ public class OrderService {
             }
         }
 
-        // Compute shipping fee using rules + free threshold
-        BigDecimal computedShipping = deliveryFeeService.computeFeeWithThreshold(
+        // --- SHIPPING FEE: verify & correct ---
+        // Client should already have previewed it, but server recomputes to prevent tampering.
+        BigDecimal expectedShipping = deliveryFeeService.computeFeeWithThreshold(
                 dto.getItemsSubtotal(), dto.getShipStateId(), dto.getShipDistrictId()
         );
+        if (expectedShipping == null || expectedShipping.signum() < 0) {
+            expectedShipping = BigDecimal.ZERO;
+        }
+
+        BigDecimal submittedShipping = dto.getShippingFee() == null ? BigDecimal.ZERO : dto.getShippingFee();
+        BigDecimal shippingToUse = expectedShipping;
+
+        // Optionally log/audit if submitted != expected
+        if (submittedShipping.compareTo(expectedShipping) != 0) {
+            // log.warn("Submitted shipping ({}) differs from expected ({}). Using expected.", submittedShipping, expectedShipping);
+        }
+
+        // Compute grand total server-side (authoritative)
+        BigDecimal itemsSubtotal = dto.getItemsSubtotal() == null ? BigDecimal.ZERO : dto.getItemsSubtotal();
+        BigDecimal discountTotal = dto.getDiscountTotal() == null ? BigDecimal.ZERO : dto.getDiscountTotal();
+        if (discountTotal.signum() < 0) discountTotal = BigDecimal.ZERO; // defensive
+        BigDecimal computedGrand = itemsSubtotal.add(shippingToUse).subtract(discountTotal);
+        if (computedGrand.signum() < 0) computedGrand = BigDecimal.ZERO;
 
         Order o = new Order();
         o.setPublicCode(code);
         o.setCustomerId(dto.getCustomerId());
         o.setStatus(dto.getStatus());
 
-        o.setItemsSubtotal(dto.getItemsSubtotal());
-        o.setShippingFee(computedShipping != null ? computedShipping : BigDecimal.ZERO); // ← keep computed value
-        o.setDiscountTotal(dto.getDiscountTotal());
-        o.setGrandTotal(dto.getGrandTotal());
+        o.setItemsSubtotal(itemsSubtotal);
+        o.setShippingFee(shippingToUse);          // ← authoritative, verified value
+        o.setDiscountTotal(discountTotal);
+        o.setGrandTotal(computedGrand);           // ← authoritative, recomputed
         o.setCurrency(dto.getCurrency());
 
         o.setCourierName(dto.getCourierName());
@@ -152,12 +170,13 @@ public class OrderService {
         emailService.sendOrderConfirmation(
                 cust.getEmail(),
                 cust.getName(),
-                saved.getPublicCode(),   // YYNNNN in DB
+                saved.getPublicCode(),
                 saved.getCurrency(),
                 saved.getGrandTotal()
         );
         return saved;
     }
+
 
     /** Retrieves an order by BBYYNNNN/YYNNNN public code (case-insensitive for BB prefix). */
     public Optional<Order> getByPublicCode(String anyPublicCode) {

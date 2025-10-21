@@ -65,6 +65,13 @@ public class ReviewController {
             @PageableDefault(size = 20) Pageable pageable) {
         return reviews.search(status, q, pageable);
     }
+    @GetMapping
+    public Page<ProductReview> listPublic(
+            @RequestParam(required = false) String q,                // optional free-text
+            @PageableDefault(size = 20, sort = "createdAt,desc") Pageable pageable) {
+        // Reuse your ReviewService search; force status to APPROVED
+        return reviews.search("APPROVED", q, pageable);
+    }
 
     // ── helpers ───────────────────────────────────────────────────────────────
     private String actor(Authentication auth) {

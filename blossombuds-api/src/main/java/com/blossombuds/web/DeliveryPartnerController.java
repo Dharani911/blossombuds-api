@@ -47,11 +47,18 @@ public class DeliveryPartnerController {
         return partners.get(id);
     }
 
-    /** Get by slug (public). */
+    /** Get by code (public). */
+    @GetMapping("/by-code/{code}")
+    public DeliveryPartner getByCode(@PathVariable String code) {
+        return partners.getByCode(code)
+                .orElseThrow(() -> new IllegalArgumentException("DeliveryPartner not found: " + code));
+    }
+
+    /** Back-compat: slug alias to code (public). */
     @GetMapping("/by-slug/{slug}")
-    public DeliveryPartner getBySlug(@PathVariable String slug) {
-        return partners.getBySlug(slug)
-                .orElseThrow(() -> new IllegalArgumentException("DeliveryPartner not found: " + slug));
+    public DeliveryPartner getBySlugCompat(@PathVariable String slug) {
+        // Treat slug path param as "code" to support older clients
+        return getByCode(slug);
     }
 
     /** List all partners (admin). */

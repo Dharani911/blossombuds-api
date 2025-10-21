@@ -3,7 +3,7 @@ package com.blossombuds.service;
 import com.blossombuds.domain.Coupon;
 import com.blossombuds.domain.CouponRedemption;
 import com.blossombuds.domain.Order;
-import com.blossombuds.dto.CouponRedemptionDto;
+import com.blossombuds.dto.CouponDto;
 import com.blossombuds.repository.CouponRedemptionRepository;
 import com.blossombuds.repository.CouponRepository;
 import com.blossombuds.repository.OrderRepository;
@@ -12,13 +12,18 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
-/** Application service for validating/applying coupons and recording redemptions. */
+/**
+ * Coupons: create/update (admin), preview & apply (customer/admin), and redemption recording.
+ * Now enforces min items (min_items) in addition to min order total.
+ */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -28,27 +33,147 @@ public class PromotionService {
     private final CouponRedemptionRepository redemptionRepo;
     private final OrderRepository orderRepo;
 
-    // ───────────────────────────────
-    // Public API
-    // ───────────────────────────────
+    /* ========================= ADMIN APIs ========================= */
+
+    @Transactional
+    @PreAuthorize("hasRole('ADMIN')")
+    public CouponDto createCoupon(CouponDto dto) {
+        Coupon c = new Coupon();
+        applyCouponFields(c, dto, true);
+        c = couponRepo.save(c);
+        return toDto(c);
+    }
+
+    @Transactional
+    @PreAuthorize("hasRole('ADMIN')")
+    public CouponDto updateCoupon(Long id, CouponDto dto) {
+        Coupon c = couponRepo.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Coupon not found: " + id));
+        applyCouponFields(c, dto, false);
+        return toDto(c);
+    }
+
+    public CouponDto getCoupon(Long id) {
+        return toDto(couponRepo.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Coupon not found: " + id)));
+    }
+
+    public List<CouponDto> listCoupons() {
+        return couponRepo.findAll().stream().map(this::toDto).toList();
+    }
+
+    @Transactional
+    @PreAuthorize("hasRole('ADMIN')")
+    public void setCouponActive(Long id, boolean active) {
+        Coupon c = couponRepo.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Coupon not found: " + id));
+        c.setActive(active);
+    }
+
+    /* =================== Mapping & validation =================== */
+
+    private void applyCouponFields(Coupon c, CouponDto dto, boolean isCreate) {
+        // Code (store uppercase; enforce uniqueness case-insensitively)
+        if (dto.getCode() != null) {
+            String codeUp = normalize(dto.getCode());
+            if (isCreate) {
+                if (couponRepo.existsByCodeIgnoreCase(codeUp))
+                    throw new IllegalArgumentException("Coupon code already exists: " + codeUp);
+            } else if (!codeUp.equalsIgnoreCase(nvl(c.getCode()))
+                    && couponRepo.existsByCodeIgnoreCase(codeUp)) {
+                throw new IllegalArgumentException("Coupon code already exists: " + codeUp);
+            }
+            c.setCode(codeUp);
+        } else if (isCreate) {
+            throw new IllegalArgumentException("Coupon code is required");
+        }
+
+       // if (dto.getTitle() != null) c.setTitle(dto.getTitle().trim());
+
+        if (dto.getDiscountType() != null) {
+            String t = dto.getDiscountType().trim().toUpperCase(Locale.ROOT);
+            if (!t.equals("PERCENT") && !t.equals("FLAT"))
+                throw new IllegalArgumentException("discountType must be PERCENT or FLAT");
+            c.setDiscountType(t); // maps to "type"
+        } else if (isCreate) {
+            throw new IllegalArgumentException("discountType is required");
+        }
+
+        if (dto.getDiscountValue() != null) {
+            if (dto.getDiscountValue().signum() < 0)
+                throw new IllegalArgumentException("discountValue must be >= 0");
+            c.setDiscountValue(dto.getDiscountValue()); // maps to "amount"
+        } else if (isCreate) {
+            throw new IllegalArgumentException("discountValue is required");
+        }
+
+        // min_order_value
+        if (dto.getMinOrderTotal() != null && dto.getMinOrderTotal().signum() < 0)
+            throw new IllegalArgumentException("minOrderTotal must be >= 0");
+        c.setMinOrderTotal(dto.getMinOrderTotal());
+
+        // NEW: min_items
+        if (dto.getMinItems() != null && dto.getMinItems() < 0)
+            throw new IllegalArgumentException("minItems must be >= 0");
+        c.setMinItems(dto.getMinItems());
+
+        // validity window
+        if (dto.getValidFrom() != null) c.setValidFrom(dto.getValidFrom()); // "starts_at"
+        if (dto.getValidTo()   != null) c.setValidTo(dto.getValidTo());     // "ends_at"
+        if (c.getValidFrom() != null && c.getValidTo() != null && c.getValidTo().isBefore(c.getValidFrom()))
+            throw new IllegalArgumentException("validTo must be after validFrom");
+
+        c.setUsageLimit(dto.getUsageLimit());
+        c.setPerCustomerLimit(dto.getPerCustomerLimit());
+
+        if (dto.getActive() != null) c.setActive(dto.getActive());
+        else if (isCreate) c.setActive(Boolean.TRUE);
+    }
+
+    private CouponDto toDto(Coupon c) {
+        CouponDto dto = new CouponDto();
+        dto.setId(c.getId());
+        dto.setCode(c.getCode());
+
+        dto.setDiscountType(c.getDiscountType());   // "type"
+        dto.setDiscountValue(c.getDiscountValue()); // "amount"
+        dto.setMinOrderTotal(c.getMinOrderTotal()); // "min_order_value"
+        dto.setMinItems(c.getMinItems());           // "min_items"
+        dto.setValidFrom(c.getValidFrom());         // "starts_at"
+        dto.setValidTo(c.getValidTo());             // "ends_at"
+        dto.setUsageLimit(c.getUsageLimit());
+        dto.setPerCustomerLimit(c.getPerCustomerLimit());
+        dto.setActive(c.getActive());
+        return dto;
+    }
+
+    private String nvl(String s) { return (s == null ? "" : s); }
+
+    /* ======================= Public APIs ======================= */
 
     /** Returns an active coupon by code, if present. */
     public Optional<Coupon> getActiveCoupon(String code) {
         String norm = normalize(code);
         if (norm == null || norm.isBlank()) return Optional.empty();
-        return couponRepo.findByCodeAndActiveTrue(norm);
+        return couponRepo.findByCodeIgnoreCaseAndActiveTrue(norm);
     }
 
-    /** Computes discount for a coupon against an order total (does NOT persist). */
-    public BigDecimal previewDiscount(String code, Long customerId, BigDecimal orderTotal) {
-        Coupon c = couponRepo.findByCodeAndActiveTrue(requireNormalize(code))
+    /**
+     * Preview discount for a given order snapshot (does NOT persist).
+     * Enforces validity window, usage limits (global & per-customer), min total, and min items.
+     */
+    public BigDecimal previewDiscount(String code, Long customerId, BigDecimal orderTotal, Integer itemsCount) {
+        Coupon c = couponRepo.findByCodeIgnoreCaseAndActiveTrue(requireNormalize(code))
                 .orElseThrow(() -> new IllegalArgumentException("Coupon not found or inactive"));
         validateUsageAndWindow(c, customerId);
         validateMinTotal(c, orderTotal);
+        validateMinItems(c, itemsCount);
         return computeDiscount(c, orderTotal);
     }
 
-    /** Applies a coupon to an order, updates order totals, and records a redemption. */
+    /**
+     * Applies a coupon to an existing order: updates totals and records a redemption.
+     */
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
     public CouponRedemption applyToOrder(String code, Long orderId, Long customerId, String actor) {
@@ -58,17 +183,17 @@ public class PromotionService {
                 .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
         if (customerId == null) customerId = order.getCustomerId();
 
-        Coupon c = couponRepo.findByCodeAndActiveTrue(requireNormalize(code))
+        Coupon c = couponRepo.findByCodeIgnoreCaseAndActiveTrue(requireNormalize(code))
                 .orElseThrow(() -> new IllegalArgumentException("Coupon not found or inactive"));
 
-        // Validate business rules against the current order/customer
+        // enforce all conditions
         validateUsageAndWindow(c, customerId);
         validateMinTotal(c, order.getGrandTotal());
+        validateMinItems(c, orderItemCount(order));
 
-        // Compute discount (capped if needed)
+        // compute discount and re-total
         BigDecimal discount = computeDiscount(c, order.getGrandTotal());
 
-        // Update order totals (grandTotal = itemsSubtotal + shippingFee - discount, not below zero)
         BigDecimal itemsSubtotal = nvl(order.getItemsSubtotal());
         BigDecimal shipping = nvl(order.getShippingFee());
         BigDecimal newGrand = itemsSubtotal.add(shipping).subtract(nvl(discount));
@@ -78,7 +203,7 @@ public class PromotionService {
         order.setGrandTotal(newGrand.setScale(2, RoundingMode.HALF_UP));
         orderRepo.save(order);
 
-        // Persist redemption
+        // record redemption
         CouponRedemption r = new CouponRedemption();
         r.setCoupon(c);
         r.setOrder(order);
@@ -90,7 +215,6 @@ public class PromotionService {
         return redemptionRepo.save(r);
     }
 
-    /** Soft-deactivates a redemption record (useful on cancel/refund). */
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void revokeRedemption(Long redemptionId, String actor) {
@@ -102,17 +226,14 @@ public class PromotionService {
         r.setModifiedAt(OffsetDateTime.now());
     }
 
-    // ───────────────────────────────
-    // Internal helpers
-    // ───────────────────────────────
+    /* ======================= Internal helpers ======================= */
 
-    /** Normalizes a coupon code for lookup (trim + upper). */
+    /** Normalize lookup key (trim + upper). */
     private String normalize(String code) {
         if (code == null) return null;
         return code.trim().toUpperCase(Locale.ROOT);
     }
 
-    /** Normalizes a coupon code and ensures it's non-blank. */
     private String requireNormalize(String code) {
         String n = normalize(code);
         if (n == null || n.isBlank()) {
@@ -121,32 +242,29 @@ public class PromotionService {
         return n;
     }
 
-    /** Throws if coupon is outside validity window or usage limits. */
+    /** Validity window and usage limits. */
     private void validateUsageAndWindow(Coupon c, Long customerId) {
         OffsetDateTime now = OffsetDateTime.now();
 
-        if (c.getValidFrom() != null && now.isBefore(c.getValidFrom())) {
+        if (c.getValidFrom() != null && now.isBefore(c.getValidFrom()))
             throw new IllegalArgumentException("Coupon not yet valid");
-        }
-        if (c.getValidTo() != null && now.isAfter(c.getValidTo())) {
+
+        if (c.getValidTo() != null && now.isAfter(c.getValidTo()))
             throw new IllegalArgumentException("Coupon expired");
-        }
 
         if (c.getUsageLimit() != null) {
-            long used = redemptionRepo.countByCoupon_Id(c.getId());
-            if (used >= c.getUsageLimit()) {
+            long used = redemptionRepo.countByCoupon_Id(c.getId()); // consider ActiveTrue variant if you support revokes
+            if (used >= c.getUsageLimit())
                 throw new IllegalArgumentException("Coupon usage limit reached");
-            }
         }
         if (c.getPerCustomerLimit() != null && customerId != null) {
-            long usedByCustomer = redemptionRepo.countByCoupon_IdAndCustomerId(c.getId(), customerId);
-            if (usedByCustomer >= c.getPerCustomerLimit()) {
+            long usedByCustomer = redemptionRepo.countByCoupon_IdAndCustomerId(c.getId(), customerId); // consider ActiveTrue variant
+            if (usedByCustomer >= c.getPerCustomerLimit())
                 throw new IllegalArgumentException("Per-customer usage limit reached");
-            }
         }
     }
 
-    /** Throws if order total is below coupon's minimum. */
+    /** Enforce minimum order total (min_order_value). */
     private void validateMinTotal(Coupon c, BigDecimal orderTotal) {
         if (c.getMinOrderTotal() != null) {
             if (orderTotal == null || orderTotal.compareTo(c.getMinOrderTotal()) < 0) {
@@ -155,30 +273,64 @@ public class PromotionService {
         }
     }
 
-    /** Calculates discount amount based on type/value and caps by maxDiscountAmount. */
+    /** Enforce minimum items (min_items). */
+    private void validateMinItems(Coupon c, Integer itemsCount) {
+        Integer minItems = c.getMinItems();
+        if (minItems != null && minItems > 0) {
+            int count = (itemsCount == null ? 0 : itemsCount);
+            if (count < minItems) {
+                throw new IllegalArgumentException("Minimum " + minItems + " item(s) required for this coupon");
+            }
+        }
+    }
+
+    /** Compute discount: PERCENT or FLAT. Clamp to not exceed order total. */
     private BigDecimal computeDiscount(Coupon c, BigDecimal orderTotal) {
         if (orderTotal == null) orderTotal = BigDecimal.ZERO;
 
         String type = (c.getDiscountType() == null) ? "" : c.getDiscountType().trim().toUpperCase(Locale.ROOT);
         BigDecimal val = (c.getDiscountValue() == null) ? BigDecimal.ZERO : c.getDiscountValue();
 
-        BigDecimal discount;
-        switch (type) {
-            case "PERCENT" -> discount = orderTotal.multiply(val).movePointLeft(2); // orderTotal * (val/100)
-            case "FLAT"    -> discount = val;
+        BigDecimal discount = switch (type) {
+            case "PERCENT" -> orderTotal.multiply(val).movePointLeft(2); // orderTotal * (val/100)
+            case "FLAT"    -> val;
             default        -> throw new IllegalArgumentException("Unsupported discount type: " + c.getDiscountType());
-        }
+        };
 
-        if (c.getMaxDiscountAmount() != null && discount.compareTo(c.getMaxDiscountAmount()) > 0) {
-            discount = c.getMaxDiscountAmount();
-        }
+        if (discount.compareTo(orderTotal) > 0) discount = orderTotal; // cannot discount more than total
         if (discount.signum() < 0) discount = BigDecimal.ZERO;
 
         return discount.setScale(2, RoundingMode.HALF_UP);
     }
 
-    /** Null-coalescing BigDecimal → zero. */
+    /** Null-coalescing BigDecimal -> zero. */
     private static BigDecimal nvl(BigDecimal v) {
         return v == null ? BigDecimal.ZERO : v;
+    }
+
+    /**
+     * Best-effort extraction of item count from Order. Tries common getters:
+     * getItemsCount(), getTotalItems(), getItemsQuantity(), getQuantity() — returns 0 if none present.
+     */
+    private Integer orderItemCount(Order order) {
+        if (order == null) return 0;
+        Integer val = tryIntGetter(order, "getItemsCount");
+        if (val != null) return val;
+        val = tryIntGetter(order, "getTotalItems");
+        if (val != null) return val;
+        val = tryIntGetter(order, "getItemsQuantity");
+        if (val != null) return val;
+        val = tryIntGetter(order, "getQuantity");
+        return val != null ? val : 0;
+    }
+
+    private Integer tryIntGetter(Order order, String getterName) {
+        try {
+            Method m = order.getClass().getMethod(getterName);
+            Object o = m.invoke(order);
+            if (o instanceof Integer i) return i;
+            if (o instanceof Long l) return l.intValue();
+        } catch (Exception ignored) {}
+        return null;
     }
 }

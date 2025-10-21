@@ -11,35 +11,35 @@ import java.time.OffsetDateTime;
 @SQLDelete(sql = "UPDATE delivery_partners SET active = false, modified_at = now() WHERE id = ?")
 @Where(clause = "active = true")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor
-@Entity @Table(name = "delivery_partners")
+@Entity
+@Table(
+        name = "delivery_partners",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_dpartners_code", columnNames = "code"),
+                @UniqueConstraint(name = "uk_dpartners_name", columnNames = "name")
+        }
+)
 public class DeliveryPartner {
 
     /** Surrogate primary key for delivery partners. */
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** Unique slug/key (e.g., bluedart, dtdc). */
-    @Column(name = "slug", length = 60, unique = true)
-    private String slug;
-
-    /** Display name (e.g., BlueDart). */
-    @Column(name = "name", length = 120)
+    /** Display name (e.g., "Blue Dart"). */
+    @Column(name = "name", length = 100, nullable = true)
     private String name;
 
-    /** URL template for tracking (e.g., https://track.example.com/{tracking_number}). */
+    /** Unique partner code/key (e.g., "BLUEDART", "DTDC"). */
+    @Column(name = "code", length = 40, nullable = true)
+    private String code;
+
+    /** URL template for tracking, e.g. https://track.example.com/{trackingNumber} */
     @Column(name = "tracking_url_template", columnDefinition = "text")
     private String trackingUrlTemplate;
 
-    /** Support contact email, if any. */
-    @Column(name = "support_email", length = 120)
-    private String supportEmail;
-
-    /** Support phone, if any. */
-    @Column(name = "support_phone", length = 40)
-    private String supportPhone;
-
     /** Soft-visibility/activation flag. */
-    @Column(nullable = false)
+    @Column(name = "active", nullable = false)
     private Boolean active = Boolean.TRUE;
 
     /** Audit: created by whom. */

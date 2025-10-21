@@ -10,7 +10,14 @@ import { ToastHost, useToasts } from "../components/profile/Toast";
 import AddressModal from "../components/profile/AddressModal";
 import ProfileHero from "../components/profile/ProfileHero";
 import type { Customer, Address, OrderLite } from "../types/profile";
-import { getAllStates, getAllDistricts, type State, type District } from "../api/geo";
+import {
+  getAllStates,
+  getAllDistricts,
+  getCountries,
+  type State,
+  type District,
+  type Country,
+} from "../api/geo";
 
 export default function ProfilePage() {
   const { user, logout, loading: authLoading } = useAuth();
@@ -33,6 +40,7 @@ export default function ProfilePage() {
   // lookup maps
   const [stateMap, setStateMap] = useState<Record<number, string>>({});
   const [districtMap, setDistrictMap] = useState<Record<number, string>>({});
+  const [countryMap, setCountryMap] = useState<Record<number, string>>({});
 
   // account edit state
   const [editingAcc, setEditingAcc] = useState(false);
@@ -45,19 +53,29 @@ export default function ProfilePage() {
   const [addrBusy, setAddrBusy] = useState(false);
   const [addrErr, setAddrErr] = useState<string | null>(null);
 
-  // load lookups once
+  // load lookups once (states, districts, countries)
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const [states, dists] = await Promise.all([getAllStates(), getAllDistricts()]);
+        const [states, dists, countries] = await Promise.all([
+          getAllStates(),
+          getAllDistricts(),
+          getCountries(),
+        ]);
         if (!alive) return;
+
         const sm: Record<number, string> = {};
         const dm: Record<number, string> = {};
+        const cm: Record<number, string> = {};
+
         (states || []).forEach((s: State) => { if (s?.id != null) sm[s.id] = s.name || String(s.id); });
         (dists || []).forEach((d: District) => { if (d?.id != null) dm[d.id] = d.name || String(d.id); });
+        (countries || []).forEach((c: Country) => { if (c?.id != null) cm[c.id] = c.name || String(c.id); });
+
         setStateMap(sm);
         setDistrictMap(dm);
+        setCountryMap(cm);
       } catch {
         // silent fallback
       }
@@ -67,6 +85,7 @@ export default function ProfilePage() {
 
   const stateNameById = (id?: number) => (id && stateMap[id]) || "";
   const districtNameById = (id?: number) => (id && districtMap[id]) || "";
+  const countryNameById = (id?: number) => (id && countryMap[id]) || "";
 
   // load profile data
   useEffect(() => {
@@ -117,7 +136,6 @@ export default function ProfilePage() {
 
     try {
       // Send all plausible field names so the backend binds one of them.
-      // (Some code paths use "fullName", some "fullname", and older ones "name".)
       await http.patch(`/api/customers/${cust.id}`, {
         fullName: fullName,
         fullname: fullName,
@@ -148,8 +166,6 @@ export default function ProfilePage() {
     }
   }
 
-
-
   function openAddAddress() {
     setAddrErr(null);
     setAddrModal({
@@ -165,6 +181,7 @@ export default function ProfilePage() {
       } as unknown as Address
     });
   }
+
   function pickIds(a: any) {
     const stateId =
       typeof a?.stateId === "number" ? a.stateId :
@@ -189,7 +206,6 @@ export default function ProfilePage() {
       data: { ...a, ...ids } as any,
     });
   }
-
 
   async function submitAddress(dto: import("../components/profile/AddressModal").AddressDtoOut) {
     if (!cust?.id) return;
@@ -249,107 +265,109 @@ export default function ProfilePage() {
       toasts.push(msg, "error");
     }
   }
-    async function deleteAddress(id: number) {
-      if (!id) return;
-      const ok = window.confirm("Delete this address?");
-      if (!ok) return;
-      try {
-        await http.delete(`/api/customers/addresses/${id}`);
-        setAddresses(prev => (prev || []).filter(a => a.id !== id));
-        toasts.push("Address deleted", "ok");
-      } catch (e: any) {
-        const msg = e?.response?.data?.message || "Could not delete address.";
-        toasts.push(msg, "error");
-      }
+
+  async function deleteAddress(id: number) {
+    if (!id) return;
+    const ok = window.confirm("Delete this address?");
+    if (!ok) return;
+    try {
+      await http.delete(`/api/customers/addresses/${id}`);
+      setAddresses(prev => (prev || []).filter(a => a.id !== id));
+      toasts.push("Address deleted", "ok");
+    } catch (e: any) {
+      const msg = e?.response?.data?.message || "Could not delete address.";
+      toasts.push(msg, "error");
     }
+  }
 
   const ordersCount = orders?.length ?? 0;
   const safeAddresses = useMemo(() => (Array.isArray(addresses) ? addresses : []), [addresses]);
 
-    return (
-      <div className="pro2-wrap">
-        <style>{pageStyles}</style>
+  return (
+    <div className="pro2-wrap">
+      <style>{pageStyles}</style>
 
-        <ProfileHero
-          initials={(initials || "BB").slice(0,2).toUpperCase()}
-          fullName={cust?.fullName || cust?.name || "Your profile"}
-          ordersCount={ordersCount}
-          onLogout={onLogout}
-        />
+      <ProfileHero
+        initials={(initials || "BB").slice(0,2).toUpperCase()}
+        fullName={cust?.fullName || cust?.name || "Your profile"}
+        ordersCount={ordersCount}
+        onLogout={onLogout}
+      />
 
+      {/* MAIN */}
+      <section className="pro2-main">
+        {err && <div className="alert bad">{err}</div>}
 
-        {/* MAIN */}
-        <section className="pro2-main">
-          {err && <div className="alert bad">{err}</div>}
+        <div className="grid">
+          <div className="col">
+            <AccountCard
+              loading={loading}
+              editing={editingAcc}
+              setEditing={setEditingAcc}
+              fullName={fullName}
+              setFullName={setFullName}
+              email={cust?.email || ""}
+              phone={phone}
+              setPhone={setPhone}
+              onSave={saveAccount}
+              saving={savingAcc}
+            />
 
-          <div className="grid">
-            <div className="col">
-              <AccountCard
-                loading={loading}
-                editing={editingAcc}
-                setEditing={setEditingAcc}
-                fullName={fullName}
-                setFullName={setFullName}
-                email={cust?.email || ""}
-                phone={phone}
-                setPhone={setPhone}
-                onSave={saveAccount}
-                saving={savingAcc}
-              />
+            {/* show country in address lines */}
+            <AddressesCard
+              loading={!addresses}
+              addresses={safeAddresses}
+              onAdd={openAddAddress}
+              onEdit={openEditAddress}
+              onSetDefault={setDefaultAddress}
+              onDelete={deleteAddress}
+              stateNameById={stateNameById}
+              districtNameById={districtNameById}
+              countryNameById={countryNameById}
+            />
+          </div>
 
-              <AddressesCard
-                loading={!addresses}
-                addresses={safeAddresses}
-                onAdd={openAddAddress}
-                onEdit={openEditAddress}
-                onSetDefault={setDefaultAddress}
-                onDelete={deleteAddress}
-                stateNameById={stateNameById}
-                districtNameById={districtNameById}
-              />
-            </div>
-
-            <div className="col">
-              <OrdersRail loading={loading} orders={orders || []} />
-              <div className="card promo">
-                <div className="promo-inner">
-                  <h4>Looking for something bespoke?</h4>
-                  <p>Share your idea, we’ll make it bloom beautifully.</p>
-                  <Link to="/" className="cta">Start a custom order</Link>
-                </div>
+          <div className="col">
+            <OrdersRail loading={loading} orders={orders || []} />
+            <div className="card promo">
+              <div className="promo-inner">
+                <h4>Looking for something bespoke?</h4>
+                <p>Share your idea, we’ll make it bloom beautifully.</p>
+                <Link to="/" className="cta">Start a custom order</Link>
               </div>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {addrModal && (
-          <AddressModal
-            initial={addrModal.data}
-            busy={addrBusy}
-            error={addrErr}
-            onClose={() => setAddrModal(null)}
-            onSubmit={submitAddress}
-            mode={addrModal.mode}
-          />
-        )}
+      {addrModal && (
+        <AddressModal
+          initial={addrModal.data}
+          busy={addrBusy}
+          error={addrErr}
+          onClose={() => setAddrModal(null)}
+          onSubmit={submitAddress}
+          mode={addrModal.mode}
+        />
+      )}
 
-        <ToastHost items={toasts.items} />
-      </div>
-    );
-  }
+      <ToastHost items={toasts.items} />
+    </div>
+  );
+}
 
-  /* page-level styles (kept) */
-  const pageStyles = `
-  .pro2-wrap { background: var(--bb-bg); color: var(--bb-primary); }
-  .pro2-main{ max-width: 1200px; margin: 20px auto 30px; padding: 0 16px; }
-  .alert{ margin: 0 0 14px; padding: 10px 12px; border:1px solid rgba(240,93,139,.25); border-radius: 12px; background:#fff3f5; color:#b0003a; }
-  .grid{ display:grid; grid-template-columns: 1.15fr .85fr; gap: 18px; align-items: start; }
-  @media (max-width: 980px){ .grid{ grid-template-columns: 1fr; } }
-  .col{ display:grid; gap: 18px; }
-  .card{ position:relative; border-radius:18px; overflow:hidden; background:#fff; border:1px solid rgba(0,0,0,.06); box-shadow: 0 18px 60px rgba(0,0,0,.10); }
-  .card.promo{ background: linear-gradient(135deg, rgba(246,195,32,.12), rgba(240,93,139,.10)); border: 1px solid rgba(0,0,0,.06); }
-  .promo .promo-inner{ padding: 16px; }
-  .promo h4{ margin: 0 0 6px; font-family: "DM Serif Display", Georgia, serif; }
-  .promo p{ margin: 0 0 12px; opacity:.95; }
-  .cta{ display:inline-flex; align-items:center; justify-content:center; height: 40px; padding: 0 14px; border-radius: 12px; background: var(--bb-accent); color:#fff; font-weight: 900; box-shadow: 0 12px 32px rgba(240,93,139,.34); }
-  `;
+/* page-level styles (kept) */
+const pageStyles = `
+.pro2-wrap { background: var(--bb-bg); color: var(--bb-primary); }
+.pro2-main{ max-width: 1200px; margin: 20px auto 30px; padding: 0 16px; }
+.alert{ margin: 0 0 14px; padding: 10px 12px; border:1px solid rgba(240,93,139,.25); border-radius: 12px; background:#fff3f5; color:#b0003a; }
+.grid{ display:grid; grid-template-columns: 1.15fr .85fr; gap: 18px; align-items: start; }
+@media (max-width: 980px){ .grid{ grid-template-columns: 1fr; } }
+.col{ display:grid; gap: 18px; }
+.card{ position:relative; border-radius:18px; overflow:hidden; background:#fff; border:1px solid rgba(0,0,0,.06); box-shadow: 0 18px 60px rgba(0,0,0,.10); }
+.card.promo{ background: linear-gradient(135deg, rgba(246,195,32,.12), rgba(240,93,139,.10)); border: 1px solid rgba(0,0,0,.06); }
+.promo .promo-inner{ padding: 16px; }
+.promo h4{ margin: 0 0 6px; font-family: "DM Serif Display", Georgia, serif; }
+.promo p{ margin: 0 0 12px; opacity:.95; }
+.cta{ display:inline-flex; align-items:center; justify-content:center; height: 40px; padding: 0 14px; border-radius: 12px; background: var(--bb-accent); color:#fff; font-weight: 900; box-shadow: 0 12px 32px rgba(240,93,139,.34); }
+`;

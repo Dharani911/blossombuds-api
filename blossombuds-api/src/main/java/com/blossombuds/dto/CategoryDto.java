@@ -6,7 +6,10 @@ import lombok.Data;
 @Data
 public class CategoryDto {
     private Long id;
+    private Long parentId;
     private String slug;
     private String name;
     private Boolean active;
+    private String description;
+    private Integer sortOrder;
 }

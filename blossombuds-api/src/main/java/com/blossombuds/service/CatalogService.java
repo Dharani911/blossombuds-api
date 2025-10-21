@@ -12,6 +12,7 @@ import com.blossombuds.util.ImageUtil;
 import com.blossombuds.util.MagickBridge;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -98,12 +99,57 @@ public class CatalogService {
     @PreAuthorize("hasRole('ADMIN')")
     public Category createCategory(CategoryDto dto) {
         if (dto == null) throw new IllegalArgumentException("CategoryDto is required");
+
+        if (dto.getName() == null || dto.getName().isBlank()) {
+            throw new IllegalArgumentException("Category name is required");
+        }
+
         Category c = new Category();
-        c.setSlug(dto.getSlug());
-        c.setName(dto.getName());
+        c.setName(dto.getName().trim());
         c.setActive(dto.getActive() != null ? dto.getActive() : Boolean.TRUE);
+
+        // --- parentId → parent ---
+        if (dto.getParentId() != null) {
+            Category parent = categoryRepo.findById(dto.getParentId())
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Parent category not found: " + dto.getParentId()));
+            c.setParent(parent);
+        } else {
+            c.setParent(null);
+        }
+
+        // --- slug handling with uniqueness ---
+        String provided = dto.getSlug();
+        if (provided != null && !provided.isBlank()) {
+            String normalized = slugify(provided);
+            if (categoryRepo.existsBySlug(normalized)) {
+                throw new DuplicateKeyException("Slug already exists: " + normalized);
+            }
+            c.setSlug(normalized);
+        } else {
+            // derive from name and ensure uniqueness: "jasmine", "jasmine-2", "jasmine-3", ...
+            String base = slugify(c.getName());
+            String candidate = base;
+            int i = 2;
+            while (categoryRepo.existsBySlug(candidate)) {
+                candidate = base + "-" + i++;
+            }
+            c.setSlug(candidate);
+        }
+
         return categoryRepo.save(c);
     }
+
+    /** Naive slugify mirroring your frontend logic. */
+    private static String slugify(String s) {
+        String out = s.toLowerCase()
+                .trim()
+                .replaceAll("['\"]", "")
+                .replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("(^-|-$)", "");
+        return out.isEmpty() ? "category" : out;
+    }
+
 
     /** Lists all active categories. */
     public List<Category> listCategories() {
@@ -123,12 +169,70 @@ public class CatalogService {
     public Category updateCategory(Long id, CategoryDto dto) {
         if (id == null) throw new IllegalArgumentException("Category id is required");
         if (dto == null) throw new IllegalArgumentException("CategoryDto is required");
-        Category c = getCategory(id);
-        if (dto.getSlug() != null) c.setSlug(dto.getSlug());
-        if (dto.getName() != null) c.setName(dto.getName());
-        if (dto.getActive() != null) c.setActive(dto.getActive());
-        return c; // dirty checking
+
+        Category c = getCategory(id); // loads existing or throws
+
+        // --- name ---
+        if (dto.getName() != null) {
+            String name = dto.getName().trim();
+            if (name.isEmpty()) throw new IllegalArgumentException("Category name cannot be blank");
+            c.setName(name);
+        }
+
+        // --- slug (normalize + uniqueness) ---
+        if (dto.getSlug() != null) {
+            String normalized = slugify(dto.getSlug());
+            if (!normalized.equalsIgnoreCase(c.getSlug())) { // changed?
+                // Either use existsBySlugAndIdNot(...) or manual lookup:
+                if (categoryRepo.existsBySlug(normalized) && !normalized.equalsIgnoreCase(c.getSlug())) {
+                    throw new org.springframework.dao.DuplicateKeyException("Slug already exists: " + normalized);
+                }
+                c.setSlug(normalized);
+            }
+        }
+
+        // --- active flag ---
+        if (dto.getActive() != null) {
+            c.setActive(dto.getActive());
+        }
+
+        // --- parent (ONLY update if parentId is provided; null means 'no change') ---
+        if (dto.getParentId() != null) {
+            Long parentId = dto.getParentId();
+
+            // allow clearing parent by sending 0 (or same id) -> interpret as 'no parent'
+            if (parentId <= 0) {
+                c.setParent(null);
+            } else if (parentId.equals(id)) {
+                throw new IllegalArgumentException("A category cannot be its own parent");
+            } else {
+                Category parent = categoryRepo.findById(parentId)
+                        .orElseThrow(() -> new IllegalArgumentException("Parent category not found: " + parentId));
+                // Prevent cycles: parent cannot be a descendant of c
+                if (wouldCreateCycle(c, parent)) {
+                    throw new IllegalArgumentException("Invalid parent: would create a cycle in the category tree");
+                }
+                c.setParent(parent);
+            }
+        }
+
+        // dirty checking will persist; returning c is fine. If you prefer, call save(c).
+        return c;
     }
+
+    /** Mirror your frontend slugify. */
+
+
+    /** Walk up the chain to ensure 'parent' is not a descendant of 'node'. */
+    private boolean wouldCreateCycle(Category node, Category parentCandidate) {
+        Category cur = parentCandidate;
+        while (cur != null) {
+            if (cur.getId() != null && cur.getId().equals(node.getId())) return true;
+            cur = cur.getParent(); // OK: LAZY; within Tx
+        }
+        return false;
+    }
+
 
     /** Soft-deletes a category (active=false via @SQLDelete). */
     @Transactional

@@ -1,3 +1,4 @@
+// src/components/profile/AddressesCard.tsx
 import React from "react";
 import { toText } from "../../lib/ui";
 
@@ -10,15 +11,17 @@ export default function AddressesCard({
   onDelete,
   stateNameById,
   districtNameById,
+  countryNameById, // ✅ NEW
 }: {
   loading: boolean;
   addresses: any[];
   onAdd: () => void;
   onEdit: (a: any) => void;
   onSetDefault: (id: number) => void;
-  onDelete: (id: number) => void;               // ✅ NEW
+  onDelete: (id: number) => void;
   stateNameById: (id?: number) => string;
   districtNameById: (id?: number) => string;
+  countryNameById?: (id?: number | null) => string; // ✅ NEW (optional)
 }) {
   return (
     <div className="card glass">
@@ -38,7 +41,7 @@ export default function AddressesCard({
       )}
 
       <div className="addr-grid">
-        {addresses?.map((a: any) => {
+        {addresses?.map((a: any, idx: number) => {
           const name = a.name || [a.firstName, a.lastName].filter(Boolean).join(" ");
           const line1 = a.line1 || "";
           const line2 = a.line2 || "";
@@ -46,19 +49,27 @@ export default function AddressesCard({
 
           // Prefer ids → map to names; fall back to nested/name strings
           const state =
-            typeof a.stateId === "number" ? stateNameById(a.stateId) :
-            toText(a.state) || toText(a.stateName) || "";
+            typeof a.stateId === "number"
+              ? stateNameById(a.stateId)
+              : toText(a.state) || toText(a.stateName) || "";
 
           const district =
-            typeof a.districtId === "number" ? districtNameById(a.districtId) :
-            toText(a.district) || toText(a.city) || "";
+            typeof a.districtId === "number"
+              ? districtNameById(a.districtId)
+              : toText(a.district) || toText(a.city) || "";
+
+          // ✅ Country (use id→name map when possible; otherwise fallback to any provided text)
+          const country =
+            typeof a.countryId === "number"
+              ? (countryNameById?.(a.countryId) || String(a.countryId))
+              : toText(a.country) || toText(a.countryName) || "";
 
           const pincode = a.pincode ?? a.postalCode ?? "";
           const phone = a.phone || "";
           const isDefault = Boolean(a.isDefault);
 
           return (
-            <div className="addr" key={id || Math.random()}>
+            <div className="addr" key={Number.isFinite(id) ? id : `addr-${idx}`}>
               <div className="in">
                 <div className="addr-top">
                   <div className="addr-title">
@@ -66,14 +77,21 @@ export default function AddressesCard({
                     {isDefault && <span className="tag">Default</span>}
                   </div>
                   <div className="addr-actions">
-                    {!isDefault && !!id && <button className="chip" onClick={()=>onSetDefault(id)}>Set default</button>}
-                    <button className="chip" onClick={()=>onEdit(a)}>Edit</button>
-                    {!!id && <button className="chip danger" onClick={()=>onDelete(id)}>Delete</button>}
+                    {!isDefault && Number.isFinite(id) && (
+                      <button className="chip" onClick={() => onSetDefault(id)}>Set default</button>
+                    )}
+                    <button className="chip" onClick={() => onEdit(a)}>Edit</button>
+                    {Number.isFinite(id) && (
+                      <button className="chip danger" onClick={() => onDelete(id)}>Delete</button>
+                    )}
                   </div>
                 </div>
+
                 <div className="addr-body">
                   <div>{[line1, line2].filter(Boolean).join(", ") || "—"}</div>
                   <div>{[district, state, pincode].filter(Boolean).join(", ")}</div>
+                  {/* ✅ Always render country line if we have something to show */}
+                  {country && <div>{country}</div>}
                   {phone && <div className="addr-phone">📞 {phone}</div>}
                 </div>
               </div>

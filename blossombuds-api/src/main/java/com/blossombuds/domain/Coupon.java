@@ -9,46 +9,53 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 /** Represents a discount coupon that can be applied to orders. */
-@SQLDelete(sql = "UPDATE coupons SET active = false, modified_at = now() WHERE id = ?")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Entity
+@Table(name = "coupons", schema = "bb_app")
+@SQLDelete(sql = "UPDATE bb_app.coupons SET active = false, modified_at = now() WHERE id = ?")
 @Where(clause = "active = true")
-@Getter @Setter @NoArgsConstructor @AllArgsConstructor
-@Entity @Table(name = "coupons")
 public class Coupon {
 
     /** Surrogate primary key for coupons. */
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     /** Unique code customers enter at checkout (e.g., BBNEW10). */
-    @Column(name = "code", length = 40, unique = true, nullable = false)
+    @Column(name = "code", length = 40, unique = true)
     private String code;
 
-    /** Human-friendly label/description for internal use. */
-    @Column(name = "title", length = 120)
+    /**
+     * Not persisted: UI/DTO display only (column not present in DB).
+     */
+    @Transient
     private String title;
 
-    /** Flat or percentage as free text (kept simple to match DB); e.g., "PERCENT", "FLAT". */
-    @Column(name = "discount_type", length = 20)
+    /** "PERCENT" or "FLAT" — DB column is 'type'. */
+    @Column(name = "type", length = 10)
     private String discountType;
 
-    /** Discount value (percent or amount based on type). */
-    @Column(name = "discount_value", precision = 12, scale = 2)
+    /** Discount value (percent if type=PERCENT, flat amount if type=FLAT) — DB column is 'amount'. */
+    @Column(name = "amount", precision = 12, scale = 2)
     private BigDecimal discountValue;
 
-    /** Minimum order total required to apply this coupon. */
-    @Column(name = "min_order_total", precision = 12, scale = 2)
+    /** Minimum order total required — DB column is 'min_order_value'. */
+    @Column(name = "min_order_value", precision = 12, scale = 2)
     private BigDecimal minOrderTotal;
 
-    /** Optional maximum discount cap for percentage coupons. */
-    @Column(name = "max_discount_amount", precision = 12, scale = 2)
-    private BigDecimal maxDiscountAmount;
+    /** Minimum number of items required — DB column is 'min_items'. */
+    @Column(name = "min_items")
+    private Integer minItems;
 
-    /** Start of validity window (inclusive). */
-    @Column(name = "valid_from")
+    /** Start of validity window (inclusive) — DB column is 'starts_at'. */
+    @Column(name = "starts_at")
     private OffsetDateTime validFrom;
 
-    /** End of validity window (inclusive). */
-    @Column(name = "valid_to")
+    /** End of validity window (inclusive) — DB column is 'ends_at'. */
+    @Column(name = "ends_at")
     private OffsetDateTime validTo;
 
     /** Global usage limit across all customers (null = unlimited). */
@@ -60,7 +67,7 @@ public class Coupon {
     private Integer perCustomerLimit;
 
     /** Soft-visibility/activation flag. */
-    @Column(nullable = false)
+    @Column(name = "active", nullable = false)
     private Boolean active = Boolean.TRUE;
 
     /** Audit: created by whom. */

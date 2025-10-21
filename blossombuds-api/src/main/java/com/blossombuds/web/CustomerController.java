@@ -68,37 +68,33 @@ public class CustomerController {
                                                   @Valid @RequestBody AddressDto dto,
                                                   Authentication auth) {
         ensureOwnershipOrAdmin(auth, customerId);
-        var saved = customers.addAddress(customerId, dto, actor(auth));
-        return CustomerService.AddressView.of(saved);
+        return customers.addAddress(customerId, dto, actor(auth));
     }
 
     /** Updates an address; if isDefault=true, it becomes the sole default. */
     @PatchMapping("/addresses/{addressId}")
     @PreAuthorize("hasAnyRole('CUSTOMER','ADMIN')")
     public CustomerService.AddressView updateAddress(@PathVariable @Min(1) Long addressId,
-                                 @Valid @RequestBody AddressDto dto,
-                                 Authentication auth) {
-        // Ownership check is done indirectly in service via address’s customer.
-        var saved=customers.updateAddress(addressId, dto, actor(auth));
-        return CustomerService.AddressView.of(saved);
+                                                     @Valid @RequestBody AddressDto dto,
+                                                     Authentication auth) {
+        // Ownership check done in service via address’s customer.
+        return customers.updateAddress(addressId, dto, actor(auth));
     }
 
     /** Lists addresses for a customer (customer must own the id, or admin). */
     @GetMapping("/{customerId}/addresses")
     @PreAuthorize("hasAnyRole('CUSTOMER','ADMIN')")
-    public List<Address> listAddresses(@PathVariable @Min(1) Long customerId,
-                                       Authentication auth) {
+    public List<CustomerService.AddressView> listAddresses(@PathVariable @Min(1) Long customerId,
+                                                           Authentication auth) {
         ensureOwnershipOrAdmin(auth, customerId);
         return customers.listAddresses(customerId, actor(auth));
     }
-
 
     /** Marks a specific address as default for its customer. */
     @PostMapping("/addresses/{addressId}/set-default")
     @PreAuthorize("hasAnyRole('CUSTOMER','ADMIN')")
     public CustomerService.AddressView setDefault(@PathVariable @Min(1) Long addressId, Authentication auth) {
-        var saved= customers.setDefaultAddress(addressId, actor(auth));
-        return CustomerService.AddressView.of(saved);
+        return customers.setDefaultAddress(addressId, actor(auth));
     }
 
     /** Soft-deletes an address (active=false, clears isDefault). */

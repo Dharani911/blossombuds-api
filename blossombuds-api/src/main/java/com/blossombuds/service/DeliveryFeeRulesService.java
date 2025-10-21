@@ -8,9 +8,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
-/** Computes effective delivery fees using district/state/default rules and a free-shipping threshold. */
+/** Computes effective delivery fees and exposes simple CRUD for rules. */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -22,29 +24,46 @@ public class DeliveryFeeRulesService {
     private final DeliveryFeeRulesRepository ruleRepo;
     private final SettingsService settingsService;
 
-    /** Finds the most specific effective fee (district → state → default), if any. */
+    /* ============================ FEE LOOKUP ============================ */
+
+    /** Finds the most specific *active* fee (district → state → default), if any. */
     public Optional<BigDecimal> findEffectiveFee(Long stateId, Long districtId) {
+        // District-specific rule (active)
         if (districtId != null) {
-            var r = ruleRepo.findTopByScopeAndScopeIdOrderByIdDesc(RuleScope.DISTRICT, districtId);
-            if (r.isPresent()) return r.map(DeliveryFeeRules::getFeeAmount).map(this::sanitize);
+            var r = ruleRepo.findTopByScopeAndScopeIdAndActiveTrueOrderByIdDesc(RuleScope.DISTRICT, districtId);
+            if (r.isPresent()) {
+                return Optional.of(sanitize(r.get().getFeeAmount()));
+            }
         }
+
+        // State-specific rule (active)
         if (stateId != null) {
-            var r = ruleRepo.findTopByScopeAndScopeIdOrderByIdDesc(RuleScope.STATE, stateId);
-            if (r.isPresent()) return r.map(DeliveryFeeRules::getFeeAmount).map(this::sanitize);
+            var r = ruleRepo.findTopByScopeAndScopeIdAndActiveTrueOrderByIdDesc(RuleScope.STATE, stateId);
+            if (r.isPresent()) {
+                return Optional.of(sanitize(r.get().getFeeAmount()));
+            }
         }
-        return ruleRepo.findTopByScopeAndScopeIdIsNullOrderByIdDesc(RuleScope.DEFAULT)
-                .map(DeliveryFeeRules::getFeeAmount)
-                .map(this::sanitize);
+
+        // Default rule (active)
+        var r = ruleRepo.findTopByScopeAndScopeIdIsNullAndActiveTrueOrderByIdDesc(RuleScope.DEFAULT);
+        if (r.isPresent()) {
+            return Optional.of(sanitize(r.get().getFeeAmount()));
+        }
+
+        return Optional.empty();
     }
 
-    /** Returns the effective fee or zero when no rule exists. */
+    /** Returns the effective fee or zero when no *active* rule exists. */
     public BigDecimal getEffectiveFeeOrZero(Long stateId, Long districtId) {
         return findEffectiveFee(stateId, districtId).orElse(BigDecimal.ZERO);
     }
 
-    /** Computes the delivery fee considering the free-shipping threshold setting. */
+    /**
+     * Computes the delivery fee considering the free-shipping threshold setting (settings.shipping.free_threshold).
+     * If subtotal is null → return effective fee (useful for drafts).
+     * If subtotal ≥ threshold → 0; else → effective fee.
+     */
     public BigDecimal computeFeeWithThreshold(BigDecimal itemsSubtotal, Long stateId, Long districtId) {
-        // Null subtotal → just return the effective fee (common during draft carts)
         if (itemsSubtotal == null) return getEffectiveFeeOrZero(stateId, districtId);
 
         var threshold = getBigDecimalSetting(KEY_FREE_THRESHOLD).orElse(VERY_LARGE);
@@ -54,10 +73,60 @@ public class DeliveryFeeRulesService {
         return getEffectiveFeeOrZero(stateId, districtId);
     }
 
-    /** Reads a decimal setting value safely; empty if missing/unparseable/blank. */
+    /* ============================ ADMIN CRUD ============================ */
+
+    /** Newest first is convenient for UI. */
+    public List<DeliveryFeeRules> listAllRulesNewestFirst() {
+        return ruleRepo.findAllByOrderByIdDesc();
+    }
+
+    /** Create a new rule. */
+    @Transactional
+    public DeliveryFeeRules createRule(DeliveryFeeRules dto) {
+        DeliveryFeeRules r = new DeliveryFeeRules();
+        applyInto(r, dto);
+        return ruleRepo.save(r);
+    }
+
+    /** Update an existing rule. */
+    @Transactional
+    public DeliveryFeeRules updateRule(Long id, DeliveryFeeRules dto) {
+        DeliveryFeeRules r = ruleRepo.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Rule not found: " + id));
+        applyInto(r, dto);
+        return ruleRepo.save(r);
+    }
+
+    /** Delete a rule. */
+    @Transactional
+    public void deleteRule(Long id) {
+        if (id != null) ruleRepo.deleteById(id);
+    }
+
+    /* ============================ Helpers ============================ */
+
+    private void applyInto(DeliveryFeeRules target, DeliveryFeeRules src) {
+        // Scope
+        RuleScope scope = src.getScope() != null ? src.getScope() : RuleScope.DEFAULT;
+        target.setScope(scope);
+
+        // scopeId is only meaningful for STATE / DISTRICT; must be null for DEFAULT
+        if (scope == RuleScope.DEFAULT) {
+            target.setScopeId(null);
+        } else {
+            target.setScopeId(src.getScopeId());
+        }
+
+        // feeAmount (sanitize)
+        target.setFeeAmount(sanitize(src.getFeeAmount()));
+
+        // active flag (default true)
+        target.setActive(src.getActive() != null ? src.getActive() : Boolean.TRUE);
+    }
+
     private Optional<BigDecimal> getBigDecimalSetting(String key) {
         try {
-            var s = settingsService.get(key); // may throw if key is unknown
+            var s = settingsService.get(key);
             if (s == null || s.getValue() == null) return Optional.empty();
             var raw = s.getValue().trim();
             if (raw.isEmpty()) return Optional.empty();
@@ -67,9 +136,19 @@ public class DeliveryFeeRulesService {
         }
     }
 
-    /** Normalizes negative/NaN-like values to zero (defensive). */
+    /** Normalizes null/negative to zero. */
     private BigDecimal sanitize(BigDecimal v) {
         if (v == null) return BigDecimal.ZERO;
         return v.signum() < 0 ? BigDecimal.ZERO : v;
+    }
+
+    /** Utility if you need to parse scope from a string elsewhere. */
+    public static RuleScope parseScope(String s) {
+        if (s == null) return RuleScope.DEFAULT;
+        return switch (s.trim().toUpperCase(Locale.ROOT)) {
+            case "STATE" -> RuleScope.STATE;
+            case "DISTRICT" -> RuleScope.DISTRICT;
+            default -> RuleScope.DEFAULT;
+        };
     }
 }

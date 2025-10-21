@@ -33,6 +33,7 @@ public class CategoryController {
             dto.setSlug(c.getSlug());
             dto.setName(c.getName());
             dto.setActive(c.getActive());
+            dto.setParentId(c.getParentId());
             return dto;
         }).collect(Collectors.toList());
     }
