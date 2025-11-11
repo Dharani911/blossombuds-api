@@ -9,18 +9,14 @@ import java.util.List;
 /** Payload for creating a product review (starts PENDING). */
 @Getter @Setter
 public class ProductReviewDto {
-    @NotNull private Long productId;
-    private Long orderId;        // optional
-    private Long orderItemId;    // optional (recommended to enforce 1-per-line)
-    @NotNull private Long customerId;
-
-    @Min(1) @Max(5)
-    private Short rating;
-
-    @Size(max = 150)
-    private String title;
-
-    private String body;
-
-    private List<ProductReviewImageDto> images; // optional
+    private Long productId;
+    private Long orderId;      // optional
+    private Long orderItemId;  // optional
+    private Long customerId;   // required
+    private String customerName;
+    private Short rating;      // 1..5
+    private String title;      // <=200
+    private String body;       // <=4000
+    private Boolean concern;   // REQUIRED: customer consent/concern
+    private List<ProductReviewImageDto> images; // optional (pre-uploaded)
 }

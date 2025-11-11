@@ -1,11 +1,11 @@
 // src/pages/ProfilePage.tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom"; // ⬅️ added useLocation
 import http from "../api/http";
 import { useAuth } from "../app/AuthProvider";
 import AccountCard from "../components/profile/AccountCard";
 import AddressesCard from "../components/profile/AddressesCard";
-import OrdersRail from "../components/profile/OrdersRail";
+import OrdersSection from "../components/profile/OrdersSection";
 import { ToastHost, useToasts } from "../components/profile/Toast";
 import AddressModal from "../components/profile/AddressModal";
 import ProfileHero from "../components/profile/ProfileHero";
@@ -22,14 +22,20 @@ import {
 export default function ProfilePage() {
   const { user, logout, loading: authLoading } = useAuth();
   const nav = useNavigate();
+  const location = useLocation(); // ⬅️ needed to build ?next=
   const toasts = useToasts();
   const DEFAULT_INDIA_ID = Number(import.meta.env.VITE_COUNTRY_ID_INDIA) || 1;
 
+  // ---------- Auth guard with "next" ----------
   useEffect(() => {
     if (authLoading) return;
-    if (!user?.id) nav("/", { replace: true });
+    if (!user?.id) {
+      // preserve exact target (e.g., /profile?code=250023&pid=1&itemId=2)
+      const next = `${location.pathname}${location.search || ""}`;
+      nav(`/login?next=${encodeURIComponent(next)}`, { replace: true });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, user?.id]);
+  }, [authLoading, user?.id, location.pathname, location.search]);
 
   const [cust, setCust] = useState<Customer | null>(null);
   const [addresses, setAddresses] = useState<Address[] | null>(null);
@@ -284,77 +290,77 @@ export default function ProfilePage() {
   const safeAddresses = useMemo(() => (Array.isArray(addresses) ? addresses : []), [addresses]);
 
   return (
-    <div className="pro2-wrap">
-      <style>{pageStyles}</style>
+      <div className="pro2-wrap">
+        <style>{pageStyles}</style>
 
-      <ProfileHero
-        initials={(initials || "BB").slice(0,2).toUpperCase()}
-        fullName={cust?.fullName || cust?.name || "Your profile"}
-        ordersCount={ordersCount}
-        onLogout={onLogout}
-      />
+        <ProfileHero
+          initials={(initials || "BB").slice(0,2).toUpperCase()}
+          fullName={cust?.fullName || cust?.name || "Your profile"}
+          ordersCount={ordersCount}
+          onLogout={onLogout}
+        />
 
-      {/* MAIN */}
-      <section className="pro2-main">
-        {err && <div className="alert bad">{err}</div>}
+        {/* MAIN */}
+        <section className="pro2-main">
+          {err && <div className="alert bad">{err}</div>}
 
-        <div className="grid">
-          <div className="col">
-            <AccountCard
-              loading={loading}
-              editing={editingAcc}
-              setEditing={setEditingAcc}
-              fullName={fullName}
-              setFullName={setFullName}
-              email={cust?.email || ""}
-              phone={phone}
-              setPhone={setPhone}
-              onSave={saveAccount}
-              saving={savingAcc}
-            />
+          <div className="grid">
+            <div className="col">
+              <AccountCard
+                loading={loading}
+                editing={editingAcc}
+                setEditing={setEditingAcc}
+                fullName={fullName}
+                setFullName={setFullName}
+                email={cust?.email || ""}
+                phone={phone}
+                setPhone={setPhone}
+                onSave={saveAccount}
+                saving={savingAcc}
+              />
 
-            {/* show country in address lines */}
-            <AddressesCard
-              loading={!addresses}
-              addresses={safeAddresses}
-              onAdd={openAddAddress}
-              onEdit={openEditAddress}
-              onSetDefault={setDefaultAddress}
-              onDelete={deleteAddress}
-              stateNameById={stateNameById}
-              districtNameById={districtNameById}
-              countryNameById={countryNameById}
-            />
-          </div>
+              <AddressesCard
+                loading={!addresses}
+                addresses={safeAddresses}
+                onAdd={openAddAddress}
+                onEdit={openEditAddress}
+                onSetDefault={setDefaultAddress}
+                onDelete={deleteAddress}
+                stateNameById={stateNameById}
+                districtNameById={districtNameById}
+                countryNameById={countryNameById}
+              />
+            </div>
 
-          <div className="col">
-            <OrdersRail loading={loading} orders={orders || []} />
-            <div className="card promo">
-              <div className="promo-inner">
-                <h4>Looking for something bespoke?</h4>
-                <p>Share your idea, we’ll make it bloom beautifully.</p>
-                <Link to="/" className="cta">Start a custom order</Link>
+            <div className="col">
+              {/* ⬇️ Orders UI (auto-opens drawer via ?code=&pid=&itemId=) */}
+              <OrdersSection orders={orders || []} />
+              <div className="card promo">
+                <div className="promo-inner">
+                  <h4>Looking for something bespoke?</h4>
+                  <p>Share your idea, we’ll make it bloom beautifully.</p>
+                  <Link to="/" className="cta">Start a custom order</Link>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {addrModal && (
-        <AddressModal
-          initial={addrModal.data}
-          busy={addrBusy}
-          error={addrErr}
-          onClose={() => setAddrModal(null)}
-          onSubmit={submitAddress}
-          mode={addrModal.mode}
-        />
-      )}
+        {addrModal && (
+          <AddressModal
+            initial={addrModal.data}
+            busy={addrBusy}
+            error={addrErr}
+            onClose={() => setAddrModal(null)}
+            onSubmit={submitAddress}
+            mode={addrModal.mode}
+          />
+        )}
 
-      <ToastHost items={toasts.items} />
-    </div>
-  );
-}
+        <ToastHost items={toasts.items} />
+      </div>
+    );
+  }
 
 /* page-level styles (kept) */
 const pageStyles = `

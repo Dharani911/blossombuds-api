@@ -41,8 +41,8 @@ public class CmsService {
         p.setTitle(title);
         p.setContent(content);
         p.setActive(dto.getActive() == null ? Boolean.TRUE : dto.getActive());
-        p.setCreatedBy(actor);
-        p.setCreatedAt(OffsetDateTime.now());
+        //p.setCreatedBy(actor);
+        //p.setCreatedAt(OffsetDateTime.now());
         pageRepo.save(p);
 
         saveRevision(p, 1, actor);
@@ -77,8 +77,8 @@ public class CmsService {
             p.setActive(dto.getActive());
         }
 
-        p.setModifiedBy(actor);
-        p.setModifiedAt(OffsetDateTime.now());
+        //p.setModifiedBy(actor);
+        //p.setModifiedAt(OffsetDateTime.now());
 
         if (changed) {
             int nextRev = revRepo.findByPageIdOrderByRevisionNumberDescIdDesc(p.getId())
@@ -118,8 +118,8 @@ public class CmsService {
         CmsPage p = pageRepo.findById(pageId)
                 .orElseThrow(() -> new IllegalArgumentException("Page not found: " + pageId));
         p.setActive(false);
-        p.setModifiedBy(actor);
-        p.setModifiedAt(OffsetDateTime.now());
+        //p.setModifiedBy(actor);
+        //p.setModifiedAt(OffsetDateTime.now());
     }
 
     /** Persists a new immutable revision snapshot for a page. */
@@ -133,8 +133,8 @@ public class CmsService {
         rev.setContent(p.getContent());
         rev.setRevisionNumber(revNo);
         rev.setActive(true);
-        rev.setCreatedBy(actor);
-        rev.setCreatedAt(OffsetDateTime.now());
+        //rev.setCreatedBy(actor);
+        //rev.setCreatedAt(OffsetDateTime.now());
         revRepo.save(rev);
     }
 

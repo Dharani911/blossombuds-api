@@ -1,7 +1,9 @@
 package com.blossombuds.dto;
 
 import com.blossombuds.domain.OrderStatus;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
+
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
@@ -36,6 +38,10 @@ public class OrderDto {
     private String rzpOrderId;
     private String rzpPaymentId;
 
+    /** Optional external payment reference (e.g., UTR / bank txn id). */
+    @Size(max = 128)
+    private String externalReference;
+
     private String shipName;
     private String shipPhone;
     private String shipLine1;
@@ -44,6 +50,8 @@ public class OrderDto {
     private Long shipStateId;
     private String shipPincode;
     private Long shipCountryId;
+    private Long CouponId;
+    private String CouponCode;
 
     private Boolean active;
 }

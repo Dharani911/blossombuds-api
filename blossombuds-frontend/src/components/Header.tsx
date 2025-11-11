@@ -3,7 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../app/AuthProvider";
 import { useCart } from "../app/CartProvider";
 import Logo from "../assets/BB_Logo.svg";
-import CustomerReviewsPage from "../pages/ReviewsPage";
+
+type LinkDef = { to: string; label: string; exact?: boolean };
 
 /** Inline SVG icons */
 function ProfileSVG(props: React.SVGProps<SVGSVGElement>) {
@@ -28,8 +29,6 @@ function CartSVG(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-type LinkDef = { to: string; label: string; exact?: boolean };
-
 export default function Header(){
   const navigate = useNavigate();
   const location = useLocation();
@@ -38,7 +37,6 @@ export default function Header(){
   const { user } = useAuth();
   const { count } = useCart();
 
-
   const links: LinkDef[] = useMemo(()=>[
     { to:"/", label:"Home", exact:true },
     { to:"/featured", label:"Featured" },
@@ -46,8 +44,7 @@ export default function Header(){
     { to:"/reviews", label:"Reviews" }
   ], []);
 
-  // Ink-bar underline animator (no big bubble)
-  const barRef = useRef<HTMLDivElement>(null);
+  // Ink-bar underline animator
   const listRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
   const [bar, setBar] = useState({ left: 0, width: 0, visible: false });
@@ -69,52 +66,75 @@ export default function Header(){
     const activeKey =
       links.find(l => (l.exact ? pathnameOnly === l.to : pathnameOnly.startsWith(l.to)))?.to || null;
     moveBarTo(activeKey);
+    // reflow on resize / orientation change
+    const onResize = () => moveBarTo(activeKey);
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathnameOnly, links]);
 
   // Mobile state
   const [open, setOpen] = useState(false);
   const goProfile = () => {
-    if (user?.id) {
-      navigate("/profile");
-    } else {
-      navigate("/login", { state: { from } });
-    }
+    if (user?.id) navigate("/profile");
+    else navigate("/login", { state: { from, background: location } });
     setOpen(false);
   };
+
+  // Lock body scroll when panel open
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    if (open) document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
+
+  // Close on ESC
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <header className="hx">
       <style>{`
         .hx{
           position:sticky; top:0; z-index:70;
-          /* Warm glassy gradient that fits #FAF7E7 */
           background: linear-gradient(180deg, rgba(250,247,231,0.92), rgba(255,255,255,0.96));
           border-bottom: 1px solid rgba(0,0,0,.06);
           backdrop-filter: saturate(180%) blur(12px);
           box-shadow: 0 10px 28px rgba(0,0,0,.06);
         }
-        .hx-shell{max-width:1200px; margin:0 auto; padding:0 12px;}
+        .hx-shell{max-width:1200px; margin:0 auto; padding:0 12px; padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px));}
 
         .hx-row{
-          display:grid; grid-template-columns: 1fr auto 1fr; align-items:center; height:80px; gap:12px;
+          display:grid; grid-template-columns: 1fr auto 1fr; align-items:center;
+          height:72px; gap:12px;
         }
         .hx-brand{ justify-self: start; }
         .hx-actions{ justify-self: end; }
 
-        /* Brand (slightly left) */
-        .hx-brand{display:flex; align-items:center; gap:10px; transform: translateX(-4px);}
+        /* Brand */
+        .hx-brand{display:flex; align-items:center; gap:10px; min-width:0;}
         .hx-title{
+          display:inline-block;
           font-family: Georgia, "Times New Roman", serif;
           color: var(--bb-primary);
           font-weight: 800; letter-spacing:.2px; line-height:1.1;
+          white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+          max-width: 58vw;
         }
+        .hx-brand img{ width:44px; height:44px; border-radius:12px; box-shadow:0 4px 16px rgba(0,0,0,.10); }
 
-        /* Center menu (each item independent, with animated ink bar) */
+        /* Center menu */
         .hx-mid{ display:flex; justify-content:center; }
         .hx-nav{
           position:relative; display:flex; gap:6px; align-items:center;
-          padding: 2px 2px 10px; /* bottom space for ink bar */
+          padding: 2px 2px 10px;
         }
         .hx-ink{
           position:absolute; bottom:0; height:3px; border-radius:3px;
@@ -137,14 +157,14 @@ export default function Header(){
         .hx-a:hover{ letter-spacing:.3px; transform: translateY(-1px); background: rgba(246,195,32,.16); }
         .hx-a.active{ background: rgba(246,195,32,.26); }
 
-
-        /* Right actions (Cart first, then Profile) */
+        /* Actions */
         .hx-actions{ display:flex; align-items:center; gap:10px; }
         .hx-ico{
           display:inline-flex; align-items:center; justify-content:center;
           width:44px; height:44px; border-radius:12px; border:none; cursor:pointer;
           background:#fff; box-shadow: 0 10px 26px rgba(0,0,0,.10);
           transition: transform .14s ease, box-shadow .14s ease, background .14s ease;
+          touch-action: manipulation;
         }
         .hx-ico:hover{ transform: translateY(-1px) scale(1.02); box-shadow: 0 14px 30px rgba(0,0,0,.14); background: #fff; }
         .hx-badge{
@@ -153,52 +173,59 @@ export default function Header(){
           box-shadow: 0 2px 12px rgba(240,93,139,.5);
         }
 
-        /* Mobile */
+        /* Burger + mobile panel */
         @media (max-width: 920px){
-          .hx-row{ grid-template-columns:auto auto 1fr; }
-          .hx-mid{ justify-content:flex-start; }
+          .hx-row{ grid-template-columns:auto auto 1fr; height:68px; }
           .hx-nav{ display:none; }
           .hx-burger{ display:inline-flex; }
-          .hx-panel{
-            position:fixed; left:0; right:0; top:80px; z-index:69; background:#fff;
-            border-bottom:1px solid rgba(0,0,0,.06);
-            box-shadow: 0 18px 40px rgba(0,0,0,.12);
-            padding: 12px 16px 16px; display:grid; gap:8px;
-            animation: drop .24s cubic-bezier(.2,.8,.2,1) both;
-          }
-          .hx-mitem{
-            padding:12px 14px; border-radius:12px; font-weight:700; color:var(--bb-primary);
-            background: rgba(246,195,32,.10);
-            opacity:.95; transform: translateY(2px);
-            transition: transform .16s ease, background .16s ease, opacity .16s ease;
-          }
-          .hx-mitem:hover{ background: rgba(246,195,32,.22); transform: translateY(0); opacity:1; }
-          .hx-mgrid{ display:grid; gap:8px; }
+          .hx-title{ max-width: 46vw; }
         }
         @media (min-width: 921px){ .hx-burger{ display:none; } }
+
+        .hx-panel{
+          position:fixed; left:0; right:0; top:var(--hxTop, 72px); z-index:69; background:#fff;
+          border-bottom:1px solid rgba(0,0,0,.06);
+          box-shadow: 0 18px 40px rgba(0,0,0,.12);
+          padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+          display:grid; gap:8px;
+          animation: drop .24s cubic-bezier(.2,.8,.2,1) both;
+        }
+        .hx-scrim{
+          position: fixed; inset: 0; z-index: 68; background: rgba(0,0,0,.28); backdrop-filter: blur(2px);
+        }
+        .hx-mgrid{ display:grid; gap:8px; }
+        .hx-mitem{
+          padding:14px; border-radius:12px; font-weight:700; color:var(--bb-primary);
+          background: rgba(246,195,32,.10);
+          opacity:.95; transform: translateY(2px);
+          transition: transform .16s ease, background .16s ease, opacity .16s ease;
+        }
+        .hx-mitem:active{ transform: scale(.98); }
+        .hx-mitem:hover{ background: rgba(246,195,32,.22); transform: translateY(0); opacity:1; }
+
         @keyframes drop{ from{opacity:0; transform: translateY(-6px);} to{opacity:1; transform:none;} }
+
+        /* Respect reduced motion */
+        @media (prefers-reduced-motion: reduce){
+          .hx-ink{ transition: none; }
+          .hx-ico:hover{ transform:none; box-shadow: 0 10px 26px rgba(0,0,0,.10); }
+        }
       `}</style>
 
       <div className="hx-shell">
         <div className="hx-row">
-          {/* LEFT: Brand (logo + title, slightly left) */}
-          <Link to="/" className="hx-brand" aria-label="Blossom & Buds home">
-            <img
-              src={Logo}
-              alt="Blossom & Buds logo"
-              width={46}
-              height={46}
-              style={{ borderRadius:12, boxShadow:"0 4px 16px rgba(0,0,0,.10)" }}
-            />
+          {/* LEFT: Brand */}
+          <Link to="/" className="hx-brand" aria-label="Blossom Buds home">
+            <img src={Logo} alt="Blossom Buds logo" width={44} height={44}/>
             <span className="hx-title">
-              Blossom & Buds
+              Blossom Buds
               <br/><span style={{fontWeight:600, opacity:.9}}>Floral Artistry</span>
             </span>
           </Link>
 
-          {/* CENTER: Independent items + animated ink bar */}
-          <div className="hx-mid">
-            <div
+          {/* CENTER: Menu with ink bar */}
+          <div className="hx-mid" aria-hidden={false}>
+            <nav
               className="hx-nav"
               ref={listRef}
               onMouseLeave={() => {
@@ -206,14 +233,11 @@ export default function Header(){
                   links.find(l => (l.exact ? pathnameOnly === l.to : pathnameOnly.startsWith(l.to)))?.to || null;
                 moveBarTo(activeKey);
               }}
+              aria-label="Primary"
             >
-              {/* Ink bar */}
               <div
-                ref={barRef}
                 className="hx-ink"
                 style={{
-                  // CSS vars used by transitions
-                  // Fallbacks ensure no layout jump on first render
                   ["--x" as any]: `${bar.left}px`,
                   ["--w" as any]: `${bar.width}px`,
                   ["--o" as any]: bar.visible ? 1 : 0
@@ -232,13 +256,20 @@ export default function Header(){
                   {l.label}
                 </NavLink>
               ))}
-            </div>
+            </nav>
           </div>
 
-          {/* RIGHT: Cart first, then Profile */}
+          {/* RIGHT: Actions */}
           <div className="hx-actions">
             {/* Burger (mobile only) */}
-            <button className="hx-ico hx-burger" aria-label="Menu" title="Menu" onClick={()=>setOpen(v=>!v)}>
+            <button
+              className="hx-ico hx-burger"
+              aria-label="Menu"
+              aria-expanded={open}
+              aria-controls="mobile-nav-panel"
+              title="Menu"
+              onClick={()=>setOpen(v=>!v)}
+            >
               <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="var(--bb-primary)" strokeWidth="2.2" strokeLinecap="round">
                 <line x1="3" y1="6" x2="21" y2="6"/>
                 <line x1="3" y1="12" x2="21" y2="12"/>
@@ -255,22 +286,15 @@ export default function Header(){
               style={{ position:"relative" }}
             >
               <CartSVG/>
-              {count>0 && <span className="hx-badge">{count}</span>}
+              {count>0 && <span className="hx-badge" aria-live="polite">{count}</span>}
             </button>
 
             {/* Profile */}
             <button
               className="hx-ico"
-              aria-label="Profile"
+              aria-label={user ? "My profile" : "Login / Register"}
               title={user ? "My profile" : "Login / Register"}
-              onClick={() => {
-                if (user?.id) {
-                  navigate("/profile");
-                } else {
-                  // 👇 pass BOTH 'from' and 'background'
-                  navigate("/login", { state: { from, background: location } });
-                }
-              }}
+              onClick={goProfile}
             >
               <ProfileSVG/>
             </button>
@@ -278,9 +302,17 @@ export default function Header(){
         </div>
       </div>
 
-      {/* MOBILE PANEL */}
+      {/* MOBILE PANEL + SCRIM */}
+      {open && <div className="hx-scrim" onClick={() => setOpen(false)} aria-hidden />}
       {open && (
-        <div className="hx-panel">
+        <div
+          id="mobile-nav-panel"
+          className="hx-panel"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Mobile navigation"
+          style={{ ["--hxTop" as any]: "68px" }}
+        >
           <div className="hx-mgrid">
             {links.map((l,i)=>(
               <NavLink
@@ -296,17 +328,21 @@ export default function Header(){
             ))}
           </div>
           <div style={{display:"flex", gap:10, marginTop:10}}>
-            <button className="hx-ico" aria-label="Cart" title="Cart" onClick={() => { navigate("/cart"); setOpen(false);  }} style={{position:"relative"}}>
+            <button
+              className="hx-ico"
+              aria-label="Cart"
+              title="Cart"
+              onClick={() => { navigate("/cart"); setOpen(false); }}
+              style={{position:"relative"}}
+            >
               <CartSVG/>{count>0 && <span className="hx-badge">{count}</span>}
             </button>
-            <button className="hx-ico" aria-label="Profile" title="Login / Profile" onClick={() => {
-                                                                                      if (user?.id) {
-                                                                                        navigate("/profile");
-                                                                                      } else {
-                                                                                        // 👇 pass BOTH 'from' and 'background'
-                                                                                        navigate("/login", { state: { from, background: location } });
-                                                                                      } ;setOpen(false);
-                                                                                    }}>
+            <button
+              className="hx-ico"
+              aria-label={user ? "My profile" : "Login / Profile"}
+              title={user ? "My profile" : "Login / Profile"}
+              onClick={() => { goProfile(); }}
+            >
               <ProfileSVG/>
             </button>
           </div>

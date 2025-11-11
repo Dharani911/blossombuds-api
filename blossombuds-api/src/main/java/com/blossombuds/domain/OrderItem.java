@@ -1,17 +1,27 @@
 package com.blossombuds.domain;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.Where;
+import org.hibernate.type.SqlTypes;
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedBy;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 
 /** Line item belonging to an order with quantity, pricing, and option snapshots. */
 @SQLDelete(sql = "UPDATE order_items SET active = false, modified_at = now() WHERE id = ?")
 @Where(clause = "active = true")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor
+@EntityListeners(AuditingEntityListener.class)
 @Entity @Table(name = "order_items")
 public class OrderItem {
 
@@ -23,15 +33,13 @@ public class OrderItem {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "order_id", nullable = false)
     @ToString.Exclude @EqualsAndHashCode.Exclude
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private Order order;
 
     /** Product snapshot name at time of purchase. */
     @Column(name = "product_name", length = 200)
     private String productName;
 
-    /** Product snapshot slug (for reference). */
-    @Column(name = "product_slug", length = 200)
-    private String productSlug;
 
     /** Product ID at time of purchase (nullable if later removed). */
     @Column(name = "product_id")
@@ -50,8 +58,9 @@ public class OrderItem {
     private BigDecimal lineTotal;
 
     /** Structured variant selection (JSONB). */
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "options_json", columnDefinition = "jsonb")
-    private String optionsJson;
+    private JsonNode optionsJson;
 
     /** Preformatted variant text for invoices/prints. */
     @Column(name = "options_text", length = 400)
@@ -63,17 +72,19 @@ public class OrderItem {
 
     /** Username/actor who created this record. */
     @Column(name = "created_by", length = 120)
+    @CreatedBy
     private String createdBy;
 
-    /** Timestamp when the record was created. */
     @Column(name = "created_at")
-    private OffsetDateTime createdAt;
+    @CreatedDate
+    private LocalDateTime createdAt;
 
-    /** Username/actor who last modified this record. */
     @Column(name = "modified_by", length = 120)
+    @LastModifiedBy
     private String modifiedBy;
 
     /** Timestamp when the record was last modified. */
     @Column(name = "modified_at")
-    private OffsetDateTime modifiedAt;
+    @LastModifiedDate
+    private LocalDateTime modifiedAt;
 }

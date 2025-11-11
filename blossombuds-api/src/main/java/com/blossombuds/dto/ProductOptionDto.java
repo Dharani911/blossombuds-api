@@ -1,3 +1,4 @@
+// src/main/java/com/blossombuds/dto/ProductOptionDto.java
 package com.blossombuds.dto;
 
 import lombok.Data;
@@ -12,5 +13,6 @@ public class ProductOptionDto {
     private Boolean required;
     private Short maxSelect;
     private Integer sortOrder;
+    private Boolean visible;
     private Boolean active;
 }

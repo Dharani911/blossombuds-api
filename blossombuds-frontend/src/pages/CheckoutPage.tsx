@@ -16,6 +16,7 @@ import {
 import {
   startCheckout,
   loadRazorpay,
+  getRzpConfig,
   type OrderDto,
   type OrderItemDto,
 } from "../api/checkout";
@@ -38,8 +39,162 @@ type Address = AddrModel & {};
 
 type DeliveryPartnerLite = { id: number; name: string; code?: string; active?: boolean };
 
+function showOrderSuccessPopup(orderId?: number | string) {
+  const host = document.createElement("div");
+  host.setAttribute("data-ck-toast", "1");
+  Object.assign(host.style, {
+    position: "fixed",
+    inset: "0",
+    zIndex: "2147483647",
+    pointerEvents: "none",
+    display: "grid",
+    placeItems: "center",
+    background: "transparent",
+  } as CSSStyleDeclaration);
+
+  const card = document.createElement("div");
+  card.setAttribute("role", "alert");
+  Object.assign(card.style, {
+    pointerEvents: "auto",
+    background: "#ffffff",
+    border: "1px solid rgba(0,0,0,.10)",
+    borderRadius: "16px",
+    boxShadow: "0 28px 88px rgba(0,0,0,.28)",
+    padding: "16px 18px",
+    maxWidth: "92vw",
+    minWidth: "min(480px, 92vw)",
+    color: "#2b2b2b",
+    font: "14px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif",
+    transform: "translateY(8px) scale(.98)",
+    opacity: "0",
+    transition: "opacity .18s ease, transform .18s cubic-bezier(.2,.8,.2,1)",
+    position: "relative",
+    overflow: "hidden",
+  } as CSSStyleDeclaration);
+
+  const bar = document.createElement("div");
+  Object.assign(bar.style, {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    height: "4px",
+    background: "#F05D8B", // accent
+  } as CSSStyleDeclaration);
+
+  const title = document.createElement("div");
+  Object.assign(title.style, {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    fontWeight: "900",
+    marginBottom: "6px",
+    letterSpacing: ".2px",
+    color: "#4A4F41", // primary
+  } as CSSStyleDeclaration);
+  title.innerHTML = `
+    <span style="width:10px;height:10px;border-radius:999px;background:#F6C320;box-shadow:0 0 0 6px rgba(246,195,32,.20);display:inline-block"></span>
+    <span>Payment successful 🎉</span>
+  `;
+
+  const msg = document.createElement("div");
+  Object.assign(msg.style, { fontSize: "13px", opacity: ".9" } as CSSStyleDeclaration);
+  msg.textContent = orderId ? `Your order is confirmed. Order ID: #${orderId}` : "Your order is confirmed. We’ve emailed your receipt.";
+
+  const actions = document.createElement("div");
+  Object.assign(actions.style, { marginTop: "10px", display: "flex", gap: "8px", justifyContent: "flex-end" } as CSSStyleDeclaration);
+
+  const close = document.createElement("button");
+  close.textContent = "Close";
+  Object.assign(close.style, {
+    border: "1px solid rgba(0,0,0,.12)",
+    background: "#fff",
+    color: "#4A4F41",
+    height: "34px",
+    padding: "0 14px",
+    fontWeight: "900",
+    borderRadius: "12px",
+    cursor: "pointer",
+  } as CSSStyleDeclaration);
+
+  const primary = document.createElement("button");
+  primary.textContent = "Okay";
+  Object.assign(primary.style, {
+    border: "none",
+    background: "#F05D8B",
+    color: "#fff",
+    height: "34px",
+    padding: "0 14px",
+    fontWeight: "900",
+    borderRadius: "12px",
+    cursor: "pointer",
+    boxShadow: "0 12px 28px rgba(240,93,139,.30)",
+  } as CSSStyleDeclaration);
+
+  actions.appendChild(close);
+  actions.appendChild(primary);
+  card.appendChild(bar);
+  card.appendChild(title);
+  card.appendChild(msg);
+  card.appendChild(actions);
+
+  host.appendChild(card);
+  document.body.appendChild(host);
+
+  requestAnimationFrame(() => {
+    card.style.opacity = "1";
+    card.style.transform = "translateY(0) scale(1)";
+  });
+
+  const remove = () => {
+    card.style.opacity = "0";
+    card.style.transform = "translateY(8px) scale(.98)";
+    setTimeout(() => { try { document.body.removeChild(host); } catch {} }, 180);
+  };
+
+  const t = setTimeout(remove, 3000);
+  const finish = () => { clearTimeout(t); remove(); };
+  close.addEventListener("click", finish, { once: true });
+  primary.addEventListener("click", finish, { once: true });
+  host.addEventListener("click", (e) => { if (e.target === host) finish(); }, { once: true });
+}
+
 /* ---------- Styles ---------- */
 const css = `
+.wrap{ --ink:rgba(0,0,0,.08); --ink2:rgba(0,0,0,.06); --accent:#F05D8B; --gold:#F6C320; --primary:#4A4F41;
+  max-width:1200px; margin:0 auto; padding:16px; color:var(--primary); }
+.head{ display:flex; align-items:flex-end; justify-content:space-between; gap:10px; margin-bottom:12px; }
+.head h1{ margin:0; font-family:"DM Serif Display", Georgia, serif; font-size:28px; }
+
+.grid{ display:grid; grid-template-columns: 1.2fr .8fr; gap:14px; }
+@media (max-width: 980px){ .grid{ grid-template-columns: 1fr; } }
+.card{ background:#fff; border:1px solid var(--ink); border-radius:16px; box-shadow:0 12px 36px rgba(0,0,0,.08); overflow:hidden; }
+.section-head{ padding:10px 12px; border-bottom:1px solid var(--ink); background:linear-gradient(180deg, rgba(246,195,32,.08), rgba(255,255,255,.95)); font-weight:900; font-size:13px; }
+.body{ padding:12px; }
+
+/* ...existing CSS unchanged... */
+.ta{
+  width:100%;
+  border:1px solid var(--ink);
+  border-radius:10px;
+  padding:8px 10px;
+  outline:none;
+  resize:vertical;
+  min-height:84px;
+}
+.ta:focus{
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(246,195,32,.18);
+}
+
+/* === Overlays === */
+.modal{
+  position:fixed; inset:0; background:rgba(0,0,0,.35);
+  display:flex; align-items:center; justify-content:center; z-index:100; backdrop-filter: blur(2px);
+  padding: 12px;
+}
+
+
 .wrap{ --ink:rgba(0,0,0,.08); --ink2:rgba(0,0,0,.06); --accent:#F05D8B; --gold:#F6C320; --primary:#4A4F41;
   max-width:1200px; margin:0 auto; padding:16px; color:var(--primary); }
 .head{ display:flex; align-items:flex-end; justify-content:space-between; gap:10px; margin-bottom:12px; }
@@ -91,6 +246,20 @@ const css = `
 .alert{ margin:10px 0; padding:10px 12px; border-radius:12px; background:#fff3f5; color:#b0003a; border:1px solid rgba(240,93,139,.25); }
 
 hr.sep{ border:none; height:1px; background:var(--ink); margin:6px 0; }
+.ta{
+  width:100%;
+  border:1px solid var(--ink);
+  border-radius:10px;
+  padding:8px 10px;
+  outline:none;
+  resize:vertical;
+  min-height:84px;
+}
+.ta:focus{
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(246,195,32,.18);
+}
+
 
 /* === Overlays === */
 .modal{
@@ -113,6 +282,7 @@ hr.sep{ border:none; height:1px; background:var(--ink); margin:6px 0; }
   border:1px solid var(--ink); border-radius:14px; background:#fff; box-shadow:0 10px 28px rgba(0,0,0,.06);
   padding:10px; display:grid; grid-template-columns: 30px 1fr auto; gap:10px; cursor:pointer; align-items:center;
 }
+svg.icon { width: 24px; height: 24px; }
 .addr-card:hover{ background:#fafafa; }
 .addr-icon{ width:28px; height:28px; border-radius:8px; border:1px solid var(--ink); display:grid; place-items:center; font-weight:900; }
 .addr-info{ font-size:13px; line-height:1.35; }
@@ -153,6 +323,7 @@ export default function CheckoutPage() {
 
   // flow toggle
   const [international, setInternational] = useState(false);
+  const [orderNotes, setOrderNotes] = useState("");
 
   // Countries + maps
   const [countries, setCountries] = useState<Country[]>([]);
@@ -217,6 +388,7 @@ export default function CheckoutPage() {
   }, [user?.id]);
 
   // Load initial: countries, states/districts, partners, addresses
+  // Load initial: countries, states/districts, partners, addresses
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -224,22 +396,30 @@ export default function CheckoutPage() {
         const cs = await getCountries().catch(() => [] as Country[]);
         if (!alive) return;
         setCountries(cs || []);
+
+        // Build id->name map
         const cmap: Record<number, string> = {};
         (cs || []).forEach(c => { if (c?.id != null) cmap[c.id] = c.name || String(c.id); });
         setCountryMap(cmap);
 
-        if (!INDIA_ID) {
-          const found =
-            cs.find(c => (c.isoCode || "").toUpperCase() === "IN") ||
-            cs.find(c => /india/i.test(c.name || ""));
-          if (found?.id) setINDIA_ID(found.id);
+        // Resolve INDIA_ID:
+        // 1) environment override (preferred)
+        const envIndiaId = Number(import.meta.env.VITE_COUNTRY_ID_INDIA) || 0;
+
+        // 2) find by common names if env not provided
+        let resolvedIndiaId = envIndiaId;
+        if (!resolvedIndiaId) {
+          const india = (cs || []).find(c => /\b(India|Bharat)\b/i.test(c?.name || ""));
+          if (india?.id) resolvedIndiaId = india.id;
         }
+
+        if (resolvedIndiaId) setINDIA_ID(resolvedIndiaId);
       } catch {/* ignore */}
 
       // label lookups
       (async () => {
         try {
-          const sid = INDIA_ID || Number(import.meta.env.VITE_COUNTRY_ID_INDIA) || 0;
+          const sid = (Number(import.meta.env.VITE_COUNTRY_ID_INDIA) || INDIA_ID || 0);
           const [states, allDists] = await Promise.all([
             sid ? getStatesByCountry(sid).catch(() => [] as State[]) : Promise.resolve([] as State[]),
             getAllDistricts().catch(() => [] as District[]),
@@ -276,8 +456,9 @@ export default function CheckoutPage() {
       }
     })();
     return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
+
 
   // domestic vs international partitions
   const domesticAddresses = useMemo(
@@ -439,85 +620,130 @@ export default function CheckoutPage() {
     return Math.max(0, subtotal + ship - discountTotal);
   }, [international, subtotal, shippingFee, discountTotal]);
 
-  // ===== Domestic (Razorpay) =====
-  async function onPlaceDomestic() {
-    if (!user?.id) { setErr("Please login to continue."); return; }
-    const selectedAddress = domesticAddresses.find(a => a.id === selectedAddrId) || null;
-    if (!selectedAddress) { setErr("Please add/select an Indian address."); return; }
-    if (!partnerId) { setErr("Please select a delivery partner."); return; }
-    if (shippingLoading) { setErr("Please wait while we calculate shipping."); return; }
-    setErr(null);
-    setSubmitting(true);
 
-    const orderItems: OrderItemDto[] = items.map((it) => {
-      const parsedId = Number(String(it.id).split(":")[0]);
-      const pid = (it as any).productId ?? (Number.isFinite(parsedId) ? parsedId : undefined);
-      return {
-        productId: pid,
-        productName: it.name,
-        quantity: it.qty,
-        unitPrice: it.price,
-        lineTotal: (Number(it.price) * Number(it.qty)).toFixed(2),
-        optionsText: it.variant || undefined,
-      };
-    });
+    async function onPlaceDomestic() {
+      if (!user?.id) { setErr("Please login to continue."); return; }
 
-    const partnerName = partners.find(p => p.id === partnerId)?.name;
+      const selectedAddress = domesticAddresses.find(a => a.id === selectedAddrId) || null;
+      if (!selectedAddress) { setErr("Please add/select an Indian address."); return; }
+      if (!partnerId) { setErr("Please select a delivery partner."); return; }
+      if (shippingLoading) { setErr("Please wait while we calculate shipping."); return; }
 
-    const order: OrderDto = {
-      customerId: Number(user?.id),
-      itemsSubtotal: subtotal,
-      shippingFee: shippingFee || 0, // ← use previewed shipping
-      discountTotal,
-      grandTotal, // ← recomputed with shipping fee
-      currency: "INR",
-      orderNotes: undefined,
-      courierName: partnerName,
-      shipName: selectedAddress.name,
-      shipPhone: selectedAddress.phone || undefined,
-      shipLine1: selectedAddress.line1,
-      shipLine2: selectedAddress.line2 || undefined,
-      shipPincode: selectedAddress.pincode || undefined,
-      shipDistrictId: selectedAddress.districtId || undefined,
-      shipStateId: selectedAddress.stateId || undefined,
-      shipCountryId: selectedAddress.countryId || undefined,
-    };
+      setErr(null);
+      setSubmitting(true);
 
-    try {
-      const res = await startCheckout(order, orderItems);
-
-      const ok = await loadRazorpay();
-      if (!ok || !(window as any).Razorpay) {
-        setErr("Could not load Razorpay. Please retry.");
-        setSubmitting(false);
-        return;
-      }
-      const key = import.meta.env.VITE_RZP_KEY;
-      if (!key) {
-        setErr("Missing Razorpay key. Set VITE_RZP_KEY.");
-        setSubmitting(false);
-        return;
-      }
-      const orderData = (res as any).razorpayOrder || {};
-      const rzp = new (window as any).Razorpay({
-        key,
-        amount: orderData.amount,
-        currency: orderData.currency || "INR",
-        name: "Blossom & Buds Floral Artistry",
-        description: "Order Payment",
-        order_id: orderData.id,
-        prefill: { name: custName || "", email: custEmail || "", contact: selectedAddress.phone || "" },
-        theme: { color: "#F05D8B" },
-        handler: function () { clear(); nav("/"); },
+      // 1) Build order items payload (server DTO)
+      const orderItems: OrderItemDto[] = items.map((it) => {
+        const parsedId = Number(String(it.id).split(":")[0]);
+        const pid = (it as any).productId ?? (Number.isFinite(parsedId) ? parsedId : undefined);
+        return {
+          productId: pid,
+          productName: it.name,
+          quantity: it.qty,
+          unitPrice: it.price,
+          lineTotal: (Number(it.price) * Number(it.qty)).toFixed(2),
+          optionsText: it.variant || undefined,
+        };
       });
-      rzp.open();
-      setSubmitting(false);
-    } catch (e: any) {
-      const msg = e?.response?.data?.message || "Checkout failed. Please try again.";
-      setErr(msg);
-      setSubmitting(false);
+
+      const partnerName = partners.find(p => p.id === partnerId)?.name;
+
+      // 2) Build order payload (use previewed shippingFee + computed grandTotal)
+      const order: OrderDto = {
+        customerId: Number(user?.id),
+        itemsSubtotal: subtotal,
+        shippingFee: shippingFee || 0,
+        discountTotal,
+        grandTotal,
+        currency: "INR",
+        deliveryPartnerId: typeof partnerId === "number" ? partnerId : undefined,
+          courierName: partnerName,
+          couponId: typeof couponId === "number" ? couponId : undefined,
+          couponCode: couponAmt > 0 ? coupon.trim() : undefined,
+          orderNotes: orderNotes.trim() ? orderNotes.trim() : undefined,
+        courierName: partnerName,
+        shipName: selectedAddress.name,
+        shipPhone: selectedAddress.phone || undefined,
+        shipLine1: selectedAddress.line1,
+        shipLine2: selectedAddress.line2 || undefined,
+        shipPincode: selectedAddress.pincode || undefined,
+        shipDistrictId: selectedAddress.districtId || undefined,
+        shipStateId: selectedAddress.stateId || undefined,
+        shipCountryId: selectedAddress.countryId || undefined,
+      };
+
+      try {
+        // 3) Ask backend to create/prepare checkout (it should create the Razorpay order)
+        const resp = await startCheckout(order, orderItems);
+        if (resp?.type !== "RZP_ORDER" || !resp.razorpayOrder) {
+          throw new Error("Server did not return a Razorpay order.");
+        }
+        const rzpOrder = resp.razorpayOrder; // { id, amount, currency, ... }
+        const internalOrderId = (resp as any).orderId || (rzpOrder.notes?.orderId ? Number(rzpOrder.notes.orderId) : undefined);
+
+        // 4) Ensure Razorpay script is loaded
+        const ok = await loadRazorpay();
+        if (!ok || !(window as any).Razorpay) {
+          throw new Error("Could not load Razorpay. Please retry.");
+        }
+
+        // 5) Fetch public key from backend (profile-aware)
+        const { keyId } = await getRzpConfig();
+        if (!keyId) throw new Error("Razorpay key not configured on server.");
+
+        // 6) Open Razorpay Checkout
+        const rzp = new (window as any).Razorpay({
+          key: keyId,
+          order_id: rzpOrder.id,
+          amount: rzpOrder.amount,                 // in paise
+          currency: rzpOrder.currency || "INR",
+          name: "Blossom Buds Floral Artistry",
+          description: "Order Payment",
+          prefill: {
+            name: custName || "",
+            email: custEmail || "",
+            contact: selectedAddress.phone || "",
+          },
+          theme: { color: "#F05D8B" },
+          handler: async function (response: any) {
+            try {
+              await http.post("/api/payments/razorpay/verify", {
+                //orderId: createdOrderIdFromDraftOrIntent, // if you store it; if not, omit
+                razorpayOrderId: response.razorpay_order_id,
+                razorpayPaymentId: response.razorpay_payment_id,
+                razorpaySignature: response.razorpay_signature,
+                amount: grandTotal,
+                currency: "INR"
+              });
+              clear();
+              nav("/"); // success UX
+            } catch (e:any) {
+              console.error(e);
+              setErr(e?.response?.data?.message || "Payment captured but order could not be created.");
+            }
+          },
+          modal: {
+            ondismiss: () => {
+              setSubmitting(false);
+            },
+          },
+        });
+
+        rzp.on("payment.failed", (err: any) => {
+          console.warn("Razorpay payment.failed:", err);
+          setErr(err?.error?.description || "Payment failed. Please try again.");
+          setSubmitting(false);
+        });
+
+        rzp.open();
+      } catch (e: any) {
+        const msg = e?.response?.data?.message || e?.message || "Checkout failed. Please try again.";
+        setErr(msg);
+        setSubmitting(false);
+      }
     }
-  }
+
+
 
   // ===== Address modal state (New/Edit) =====
   const [naName, setNaName] = useState("");
@@ -983,6 +1209,22 @@ export default function CheckoutPage() {
             {shippingErr && !international && (
               <div className="small" style={{ color:"#b0003a" }}>{shippingErr}</div>
             )}
+            {/* Order notes (optional) */}
+            {!international && (
+            <div>
+              <div className="lbl">Order notes (optional)</div>
+              <textarea
+                className="ta"
+                rows={3}
+                maxLength={500}
+                placeholder="Do you want to let anything us know?"
+                value={orderNotes}
+                onChange={(e) => setOrderNotes(e.target.value)}
+              />
+              <div className="small" style={{ textAlign: "right" }}>
+                {500 - (orderNotes?.length || 0)} characters left
+              </div>
+            </div>)}
 
             <div className="actions">
               {international ? (
@@ -990,6 +1232,7 @@ export default function CheckoutPage() {
                   {submitting ? "Opening WhatsApp…" : "Send on WhatsApp"}
                 </button>
               ) : (
+
                 <button className="btn primary" onClick={onPlaceDomestic} disabled={submitting || !user?.id || shippingLoading}>
                   {submitting ? "Processing…" : "Proceed to Pay"}
                 </button>

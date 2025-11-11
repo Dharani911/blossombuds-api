@@ -60,8 +60,8 @@ public class CheckoutService {
         ci.setCurrency(currency);
         ci.setStatus("PENDING");
         ci.setExpiresAt(OffsetDateTime.now().plus(2, ChronoUnit.HOURS));
-        ci.setCreatedAt(OffsetDateTime.now());
-        ci.setCreatedBy("system");
+        //ci.setCreatedAt(OffsetDateTime.now());
+        //ci.setCreatedBy("system");
         ciRepo.save(ci);
 
         // Create Razorpay order tied to this intent (use receipt for friendly code)
@@ -73,8 +73,8 @@ public class CheckoutService {
         Map<String, Object> rzp = rzpService.createRzpOrderForAmount(paise, currency, "CI" + ci.getId(), notes, true);
         String rzpOrderId = (String) rzp.get("id");
         ci.setRzpOrderId(rzpOrderId);
-        ci.setModifiedAt(OffsetDateTime.now());
-        ci.setModifiedBy("system");
+        //ci.setModifiedAt(OffsetDateTime.now());
+        //ci.setModifiedBy("system");
 
         return Decision.rzpOrder(rzp, currency);
     }

@@ -24,8 +24,6 @@ export type OrderDto = {
   shipStateId?: number;
   shipPincode?: string;
   shipCountryId?: number;
-
-  // optional fields omitted for brevity (status, rzpOrderId, etc.)
 };
 
 export type OrderItemDto = {
@@ -44,15 +42,19 @@ export type CheckoutRequest = {
   items: OrderItemDto[];
 };
 
+/** Your backend may return RZP order inline OR a WhatsApp URL (intl flow). */
 export type CheckoutResponse =
   | {
       type: "RZP_ORDER";
+      /** useful to keep track of which order to verify against */
+      orderId?: number;
       currency?: string;
       razorpayOrder?: Record<string, any>;
       whatsappUrl?: undefined;
     }
   | {
       type: "WHATSAPP";
+      orderId?: number;
       currency?: undefined;
       razorpayOrder?: undefined;
       whatsappUrl?: string;
@@ -67,10 +69,60 @@ export async function startCheckout(order: OrderDto, items: OrderItemDto[]) {
   return data;
 }
 
-/** Load Razorpay script once. Returns true on success. */
+/** If you choose to create the Razorpay order in a separate step. */
+export async function createRzpOrder(orderId: number) {
+  const { data } = await http.post<Record<string, any>>(
+    `/api/payments/razorpay/orders/${orderId}`
+  );
+  return data; // { id, amount, currency, ... }
+}
+
+/** Payload to verify the payment on the server. */
+export type RzpVerifyPayload = {
+  orderId: number;                // your internal order id
+  razorpayOrderId: string;        // resp.razorpay_order_id
+  razorpayPaymentId: string;      // resp.razorpay_payment_id
+  razorpaySignature: string;      // resp.razorpay_signature
+  amount?: number;                // optional (for record-keeping)
+  currency?: string;              // optional (default INR)
+};
+
+/** Verify success with the backend (signature + record Payment row). */
+export async function verifyRzp(payload: RzpVerifyPayload) {
+  await http.post("/api/payments/razorpay/verify", payload);
+}
+export async function getRzpConfig(): Promise<{ keyId: string }> {
+  const { data } = await http.get<{ keyId: string }>("/api/payments/razorpay/config");
+  return data;
+}
+
+
+/** Load Razorpay script once. */
 let rzpLoaded = false;
 export async function loadRazorpay(): Promise<boolean> {
-  if (rzpLoaded) return true;
+  if (rzpLoaded || (window as any).Razorpay) {
+    rzpLoaded = true;
+    return true;
+  }
+  // avoid adding multiple <script> tags
+  const existing = document.querySelector<HTMLScriptElement>(
+    'script[src="https://checkout.razorpay.com/v1/checkout.js"]'
+  );
+  if (existing) {
+    return new Promise((resolve) => {
+      if ((window as any).Razorpay) {
+        rzpLoaded = true;
+        resolve(true);
+      } else {
+        existing.addEventListener("load", () => {
+          rzpLoaded = true;
+          resolve(true);
+        });
+        existing.addEventListener("error", () => resolve(false));
+      }
+    });
+  }
+
   return new Promise((resolve) => {
     const script = document.createElement("script");
     script.src = "https://checkout.razorpay.com/v1/checkout.js";
@@ -80,6 +132,6 @@ export async function loadRazorpay(): Promise<boolean> {
       resolve(true);
     };
     script.onerror = () => resolve(false);
-    document.body.appendChild(script);
+    document.head.appendChild(script);
   });
 }

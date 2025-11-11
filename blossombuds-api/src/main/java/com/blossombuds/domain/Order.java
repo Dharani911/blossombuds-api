@@ -1,17 +1,27 @@
 package com.blossombuds.domain;
 
 import com.blossombuds.db.GenericPgEnumConverter;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.Where;
+import org.hibernate.type.SqlTypes;
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedBy;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 
 /** Represents a customer order including totals, snapshots and tracking info. */
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor
 @ToString @EqualsAndHashCode(onlyExplicitlyIncluded = true)
+@EntityListeners(AuditingEntityListener.class)
 @Entity
 @Table(name = "orders")
 @SQLDelete(sql = "UPDATE orders SET active = false, modified_at = now() WHERE id = ?")
@@ -33,7 +43,8 @@ public class Order {
     private Long customerId;
 
     /** Lifecycle state of the order (PostgreSQL enum: order_status_enum). */
-    @Convert(converter = GenericPgEnumConverter.class)
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)          // ← key line: bind as a PG named enum
     @Column(name = "status", columnDefinition = "order_status_enum")
     private OrderStatus status;
 
@@ -113,6 +124,10 @@ public class Order {
     @Column(name = "rzp_payment_id", length = 100)
     private String rzpPaymentId;
 
+    /** External payment reference (e.g., UTR / bank txn id). */
+    @Column(name = "external_reference", length = 128)
+    private String externalReference;
+
     // --- shipping snapshot ---
 
     /** Recipient name for shipping. */
@@ -132,6 +147,7 @@ public class Order {
     private String shipLine2;
 
     /** Shipping district / city (FK: orders.ship_district_id). */
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "ship_district_id",
             foreignKey = @ForeignKey(name = "fk_order_ship_district"))
@@ -139,6 +155,7 @@ public class Order {
     private District shipDistrict;
 
     /** Shipping state / region (FK: orders.ship_state_id). */
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "ship_state_id",
             foreignKey = @ForeignKey(name = "fk_order_ship_state"))
@@ -150,6 +167,7 @@ public class Order {
     private String shipPincode;
 
     /** Shipping country (FK: orders.ship_country_id). */
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "ship_country_id",
             foreignKey = @ForeignKey(name = "fk_order_ship_country"))
@@ -164,17 +182,21 @@ public class Order {
 
     /** Username/actor who created this record. */
     @Column(name = "created_by", length = 120)
+    @CreatedBy
     private String createdBy;
 
     /** Timestamp when the record was created. */
     @Column(name = "created_at")
-    private OffsetDateTime createdAt;
+    @CreatedDate
+    private LocalDateTime createdAt;
 
     /** Username/actor who last modified this record. */
     @Column(name = "modified_by", length = 120)
+    @LastModifiedBy
     private String modifiedBy;
 
     /** Timestamp when the record was last modified. */
     @Column(name = "modified_at")
-    private OffsetDateTime modifiedAt;
+    @LastModifiedDate
+    private LocalDateTime modifiedAt;
 }

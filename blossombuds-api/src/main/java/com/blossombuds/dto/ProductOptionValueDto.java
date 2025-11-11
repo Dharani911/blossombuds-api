@@ -1,3 +1,4 @@
+// src/main/java/com/blossombuds/dto/ProductOptionValueDto.java
 package com.blossombuds.dto;
 
 import lombok.Data;
@@ -12,5 +13,6 @@ public class ProductOptionValueDto {
     private String valueLabel;
     private BigDecimal priceDelta;
     private Integer sortOrder;
+    private Boolean visible;
     private Boolean active;
 }

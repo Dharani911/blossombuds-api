@@ -59,13 +59,17 @@ export default function ProductQuickView({ productId, onClose }: Props) {
           .sort((a,b)=>(a.sortOrder ?? 0)-(b.sortOrder ?? 0));
         setImages(sortedImgs);
 
-        // default: select FIRST active value for each option
+        // 🔒 Only keep options that are visible (visible !== false)
+        const visibleOptions = (options || []).filter(o => (o as any)?.visible !== false);
+
+        // default: select FIRST active + visible value for each visible option
         const s: Record<number, number> = {};
-        (options || []).forEach(o => {
-          const act = (o.values || []).filter(v => v.active !== false);
+        visibleOptions.forEach(o => {
+          const act = (o.values || []).filter(v => v.active !== false && (v as any)?.visible !== false);
           if (act.length) s[o.id] = act[0].id;
         });
-        setOpts(options || []);
+
+        setOpts(visibleOptions);
         setSel(s);
       } catch (e:any) {
         if (!live) return;
@@ -85,11 +89,11 @@ export default function ProductQuickView({ productId, onClose }: Props) {
     return undefined;
   }
 
-  // compute unit price from the selected value that has a price
+  // compute unit price from the selected (visible) value that has a price
   const unitPrice = useMemo(() => {
     for (const o of opts) {
       const vId = sel[o.id];
-      const v: any = o.values.find(x => x.id === vId);
+      const v: any = o.values.find(x => x.id === vId && (x as any)?.visible !== false);
       const vp = readValuePrice(v);
       if (typeof vp === "number") return vp;
     }
@@ -110,7 +114,7 @@ export default function ProductQuickView({ productId, onClose }: Props) {
 
   function onAdd() {
     if (!p || adding) return;
-    // ensure required options
+    // ensure required options (only among visible options)
     for (const o of opts) {
       if (o.required && !sel[o.id]) {
         alert(`Please select: ${o.name}`);
@@ -210,8 +214,10 @@ export default function ProductQuickView({ productId, onClose }: Props) {
               <h1 className="pqv-title">{p.name}</h1>
               <div className="pqv-price">{priceText}</div>
 
+              {/* Only render visible options; values within also must be visible */}
               {opts.map((o, idx) => {
-                const act = o.values.filter(v => v.active !== false);
+                const act = o.values.filter(v => v.active !== false && (v as any)?.visible !== false);
+                if (act.length === 0) return null; // nothing to pick, hide block
                 const currentVal = sel[o.id] ?? act[0]?.id ?? undefined;
                 return (
                   <div key={o.id} className={"pqv-opt" + (idx>0 ? " subtle": "")}>

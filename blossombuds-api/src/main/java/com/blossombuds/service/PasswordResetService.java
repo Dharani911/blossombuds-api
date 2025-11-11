@@ -32,15 +32,15 @@ public class PasswordResetService {
     private static final SecureRandom RNG = new SecureRandom();
 
     /** Issues a password reset token (idempotent on email existence) and emails the link. */
-    @Transactional
+    @Transactional(readOnly = false)
     public void requestReset(String email) {
-        if (email == null || email.isBlank()) return; // no info leak
+        if (email == null || email.isBlank()) return; // privacy: no info leak
         var customerOpt = customerRepo.findByEmail(email.trim());
-        if (customerOpt.isEmpty()) return; // don't reveal
+        if (customerOpt.isEmpty()) return;
 
         Customer c = customerOpt.get();
 
-        // create a fresh token (expire previous active tokens)
+        // expire previous tokens
         prtRepo.deactivateAllByCustomerId(c.getId());
 
         String token = randomToken();
@@ -48,20 +48,24 @@ public class PasswordResetService {
         prt.setCustomerId(c.getId());
         prt.setToken(token);
         prt.setActive(true);
-        prt.setExpiresAt(OffsetDateTime.now().plus(1, ChronoUnit.HOURS));
-        prt.setCreatedBy("system"); prt.setCreatedAt(OffsetDateTime.now());
+        prt.setExpiresAt(OffsetDateTime.now().plusHours(1));
         prtRepo.save(prt);
 
-        String resetUrl = frontendBase + "/reset-password?token=" + token;
+        // construct reset URL
+        String resetUrl = frontendBase + "/reset-password?token=" + java.net.URLEncoder.encode(token, java.nio.charset.StandardCharsets.UTF_8);
         emailService.sendPasswordResetEmail(c.getEmail(), resetUrl);
     }
 
     /** Confirms a new password using a valid, unexpired token, then consumes the token. */
-    @Transactional
+    @Transactional(readOnly = false)
     public void confirmReset(String token, String newPassword) {
         if (token == null || token.isBlank()) {
             throw new IllegalArgumentException("Invalid token");
         }
+        if (newPassword == null || newPassword.isBlank() || newPassword.length() < 8) {
+            throw new IllegalArgumentException("Password too short");
+        }
+
         var prt = prtRepo.findByToken(token)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid token"));
 
@@ -75,11 +79,11 @@ public class PasswordResetService {
         Customer c = customerRepo.findById(prt.getCustomerId())
                 .orElseThrow(() -> new IllegalArgumentException("Customer not found"));
 
-        // Set new password
+        // set and persist new password
         c.setPasswordHash(encoder.encode(newPassword));
-        c.setModifiedBy("system"); c.setModifiedAt(OffsetDateTime.now());
+        customerRepo.save(c); // <— force persist (don’t rely on flush when class is readOnly)
 
-        // Consume token
+        // consume token
         prt.setActive(false);
         prt.setConsumedAt(OffsetDateTime.now());
         prtRepo.save(prt);

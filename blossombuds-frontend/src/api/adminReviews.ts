@@ -1,3 +1,4 @@
+// src/api/adminReviews.ts
 import http from "./adminHttp";
 
 export type ReviewStatus = "PENDING" | "APPROVED" | "REJECTED";
@@ -8,12 +9,13 @@ export type ProductReview = {
   productName?: string;
   customerId?: number;
   customerName?: string;
-  rating?: number;         // 1..5
+  rating?: number;
   title?: string;
-  comment?: string;
-  status?: ReviewStatus;   // PENDING | APPROVED | REJECTED
-  createdAt?: string;      // ISO
+  body?: string;
+  status?: ReviewStatus;
+  createdAt?: string; // ISO
   active?: boolean;
+  concern?: boolean;
 };
 
 export type Page<T> = {
@@ -24,14 +26,38 @@ export type Page<T> = {
   number: number;
 };
 
+export type ProductReviewImageDto = {
+  id?: number;
+  publicId?: string;
+  url: string;        // signed GET (30 min)
+  sortOrder?: number;
+};
+
+export type ProductReviewDetailView = {
+  id: number;
+  productId: number;
+  orderId?: number;
+  orderItemId?: number;
+  customerId: number;
+  rating: number;
+  title?: string;
+  body?: string;
+  status: ReviewStatus;
+  concern: boolean;
+  createdAt: string; // ISO
+  images: ProductReviewImageDto[];
+  productName?: string;  // optional if BE enriches
+  customerName?: string; // optional if BE enriches
+};
+
 export async function listAdminReviews(params: {
   status?: ReviewStatus;
   q?: string;
   page?: number;
   size?: number;
-}) : Promise<Page<ProductReview>> {
+  concern?: boolean;
+}): Promise<Page<ProductReview>> {
   const res = await http.get<Page<ProductReview>>("/api/reviews/admin", { params });
-  // Ensure defaults
   return {
     content: res.data?.content ?? [],
     totalElements: res.data?.totalElements ?? 0,
@@ -41,8 +67,21 @@ export async function listAdminReviews(params: {
   };
 }
 
-export async function moderateReview(reviewId: number, status: Exclude<ReviewStatus, "PENDING">) {
-  const res = await http.post<ProductReview>(`/api/reviews/${reviewId}/moderate/${status}`);
+export async function getAdminReviewDetail(reviewId: number) {
+  const res = await http.get<ProductReviewDetailView>(`/api/reviews/${reviewId}`);
+  return res.data;
+}
+
+export async function moderateReview(
+  reviewId: number,
+  status: Exclude<ReviewStatus, "PENDING">,
+  override = false
+) {
+  const res = await http.post<ProductReview>(
+    `/api/reviews/${reviewId}/moderate/${status}`,
+    null,
+    { params: { override } }
+  );
   return res.data;
 }
 

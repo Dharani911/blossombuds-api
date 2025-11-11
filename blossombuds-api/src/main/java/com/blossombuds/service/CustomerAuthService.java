@@ -64,8 +64,8 @@ public class CustomerAuthService {
         c.setPasswordHash(encoder.encode(rawPassword));
         c.setActive(true);
         c.setEmailVerified(false);
-        c.setCreatedBy("system");
-        c.setCreatedAt(OffsetDateTime.now());
+        //c.setCreatedBy("system");
+        //c.setCreatedAt(OffsetDateTime.now());
         customers.save(c);
 
         // Invalidate any previous active tokens for this customer (defense-in-depth)
@@ -78,8 +78,8 @@ public class CustomerAuthService {
         evt.setToken(token);
         evt.setExpiresAt(OffsetDateTime.now().plus(24, ChronoUnit.HOURS));
         evt.setActive(true);
-        evt.setCreatedBy("system");
-        evt.setCreatedAt(OffsetDateTime.now());
+        //evt.setCreatedBy("system");
+        //evt.setCreatedAt(OffsetDateTime.now());
         evtRepo.save(evt);
 
         // Send email
@@ -112,8 +112,8 @@ public class CustomerAuthService {
                 .orElseThrow(() -> new IllegalArgumentException("Customer not found"));
 
         customer.setEmailVerified(true);
-        customer.setModifiedBy("system");
-        customer.setModifiedAt(OffsetDateTime.now());
+        //customer.setModifiedBy("system");
+        //customer.setModifiedAt(OffsetDateTime.now());
 
         evt.setConsumedAt(OffsetDateTime.now());
         evt.setActive(false);

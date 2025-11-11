@@ -3,12 +3,19 @@ package com.blossombuds.domain;
 import jakarta.persistence.*;
 import lombok.Getter; import lombok.Setter;
 import org.hibernate.annotations.SQLDelete; import org.hibernate.annotations.Where;
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedBy;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 
 /** Immutable snapshots of CMS page content. */
 @Getter @Setter
 @Entity @Table(name = "cms_page_revisions")
+@EntityListeners(AuditingEntityListener.class)
 @SQLDelete(sql = "UPDATE cms_page_revisions SET active=false, modified_at=now() WHERE id=?")
 @Where(clause = "active = true")
 public class CmsPageRevision {
@@ -23,8 +30,12 @@ public class CmsPageRevision {
     private Boolean active = true;
 
     // audit
+    @CreatedBy
     @Column(length=120) private String createdBy;
-    private OffsetDateTime createdAt;
+    @CreatedDate
+    private LocalDateTime createdAt;
+    @LastModifiedBy
     @Column(length=120) private String modifiedBy;
-    private OffsetDateTime modifiedAt;
+    @LastModifiedDate
+    private LocalDateTime modifiedAt;
 }

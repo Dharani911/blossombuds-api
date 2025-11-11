@@ -1,4 +1,3 @@
-// src/api/adminCatalog.ts
 import adminHttp from "./adminHttp";
 
 /** ---------- Shared types ---------- */
@@ -18,6 +17,9 @@ export type ProductDto = {
   description?: string | null;
   price: number;
   active?: boolean;
+  visible?: boolean;
+  featured?: boolean;
+  featuredRank?: number | null;
 };
 
 export type Product = {
@@ -27,14 +29,17 @@ export type Product = {
   description?: string | null;
   price: number;
   active: boolean;
+  visible?: boolean;
+  featured?: boolean;
+  featuredRank?: number | null;
 };
 
 export type ProductImageDto = {
   id: number;
   productId: number;
   publicId: string | null;
-  url: string | null;                 // short-lived signed GET
-  watermarkVariantUrl: string | null; // same as url for now
+  url: string | null;
+  watermarkVariantUrl: string | null;
   altText: string | null;
   sortOrder: number;
   active: boolean;
@@ -99,6 +104,8 @@ export async function deleteProduct(id: number) {
   await adminHttp.delete(`/api/catalog/products/${id}`);
 }
 
+/** convenience togglers that still use PUT (full update) */
+
 export async function toggleProductActive(p: Product) {
   const payload: ProductDto = {
     name: p.name,
@@ -106,56 +113,87 @@ export async function toggleProductActive(p: Product) {
     description: p.description ?? undefined,
     price: p.price,
     active: !p.active,
+    visible: p.visible,
+    featured: p.featured,
   };
   const { data } = await adminHttp.put<Product>(`/api/catalog/products/${p.id}`, payload);
   return data;
 }
 
-/** ---------- Images (presign → PUT → from-key) ---------- */
+export async function toggleProductVisible(p: Product) {
+  const nextVisible = !Boolean(p.visible);
 
-// 1) Ask backend for a presigned PUT URL
-export async function presignUpload(filename: string, contentType: string) {
-  const { data } = await adminHttp.post(
-    `/api/catalog/uploads/presign`,
-    null,
-    { params: { filename, contentType } }
-  );
-  return data as { key: string; url: string; contentType: string };
+  // send both keys to be safe with different backends
+  const payload: ProductDto & { isVisible?: boolean } = {
+    name: p.name,
+    slug: p.slug ?? undefined,
+    description: p.description ?? undefined,
+    price: p.price,
+    active: p.active,                 // keep active as-is (delete uses this separately)
+    visible: nextVisible,             // current API
+    isVisible: nextVisible,           // alt backend key (no harm if ignored)
+    featured: p.featured,
+  };
+
+  const { data } = await adminHttp.put<Product>(`/api/catalog/products/${p.id}`, payload);
+
+  // normalize the response so caller always gets a concrete boolean
+  const normalized: Product = {
+    ...data,
+    visible: (data as any)?.visible ?? (data as any)?.isVisible ?? nextVisible,
+  };
+  return normalized;
 }
 
-export async function attachImageFromKey(
-  productId: number,
-  payload: { key: string; altText?: string; sortOrder?: number }
-) {
-  const form = new FormData();
-  form.append("key", payload.key);
-  if (payload.altText) form.append("altText", payload.altText);
-  if (payload.sortOrder != null) form.append("sortOrder", String(payload.sortOrder));
-  const { data } = await adminHttp.post(
-    `/api/catalog/products/${productId}/images/from-key`,
-    form
+
+/**
+ * New server routes for Featured flag:
+ *  - POST   /api/catalog/products/{id}/featured  -> returns Product
+ *  - DELETE /api/catalog/products/{id}/featured  -> 204 No Content
+ *
+ * setProductFeatured will POST for true, DELETE for false,
+ * and return the updated Product (DELETE followed by GET).
+ */
+export async function setProductFeatured(id: number, featured: boolean) {
+  if (featured) {
+    const { data } = await adminHttp.post<Product>(`/api/catalog/products/${id}/featured`);
+    return data;
+  } else {
+    await adminHttp.delete(`/api/catalog/products/${id}/featured`);
+    // controller returns 204, so fetch the updated row
+    const data = await getProduct(id);
+    return data;
+  }
+}
+
+/** Lists for Featured page and New Arrivals (public endpoints are fine in admin) */
+
+export async function listFeaturedProducts(page = 0, size = 24) {
+  const { data } = await adminHttp.get<Page<Product>>(
+    `/api/catalog/products/featured`,
+    { params: { page, size } }
   );
   return data;
 }
 
-/* // 2) Tell backend to process temp object and attach to product
-export async function addImageFromKey(
-  productId: number,
-  key: string,
-  altText?: string,
-  sortOrder?: number
-) {
-  const params = new URLSearchParams({ key });
-  if (altText) params.set("altText", altText);
-  if (sortOrder != null) params.set("sortOrder", String(sortOrder));
-
-  const { data } = await adminHttp.post<ProductImageDto>(
-    `/api/catalog/products/${productId}/images/from-key?${params.toString()}`
+export async function listFeaturedTop(limit = 12) {
+  const { data } = await adminHttp.get<Product[]>(
+    `/api/catalog/products/featured/top`,
+    { params: { limit } }
   );
   return data;
-} */
+}
 
-// List images (signed preview URLs)
+export async function listNewArrivals(page = 0, size = 24) {
+  const { data } = await adminHttp.get<Page<Product>>(
+    `/api/catalog/products/new-arrivals`,
+    { params: { page, size } }
+  );
+  return data;
+}
+
+/** ---------- Images (multipart) ---------- */
+
 export async function listProductImages(productId: number) {
   const { data } = await adminHttp.get<ProductImageDto[]>(
     `/api/catalog/products/${productId}/images`
@@ -163,7 +201,8 @@ export async function listProductImages(productId: number) {
   return data;
 }
 
-// add/replace this function
+export type ProductImage = ProductImageDto;
+
 export async function uploadProductImage(
   productId: number,
   file: File,
@@ -172,7 +211,6 @@ export async function uploadProductImage(
   onProgress?: (pct: number) => void
 ){
   const fd = new FormData();
-  // IMPORTANT: backend accepts "file" (and also "image"), we send "file"
   fd.append("file", file, file.name);
   if (altText != null)  fd.append("altText", String(altText));
   if (sortOrder != null) fd.append("sortOrder", String(sortOrder));
@@ -187,11 +225,6 @@ export async function uploadProductImage(
   return res.data as ProductImage;
 }
 
-
-
-
-
-
 export async function updateImageMeta(
   productId: number,
   imageId: number,
@@ -204,37 +237,15 @@ export async function updateImageMeta(
 
   const { data } = await adminHttp.put(
     `/api/catalog/products/${productId}/images/${imageId}`,
-    fd,
-    { headers: { /* let browser set multipart boundary */ } }
+    fd
   );
   return data; // ProductImage
 }
 
-/*
-export async function attachImageFromKey(
-  productId: number,
-  payload: { key: string; altText?: string; sortOrder?: number }
-) {
-  const form = new FormData();
-  form.append("key", payload.key);
-  if (payload.altText) form.append("altText", payload.altText);
-  if (payload.sortOrder != null) form.append("sortOrder", String(payload.sortOrder));
-
-  const res = await fetch(`/api/catalog/products/${productId}/images/from-key`, {
-    method: "POST",
-    body: form,
-  });
-  if (!res.ok) throw new Error("Failed to attach image");
-  return res.json(); // ProductImageDto
-}
- */
-
-// Delete image
 export async function deleteProductImage(productId: number, imageId: number) {
   await adminHttp.delete(`/api/catalog/products/${productId}/images/${imageId}`);
 }
 
-// Make primary
 export async function setPrimaryImage(productId: number, imageId: number) {
   await adminHttp.post(`/api/catalog/products/${productId}/images/${imageId}/primary`);
 }
@@ -357,4 +368,85 @@ export function slugifyName(name: string) {
     .replace(/['"]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
+}
+
+/** Coerces price fields to numbers (defensive against stringy backends) */
+export function normalizeProduct<T extends { price: any }>(p: T): T & { price: number } {
+  return { ...p, price: Number(p?.price ?? 0) };
+}
+
+/** Coerces priceDelta to number (keeps nulls as null) */
+export function normalizeOptionValue<T extends { priceDelta?: any | null }>(
+  v: T
+): T & { priceDelta: number | null } {
+  return {
+    ...v,
+    priceDelta: v.priceDelta == null ? null : Number(v.priceDelta),
+  };
+}
+
+/** Simple helper to read a product's numeric price */
+export function resolveBasePrice(p: { price: any }): number {
+  const n = Number(p?.price ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** ---------- Lite helpers for admin CreateOrder ---------- */
+
+// Replace the whole function with this robust version
+export type ProductLite = { id: number; name: string; price: number };
+
+export async function searchProductsLite(q: string, size = 20): Promise<ProductLite[]> {
+  const term = (q || "").trim();
+  // Try several common keys the API might accept; backend will ignore unknown ones
+  const params: any = {
+    page: 0,
+    size,
+    q: term,
+    query: term,
+    search: term,
+    name: term,
+  };
+
+  const { data } = await adminHttp.get<Page<Product>>(`/api/catalog/products`, { params });
+  const rows = data?.content || [];
+
+  // Normalize price
+  const normalized = rows.map(p => ({
+    id: p.id,
+    name: p.name,
+    price: Number(p.price ?? 0),
+  }));
+
+  // Fallback client-side filter in case server ignores query params
+  if (!term) return normalized;
+
+  const idWanted = /^\d+$/.test(term) ? Number(term) : null;
+  const t = term.toLowerCase();
+
+  return normalized.filter(p =>
+    (idWanted != null && p.id === idWanted) ||
+    p.name.toLowerCase().includes(t)
+  );
+}
+
+
+export type ProductOptionWithValues = ProductOption & { values: ProductOptionValue[] };
+
+/**
+ * Loads product options and inlines their values.
+ * All price fields are normalized to numbers (priceDelta can still be null).
+ */
+export async function getProductOptionsLite(productId: number): Promise<ProductOptionWithValues[]> {
+  const opts = await listOptions(productId);
+  if (!opts?.length) return [];
+
+  const valuesLists = await Promise.all(
+    opts.map(o => listOptionValues(o.id).catch(() => [] as ProductOptionValue[]))
+  );
+
+  return opts.map((o, i) => ({
+    ...o,
+    values: (valuesLists[i] || []).map(normalizeOptionValue),
+  }));
 }

@@ -3,13 +3,10 @@ package com.blossombuds.web;
 import com.blossombuds.domain.*;
 import com.blossombuds.dto.*;
 import com.blossombuds.service.CatalogService;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -21,9 +18,6 @@ import org.springframework.web.multipart.MultipartHttpServletRequest;
 
 import java.io.IOException;
 import java.util.List;
-
-
-import static com.blossombuds.util.ImageUtil.validateFileEnvelope;
 
 /**
  * HTTP endpoints for catalog: products, product-category links,
@@ -40,7 +34,6 @@ import static com.blossombuds.util.ImageUtil.validateFileEnvelope;
 public class CatalogController {
 
     private final CatalogService catalog;
-    //private static final Logger log = LoggerFactory.getLogger(CatalogController.class);
 
     // ────────────────────────────── Categories (admin ops) ───────────────────
 
@@ -91,6 +84,12 @@ public class CatalogController {
         return catalog.listProducts(page, size);
     }
 
+    /** NEW: New-arrival products (sorted by createdAt DESC, active via @Where). */
+    @GetMapping("/products/new-arrivals")
+    public List<Product> newArrivals(@RequestParam(defaultValue = "12") @Min(1) int limit) {
+        return catalog.listNewArrivals(limit);
+    }
+
     /** Get product by id (read: public). */
     @GetMapping("/products/{id}")
     public Product getProduct(@PathVariable Long id) {
@@ -138,18 +137,7 @@ public class CatalogController {
 
     // ───────────────────────────────── Images ────────────────────────────────
 
-    /** Add product image metadata. */
-    /** Add a new product image (with file upload) */
-    /** Upload + create image (returns signed URLs) */
-    // POST /api/catalog/products/{productId}/images
-    // imports needed:
-// import org.slf4j.Logger;
-// import org.slf4j.LoggerFactory;
-// import org.springframework.web.multipart.MultipartFile;
-// import org.springframework.web.multipart.MultipartHttpServletRequest;
-
-
-
+    /** Upload + create image (returns signed URLs). */
     @PostMapping(value = "/products/{productId}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole('ADMIN')")
     public ProductImage addProductImage(
@@ -159,15 +147,13 @@ public class CatalogController {
             MultipartHttpServletRequest request
     ) throws IOException, InterruptedException {
 
-        // ── Request-level visibility
+        // Request-level visibility
         log.info("POST /products/{}/images: reqContentType={}", productId, request.getContentType());
         log.info("Request params: altText='{}', sortOrder='{}'", altText, sortOrder);
 
-        // List all part names Spring sees
         var names = request.getFileMap().keySet();
         log.info("Multipart file field names: {}", names);
 
-        // Log each part’s shape
         request.getFileMap().forEach((k, v) -> {
             if (v != null) {
                 log.info("Part[{}]: originalFilename='{}', contentType='{}', size={}",
@@ -177,7 +163,6 @@ public class CatalogController {
             }
         });
 
-        // Pick the first non-empty file among common keys, else first present
         MultipartFile file =
                 firstNonEmpty(
                         request.getFile("file"),
@@ -200,7 +185,6 @@ public class CatalogController {
         log.info("Chosen part: originalFilename='{}', contentType='{}', size={}",
                 file.getOriginalFilename(), file.getContentType(), file.getSize());
 
-        // Defensive: log first bytes (magic) to confirm it’s a real file
         try {
             byte[] peek = file.getBytes();
             int head = Math.min(peek.length, 16);
@@ -232,27 +216,14 @@ public class CatalogController {
         return null;
     }
 
-
-
-
-
-
-
-
-
-
-    /** List images (each item contains a short-lived signed URL) */
+    /** List images (each item contains a short-lived signed URL). */
     @GetMapping("/products/{productId}/images")
     public List<ProductImageDto> listImages(@PathVariable Long productId) {
-        return catalog.listProductImageResponses(productId); // <-- no type mismatch now
+        return catalog.listProductImageResponses(productId);
     }
 
-    /** Update metadata and/or replace file (returns fresh signed URLs) */
-    // UPDATE image (metadata and/or file)
-    @PutMapping(
-            value = "/products/{productId}/images/{imageId}",
-            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
-    )
+    /** Update metadata and/or replace file (returns fresh signed URLs). */
+    @PutMapping(value = "/products/{productId}/images/{imageId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole('ADMIN')")
     public ProductImage updateImage(
             @PathVariable Long productId,
@@ -275,7 +246,6 @@ public class CatalogController {
                 if (mf != null && !mf.isEmpty()) { file = mf; break; }
             }
         }
-        // file may be null -> that's OK (metadata-only update)
 
         ProductImageDto dto = new ProductImageDto();
         dto.setId(imageId);
@@ -287,10 +257,7 @@ public class CatalogController {
         return catalog.updateProductImage(dto, file);
     }
 
-
-
-
-    /** Delete an image (soft delete) */
+    /** Delete an image (soft delete). */
     @DeleteMapping("/products/{productId}/images/{imageId}")
     @PreAuthorize("hasRole('ADMIN')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
@@ -298,14 +265,15 @@ public class CatalogController {
         catalog.deleteProductImage(productId, imageId);
     }
 
-    /** Mark an image as primary for the product */
+    /** Mark an image as primary for the product. */
     @PostMapping("/products/{productId}/images/{imageId}/primary")
     @PreAuthorize("hasRole('ADMIN')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void setPrimaryImage(@PathVariable Long productId, @PathVariable Long imageId) {
         catalog.setPrimaryImage(productId, imageId);
     }
-    // 1) FE asks for a presigned PUT
+
+    // Presign direct upload
     @PostMapping("/uploads/presign")
     @PreAuthorize("hasRole('ADMIN')")
     public PresignResponse presignUpload(@RequestParam String filename,
@@ -313,16 +281,18 @@ public class CatalogController {
         return catalog.presignPut(filename, contentType);
     }
 
-    // 2) FE tells backend the temp key to process + attach to product
+    // Consume temp key, process & attach to product
     @PostMapping("/products/{productId}/images/from-key")
     @PreAuthorize("hasRole('ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
     public ProductImageDto addImageFromKey(@PathVariable Long productId,
-                                                @RequestParam String key,
-                                                @RequestParam(required=false) String altText,
-                                                @RequestParam(required=false) Integer sortOrder) throws IOException, InterruptedException {
+                                           @RequestParam String key,
+                                           @RequestParam(required=false) String altText,
+                                           @RequestParam(required=false) Integer sortOrder)
+            throws IOException, InterruptedException {
         return catalog.createImageFromTempKey(productId, key, altText, sortOrder);
     }
+
     // ─────────────────────────────── Options ────────────────────────────────
 
     /** Create an option for a product. */
@@ -402,5 +372,35 @@ public class CatalogController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteValue(@PathVariable Long optionId, @PathVariable Long valueId) {
         catalog.deleteProductOptionValue(optionId, valueId);
+    }
+    /** GET /api/catalog/products/featured?page=0&size=24 */
+    @GetMapping("/products/featured")
+    public Page<Product> listFeatured(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "24") int size
+    ) {
+        return catalog.listFeaturedProducts(page, size);
+    }
+
+    /** GET /api/catalog/products/featured/top?limit=12 */
+    @GetMapping("/products/featured/top")
+    public List<Product> listFeaturedTop(
+            @RequestParam(defaultValue = "12") int limit
+    ) {
+        return catalog.listFeaturedTop(limit);
+    }
+    // Mark featured = true
+    @PostMapping("/products/{id}/featured")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Product markFeatured(@PathVariable Long id) {
+        return catalog.setProductFeatured(id, true);
+    }
+
+    // Mark featured = false
+    @DeleteMapping("/products/{id}/featured")
+    @PreAuthorize("hasRole('ADMIN')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void unmarkFeatured(@PathVariable Long id) {
+        catalog.setProductFeatured(id, false);
     }
 }

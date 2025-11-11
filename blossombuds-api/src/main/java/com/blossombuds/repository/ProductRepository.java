@@ -61,5 +61,9 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
                                  @Param("priceMin") BigDecimal priceMin,
                                  @Param("priceMax") BigDecimal priceMax,
                                  Pageable pageable);
+    Page<Product> findByFeaturedTrue(Pageable pageable);
+
+    // If you gate by visible flag too:
+    Page<Product> findByFeaturedTrueAndVisibleTrue(Pageable pageable);
 
 }

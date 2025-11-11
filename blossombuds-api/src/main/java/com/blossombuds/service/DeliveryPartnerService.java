@@ -32,8 +32,8 @@ public class DeliveryPartnerService {
         p.setName(safeTrim(dto.getName()));
         p.setTrackingUrlTemplate(safeTrim(dto.getTrackingUrlTemplate()));
         p.setActive(dto.getActive() != null ? dto.getActive() : Boolean.TRUE);
-        p.setCreatedBy(actor);
-        p.setCreatedAt(OffsetDateTime.now());
+        //p.setCreatedBy(actor);
+        //p.setCreatedAt(OffsetDateTime.now());
         return partnerRepo.save(p);
     }
 
@@ -52,8 +52,8 @@ public class DeliveryPartnerService {
         if (dto.getTrackingUrlTemplate() != null)p.setTrackingUrlTemplate(safeTrim(dto.getTrackingUrlTemplate()));
         if (dto.getActive() != null)             p.setActive(dto.getActive());
 
-        p.setModifiedBy(actor);
-        p.setModifiedAt(OffsetDateTime.now());
+        //p.setModifiedBy(actor);
+        //p.setModifiedAt(OffsetDateTime.now());
         return p; // dirty-checked on commit
     }
 
@@ -88,8 +88,8 @@ public class DeliveryPartnerService {
         if (id == null) throw new IllegalArgumentException("id is required");
         DeliveryPartner p = get(id);
         p.setActive(active);
-        p.setModifiedBy(actor);
-        p.setModifiedAt(OffsetDateTime.now());
+        //p.setModifiedBy(actor);
+        //p.setModifiedAt(OffsetDateTime.now());
         return p;
     }
 

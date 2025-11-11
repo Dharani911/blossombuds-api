@@ -5,7 +5,13 @@ import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.Where;
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedBy;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 
 /** Customer account (soft-deleted; active-only by default). */
@@ -15,6 +21,7 @@ import java.time.OffsetDateTime;
         @Index(name = "idx_customers_email", columnList = "email"),
         @Index(name = "idx_customers_active", columnList = "active")
 })
+@EntityListeners(AuditingEntityListener.class)
 @SQLDelete(sql = "UPDATE customers SET active=false, modified_at=now() WHERE id=?")
 @Where(clause = "active = true")
 public class Customer {
@@ -34,8 +41,12 @@ public class Customer {
 
     // audit
     private Boolean active = Boolean.TRUE;
+    @CreatedBy
     @Column(name = "created_by", length = 120)  private String createdBy;
-    @Column(name = "created_at")                private OffsetDateTime createdAt;
+    @CreatedDate
+    @Column(name = "created_at")                private LocalDateTime createdAt;
+    @LastModifiedBy
     @Column(name = "modified_by", length = 120) private String modifiedBy;
-    @Column(name = "modified_at")               private OffsetDateTime modifiedAt;
+    @LastModifiedDate
+    @Column(name = "modified_at")               private LocalDateTime modifiedAt;
 }

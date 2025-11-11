@@ -1,3 +1,4 @@
+// src/pages/admin/ReviewsPage.tsx
 import React, { useEffect, useState } from "react";
 import {
   listAdminReviews,
@@ -7,6 +8,7 @@ import {
   type ReviewStatus,
   type Page,
 } from "../../api/adminReviews";
+import ReviewViewModal from "../../components/admin/ReviewViewModal"; // <-- adjust path if needed
 
 const PRIMARY = "#4A4F41";
 const ACCENT  = "#F05D8B";
@@ -14,20 +16,27 @@ const GOLD    = "#F6C320";
 const INK     = "rgba(0,0,0,.08)";
 
 type Tab = "ALL" | "PENDING" | "APPROVED" | "REJECTED";
+type ConsentFilter = "ALL" | "WITH" | "WITHOUT";
 
 export default function ReviewsPage() {
   const [tab, setTab] = useState<Tab>("PENDING");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(0);
   const [size, setSize] = useState(20);
+  const [consent, setConsent] = useState<ConsentFilter>("ALL");
 
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [data, setData] = useState<Page<ProductReview> | null>(null);
   const [toast, setToast] = useState<{kind:"ok"|"bad"; msg:string} | null>(null);
 
+  // NEW: modal state
+  const [viewId, setViewId] = useState<number | null>(null);
+
   const statusFilter: ReviewStatus | undefined =
     tab === "ALL" ? undefined : (tab as ReviewStatus);
+
+  const concernParam = consent === "ALL" ? undefined : (consent === "WITH" ? true : false);
 
   useEffect(() => {
     let live = true;
@@ -39,6 +48,7 @@ export default function ReviewsPage() {
           q: q.trim() || undefined,
           page,
           size,
+          concern: concernParam,
         });
         if (!live) return;
         setData(res);
@@ -52,15 +62,19 @@ export default function ReviewsPage() {
     })();
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, q, page, size]);
+  }, [tab, q, page, size, consent]);
 
   function refreshSamePage() {
     setPage(p => p);
   }
 
-  async function doModerate(r: ProductReview, next: Exclude<ReviewStatus, "PENDING">) {
+  async function doModerate(
+    r: ProductReview,
+    next: Exclude<ReviewStatus, "PENDING">,
+    override = false
+  ) {
     try {
-      await moderateReview(r.id!, next);
+      await moderateReview(r.id!, next, override);
       setToast({ kind: "ok", msg: `Marked as ${next}.` });
       refreshSamePage();
     } catch (e:any) {
@@ -110,6 +124,17 @@ export default function ReviewsPage() {
               </button>
             ))}
           </div>
+
+          <select
+            value={consent}
+            onChange={e => { setConsent(e.target.value as ConsentFilter); setPage(0); }}
+            title="Filter by customer consent"
+          >
+            <option value="ALL">All</option>
+            <option value="WITH">With consent</option>
+            <option value="WITHOUT">Without consent</option>
+          </select>
+
           <div className="search">
             <input
               placeholder="Search by product/customer/title/comment…"
@@ -125,7 +150,7 @@ export default function ReviewsPage() {
           <div className="thead">
             <div>Product</div>
             <div>Rating</div>
-            <div>Title & Comment</div>
+            <div>Title</div>
             <div>Customer</div>
             <div>When</div>
             <div>Status</div>
@@ -163,7 +188,6 @@ export default function ReviewsPage() {
               <div className="cell-rating">{Stars(r.rating)}</div>
               <div className="cell-text">
                 <div className="ttl" title={r.title || ""}>{r.title || "—"}</div>
-                <div className="cmt" title={r.comment || ""}>{r.comment || "—"}</div>
               </div>
               <div className="cell-cust">
                 {r.customerName ? r.customerName : (r.customerId ? `#${r.customerId}` : "—")}
@@ -173,11 +197,27 @@ export default function ReviewsPage() {
                 <span className={"badge s-"+(r.status||"PENDING").toLowerCase()}>
                   {r.status}
                 </span>
+                <span className="consent-badge">{r.concern ? "consent✓" : "no consent"}</span>
               </div>
               <div className="cell-actions">
-                {r.status !== "APPROVED" && (
+                <button className="ghost sm" onClick={() => setViewId(r.id!)}>View</button>
+
+                {r.status !== "APPROVED" && r.concern !== false && (
                   <button className="ghost sm ok" onClick={()=>doModerate(r,"APPROVED")}>Approve</button>
                 )}
+                {r.status !== "APPROVED" && r.concern === false && (
+                  <>
+                    <button className="ghost sm ok" disabled title="Customer consent is required">Approve</button>
+                    <button
+                      className="ghost sm warn"
+                      onClick={()=>doModerate(r,"APPROVED", true)}
+                      title="Approve (override)"
+                    >
+                      Approve (override)
+                    </button>
+                  </>
+                )}
+
                 {r.status !== "REJECTED" && (
                   <button className="ghost sm warn" onClick={()=>doModerate(r,"REJECTED")}>Reject</button>
                 )}
@@ -198,6 +238,15 @@ export default function ReviewsPage() {
           </div>
         </div>
       </div>
+
+      {/* VIEW MODAL */}
+      {viewId != null && (
+        <ReviewViewModal
+          open
+          reviewId={viewId}
+          onClose={() => setViewId(null)}
+        />
+      )}
     </div>
   );
 }
@@ -230,15 +279,15 @@ const css = `
 .seg-btn.active{ background:${GOLD}; color:#2a2200; border-color:transparent; box-shadow:0 8px 22px rgba(246,195,32,.35); }
 
 .search input{
-  height:38px; border:1px solid ${INK}; border-radius:12px; padding:0 12px; background:#fff; outline:none; min-width:280px;
+  height:38px; border:1px solid ${INK}; border-radius:12px; padding:0 12px; background:#fff; outline:none; min-width:220px;
 }
 
 .card{ border:1px solid ${INK}; border-radius:14px; background:#fff; box-shadow:0 12px 36px rgba(0,0,0,.08); overflow:hidden; }
 
 /* table */
-.table{ display:grid; min-height:260px; }
+.table{ display:grid; min-height:150px; }
 .thead, .trow{
-  display:grid; grid-template-columns: 1.2fr 100px 2.2fr 1.2fr 1.2fr 110px 220px; gap:10px; align-items:center; padding:10px 12px;
+  display:grid; grid-template-columns: 1.2fr 100px 2.2fr 1.2fr 1.2fr 160px 150px; gap:10px; align-items:center; padding:10px 12px;
 }
 .thead{ font-weight:900; font-size:12px; background:linear-gradient(180deg, rgba(246,195,32,.08), rgba(255,255,255,.95)); border-bottom:1px solid ${INK}; }
 .trow{ border-bottom:1px solid ${INK}; }
@@ -246,7 +295,6 @@ const css = `
 
 .cell-prod .pname{ font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .cell-text .ttl{ font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.cell-text .cmt{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; opacity:.9; }
 .cell-rating{ font-weight:900; letter-spacing:1px; }
 
 .badge{
@@ -256,8 +304,10 @@ const css = `
 .badge.s-pending{ background:#7aa2e3; }
 .badge.s-approved{ background:#59b26b; }
 .badge.s-rejected{ background:#e57373; }
+.cell-status{ display:flex; align-items:center; gap:6px; }
+.consent-badge{ font-size:11px; opacity:.8; }
 
-.cell-actions{ display:flex; gap:6px; }
+.cell-actions{ display:flex; gap:6px; flex-wrap:wrap; }
 .btn{
   height:38px; padding:0 14px; border:none; border-radius:12px; cursor:pointer;
   background:${ACCENT}; color:#fff; font-weight:900; box-shadow: 0 10px 28px rgba(240,93,139,.35);
@@ -302,10 +352,10 @@ select{ height:32px; border:1px solid ${INK}; border-radius:10px; padding:0 10px
 
 /* responsive */
 @media (max-width: 1200px){
-  .thead, .trow{ grid-template-columns: 1.2fr 90px 2fr 1fr 1fr 100px 200px; }
+  .thead, .trow{ grid-template-columns: 1.2fr 90px 2fr 1fr 1fr 150px 240px; }
 }
 @media (max-width: 900px){
-  .thead, .trow{ grid-template-columns: 1.2fr 80px 1.8fr 1fr 1fr 90px 170px; }
+  .thead, .trow{ grid-template-columns: 1.2fr 80px 1.8fr 1fr 1fr 140px 220px; }
   .search input{ min-width: 200px; }
 }
 `;

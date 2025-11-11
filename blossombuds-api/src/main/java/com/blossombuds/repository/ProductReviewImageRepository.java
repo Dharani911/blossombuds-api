@@ -8,4 +8,7 @@ import java.util.List;
 /** Repository for product review images (active-only by @Where). */
 public interface ProductReviewImageRepository extends JpaRepository<ProductReviewImage, Long> {
     List<ProductReviewImage> findByReviewIdOrderBySortOrderAscIdAsc(Long reviewId);
+    // ProductReviewImageRepository
+    List<ProductReviewImage> findByReviewIdAndActiveTrueOrderBySortOrderAsc(Long reviewId);
+
 }

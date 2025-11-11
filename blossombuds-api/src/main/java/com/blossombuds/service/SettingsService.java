@@ -37,11 +37,11 @@ public class SettingsService {
         if (dto.getActive() != null) s.setActive(dto.getActive());
         if (s.getId() == null) {
             s.setActive(s.getActive() != null ? s.getActive() : Boolean.TRUE);
-            s.setCreatedBy(actor);
-            s.setCreatedAt(OffsetDateTime.now());
+            //s.setCreatedBy(actor);
+            //s.setCreatedAt(OffsetDateTime.now());
         } else {
-            s.setModifiedBy(actor);
-            s.setModifiedAt(OffsetDateTime.now());
+            //s.setModifiedBy(actor);
+            //s.setModifiedAt(OffsetDateTime.now());
         }
         return repo.save(s);
     }
@@ -66,8 +66,8 @@ public class SettingsService {
     public void delete(String key, String actor) {
         Setting s = get(key);
         s.setActive(false);
-        s.setModifiedBy(actor);
-        s.setModifiedAt(OffsetDateTime.now());
+        //s.setModifiedBy(actor);
+        //s.setModifiedAt(OffsetDateTime.now());
     }
     public String safeGet(String key) {
         try { return get(key).getValue(); } catch (Exception e) { return null; }

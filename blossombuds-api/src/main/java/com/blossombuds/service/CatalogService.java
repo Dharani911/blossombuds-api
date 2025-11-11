@@ -4,7 +4,6 @@ import com.amazonaws.services.s3.model.*;
 import com.blossombuds.domain.*;
 import com.blossombuds.dto.*;
 import com.blossombuds.repository.*;
-import com.amazonaws.HttpMethod;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import com.blossombuds.util.ImageMagickUtil;
@@ -15,11 +14,11 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;                  // ← added
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
-
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.imageio.IIOImage;
@@ -36,16 +35,14 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
 import java.util.List;
-import java.io.IOException;
-import java.util.Map;
 import java.util.UUID;
+
 import static com.blossombuds.util.ImageUtil.*;
+
 import com.amazonaws.services.s3.AmazonS3;
-import net.coobird.thumbnailator.Thumbnails;
 import org.springframework.beans.factory.annotation.Value;
 
 /** Catalog application service for categories, products, images, options, and values. */
-
 @Slf4j
 @Service
 @Validated
@@ -71,7 +68,6 @@ public class CatalogService {
     private String r2Endpoint;
 
     private static final long MAX_BYTES = 10L * 1024 * 1024;
-    //private static final String WATERMARK_PATH = "src/main/resources/static/watermark.png";
     static { javax.imageio.ImageIO.setUseCache(false); }
     private static BufferedImage WATERMARK_IMG = null;
 
@@ -82,15 +78,13 @@ public class CatalogService {
             if (WATERMARK_IMG == null) {
                 log.warn("watermark.png found but could not be decoded; watermarking will be skipped.");
             } else {
-                log.info("Loaded watermark.png from classpath: {}x{}",
-                        WATERMARK_IMG.getWidth(), WATERMARK_IMG.getHeight());
+                log.info("Loaded watermark.png from classpath: {}x{}", WATERMARK_IMG.getWidth(), WATERMARK_IMG.getHeight());
             }
         } catch (Exception e) {
             log.warn("watermark.png not found on classpath; watermarking will be skipped.");
             WATERMARK_IMG = null;
         }
     }
-
 
     // ────────────────────────────── Categories ────────────────────────────────
 
@@ -99,7 +93,6 @@ public class CatalogService {
     @PreAuthorize("hasRole('ADMIN')")
     public Category createCategory(CategoryDto dto) {
         if (dto == null) throw new IllegalArgumentException("CategoryDto is required");
-
         if (dto.getName() == null || dto.getName().isBlank()) {
             throw new IllegalArgumentException("Category name is required");
         }
@@ -108,17 +101,16 @@ public class CatalogService {
         c.setName(dto.getName().trim());
         c.setActive(dto.getActive() != null ? dto.getActive() : Boolean.TRUE);
 
-        // --- parentId → parent ---
+        // parent
         if (dto.getParentId() != null) {
             Category parent = categoryRepo.findById(dto.getParentId())
-                    .orElseThrow(() -> new IllegalArgumentException(
-                            "Parent category not found: " + dto.getParentId()));
+                    .orElseThrow(() -> new IllegalArgumentException("Parent category not found: " + dto.getParentId()));
             c.setParent(parent);
         } else {
             c.setParent(null);
         }
 
-        // --- slug handling with uniqueness ---
+        // slug
         String provided = dto.getSlug();
         if (provided != null && !provided.isBlank()) {
             String normalized = slugify(provided);
@@ -127,13 +119,10 @@ public class CatalogService {
             }
             c.setSlug(normalized);
         } else {
-            // derive from name and ensure uniqueness: "jasmine", "jasmine-2", "jasmine-3", ...
             String base = slugify(c.getName());
             String candidate = base;
             int i = 2;
-            while (categoryRepo.existsBySlug(candidate)) {
-                candidate = base + "-" + i++;
-            }
+            while (categoryRepo.existsBySlug(candidate)) candidate = base + "-" + i++;
             c.setSlug(candidate);
         }
 
@@ -150,10 +139,9 @@ public class CatalogService {
         return out.isEmpty() ? "category" : out;
     }
 
-
     /** Lists all active categories. */
     public List<Category> listCategories() {
-        return categoryRepo.findAll(); // relies on @Where(active = true) at entity
+        return categoryRepo.findAll(); // relies on @Where(active = true)
     }
 
     /** Retrieves a category by id or throws if not found. */
@@ -170,20 +158,17 @@ public class CatalogService {
         if (id == null) throw new IllegalArgumentException("Category id is required");
         if (dto == null) throw new IllegalArgumentException("CategoryDto is required");
 
-        Category c = getCategory(id); // loads existing or throws
+        Category c = getCategory(id);
 
-        // --- name ---
         if (dto.getName() != null) {
             String name = dto.getName().trim();
             if (name.isEmpty()) throw new IllegalArgumentException("Category name cannot be blank");
             c.setName(name);
         }
 
-        // --- slug (normalize + uniqueness) ---
         if (dto.getSlug() != null) {
             String normalized = slugify(dto.getSlug());
-            if (!normalized.equalsIgnoreCase(c.getSlug())) { // changed?
-                // Either use existsBySlugAndIdNot(...) or manual lookup:
+            if (!normalized.equalsIgnoreCase(c.getSlug())) {
                 if (categoryRepo.existsBySlug(normalized) && !normalized.equalsIgnoreCase(c.getSlug())) {
                     throw new org.springframework.dao.DuplicateKeyException("Slug already exists: " + normalized);
                 }
@@ -191,16 +176,10 @@ public class CatalogService {
             }
         }
 
-        // --- active flag ---
-        if (dto.getActive() != null) {
-            c.setActive(dto.getActive());
-        }
+        if (dto.getActive() != null) c.setActive(dto.getActive());
 
-        // --- parent (ONLY update if parentId is provided; null means 'no change') ---
         if (dto.getParentId() != null) {
             Long parentId = dto.getParentId();
-
-            // allow clearing parent by sending 0 (or same id) -> interpret as 'no parent'
             if (parentId <= 0) {
                 c.setParent(null);
             } else if (parentId.equals(id)) {
@@ -208,7 +187,6 @@ public class CatalogService {
             } else {
                 Category parent = categoryRepo.findById(parentId)
                         .orElseThrow(() -> new IllegalArgumentException("Parent category not found: " + parentId));
-                // Prevent cycles: parent cannot be a descendant of c
                 if (wouldCreateCycle(c, parent)) {
                     throw new IllegalArgumentException("Invalid parent: would create a cycle in the category tree");
                 }
@@ -216,23 +194,18 @@ public class CatalogService {
             }
         }
 
-        // dirty checking will persist; returning c is fine. If you prefer, call save(c).
-        return c;
+        return c; // dirty checking
     }
-
-    /** Mirror your frontend slugify. */
-
 
     /** Walk up the chain to ensure 'parent' is not a descendant of 'node'. */
     private boolean wouldCreateCycle(Category node, Category parentCandidate) {
         Category cur = parentCandidate;
         while (cur != null) {
             if (cur.getId() != null && cur.getId().equals(node.getId())) return true;
-            cur = cur.getParent(); // OK: LAZY; within Tx
+            cur = cur.getParent();
         }
         return false;
     }
-
 
     /** Soft-deletes a category (active=false via @SQLDelete). */
     @Transactional
@@ -254,6 +227,9 @@ public class CatalogService {
         p.setName(dto.getName());
         p.setDescription(dto.getDescription());
         p.setPrice(dto.getPrice());
+        p.setVisible(dto.getVisible() != null ? dto.getVisible() : Boolean.TRUE);
+        p.setFeatured(dto.getFeatured() != null ? dto.getFeatured() : Boolean.FALSE);
+
         p.setActive(dto.getActive() != null ? dto.getActive() : Boolean.TRUE);
         return productRepo.save(p);
     }
@@ -281,6 +257,8 @@ public class CatalogService {
         if (dto.getName() != null) p.setName(dto.getName());
         if (dto.getDescription() != null) p.setDescription(dto.getDescription());
         if (dto.getPrice() != null) p.setPrice(dto.getPrice());
+        if (dto.getVisible() != null)     p.setVisible(dto.getVisible());
+        if (dto.getFeatured() != null)    p.setFeatured(dto.getFeatured());
         if (dto.getActive() != null) p.setActive(dto.getActive());
         return p; // dirty checking
     }
@@ -305,6 +283,15 @@ public class CatalogService {
         return categoryRepo.findActiveByProductId(productId);
     }
 
+    /** NEW: New Arrivals — newest products first (active=true via @Where). */
+    public List<Product> listNewArrivals(int limit) {
+        int lim = Math.max(1, Math.min(100, limit)); // sanity cap
+        Page<Product> page = productRepo.findAll(
+                PageRequest.of(0, lim, Sort.by(Sort.Direction.DESC, "createdAt"))
+        );
+        return page.getContent();
+    }
+
     // ─────────────────────── Product ↔ Category links ────────────────────────
 
     /** Links a product to a category (idempotent). */
@@ -315,19 +302,16 @@ public class CatalogService {
             throw new IllegalArgumentException("productId and categoryId are required");
         }
 
-        // Look for ANY row (active or inactive) to satisfy the unique(product_id, category_id)
         var existing = linkRepo.findAnyLink(productId, categoryId);
 
         if (existing.isPresent()) {
-            // Reactivate instead of inserting a new row (avoids unique violation)
             ProductCategory link = existing.get();
             if (Boolean.FALSE.equals(link.getActive())) {
-                link.setActive(true); // dirty checking will update it
+                link.setActive(true);
             }
             return;
         }
 
-        // No row found at all — create a new link
         ProductCategory link = new ProductCategory();
         link.setId(new ProductCategory.PK(productId, categoryId));
         link.setProduct(productRepo.getReferenceById(productId));
@@ -342,15 +326,11 @@ public class CatalogService {
         if (productId == null || categoryId == null) {
             throw new IllegalArgumentException("productId and categoryId are required");
         }
-        // Flip to inactive if it exists (idempotent)
         linkRepo.findAnyLink(productId, categoryId)
                 .ifPresent(link -> link.setActive(false));
     }
 
     // ───────────────────────────────── Images ────────────────────────────────
-
-    /** Adds image metadata for a product. */
-    // ================== Service methods (drop-in) ==================
 
     private String uploadJpegBytes(byte[] bytes) throws IOException {
         String key = "products/" + UUID.randomUUID() + ".jpg";
@@ -381,7 +361,7 @@ public class CatalogService {
 
         // Accept HEIC sent as octet-stream if extension looks like an image
         try {
-            validateFileEnvelope(file);
+            validateFile(file); // ← use the defined validator
         } catch (IllegalArgumentException iae) {
             String ct = file.getContentType() == null ? "" : file.getContentType();
             String fn = (file.getOriginalFilename() == null ? "" : file.getOriginalFilename().toLowerCase());
@@ -406,15 +386,14 @@ public class CatalogService {
             }
         }
 
-        // 2) Decode → resize → LOGO (or text) watermark (subtle diagonal tiling)
+        // 2) Decode → resize → watermark
         BufferedImage decoded = ImageMagickUtil.readImage(normalizedJpeg);
         if (decoded == null) throw new IllegalArgumentException("Uploaded file is not a supported image");
         BufferedImage base = ImageUtil.fitWithin(decoded, ImageUtil.MAX_DIM);
 
-        // draw your logo if available; otherwise fall back to subtle text
         BufferedImage stamped = watermarkLogoOrText(base, WATERMARK_IMG, "BLOSSOM BUDS");
 
-        // 3) Compress to target
+        // 3) Compress
         byte[] finalBytes;
         try {
             finalBytes = ImageMagickUtil.targetSizeJpeg(stamped);
@@ -449,8 +428,6 @@ public class CatalogService {
         return imageRepo.save(imgRow);
     }
 
-
-
     // ──────────────── updateProductImage (REPLACE) ────────────────
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
@@ -467,7 +444,7 @@ public class CatalogService {
             throw new IllegalArgumentException("Image does not belong to product " + dto.getProductId());
 
         if (newFile != null && !newFile.isEmpty()) {
-            validateFileEnvelope(newFile);
+            validateFile(newFile); // ← use the defined validator
 
             byte[] normalizedJpeg = convertAnyToJpegBytes(
                     newFile.getBytes(),
@@ -479,8 +456,6 @@ public class CatalogService {
             if (decoded == null) throw new IllegalArgumentException("Uploaded file is not a supported image");
 
             BufferedImage base = ImageUtil.fitWithin(decoded, ImageUtil.MAX_DIM);
-
-            // logo (or text) watermark
             BufferedImage stamped = watermarkLogoOrText(base, WATERMARK_IMG, "BLOSSOM BUDS");
 
             byte[] finalBytes;
@@ -510,50 +485,44 @@ public class CatalogService {
 
         return imageRepo.save(imgRow);
     }
+
     /**
      * Tiles your PNG logo (if present) diagonally with low opacity.
      * Falls back to subtle text grid when logo is null.
      */
     private static BufferedImage watermarkLogoOrText(BufferedImage src, BufferedImage logoOrNull, String fallbackText) {
         if (logoOrNull == null) {
-            return watermarkSubtleGrid(src, fallbackText); // your existing text helper
+            return watermarkSubtleGrid(src, fallbackText);
         }
 
         int w = src.getWidth(), h = src.getHeight();
         BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
         Graphics2D g = out.createGraphics();
 
-        // quality hints
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
         g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
 
-        // draw base
         g.drawImage(src, 0, 0, null);
 
-        // rotate for diagonal pattern
         double angle = Math.toRadians(-22);
         AffineTransform oldTx = g.getTransform();
         g.translate(w / 2.0, h / 2.0);
         g.rotate(angle);
 
-        int L = (int)Math.ceil(Math.hypot(w, h)); // half-diagonal coverage
+        int L = (int)Math.ceil(Math.hypot(w, h));
 
-        // scale logo relative to image
         double shortSide = Math.min(w, h);
-        int target = (int)Math.round(shortSide * 0.12); // ~12% of short side (not too big)
+        int target = (int)Math.round(shortSide * 0.12);
         double scale = Math.min(1.0,
                 Math.max(0.25, target / (double)Math.max(1, Math.max(logoOrNull.getWidth(), logoOrNull.getHeight()))));
 
         int logoW = (int)Math.round(logoOrNull.getWidth() * scale);
         int logoH = (int)Math.round(logoOrNull.getHeight() * scale);
 
-        // spacing between tiles
         int stepX = Math.max(logoW + (int)(shortSide * 0.06), logoW + 40);
         int stepY = Math.max(logoH + (int)(shortSide * 0.05), logoH + 34);
 
-        // subtle alpha (two passes to be visible on light & dark)
-        // pass 1: faint white underlay offset for light outline
         g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.08f));
         for (int y = -L; y <= L; y += stepY) {
             int xOffset = ((y / stepY) & 1) == 0 ? 0 : stepX / 2;
@@ -562,7 +531,6 @@ public class CatalogService {
             }
         }
 
-        // pass 2: main mark
         g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.14f));
         for (int y = -L; y <= L; y += stepY) {
             int xOffset = ((y / stepY) & 1) == 0 ? 0 : stepX / 2;
@@ -571,55 +539,48 @@ public class CatalogService {
             }
         }
 
-        // restore
         g.setTransform(oldTx);
         g.dispose();
         return out;
     }
 
-    // ─────────────── helper (ADD inside the same class) ───────────────
+    // helper
     private static BufferedImage watermarkSubtleGrid(BufferedImage src, String text) {
         int w = src.getWidth(), h = src.getHeight();
         BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
         Graphics2D g = out.createGraphics();
 
-        // quality
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
         g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
 
-        // base image
         g.drawImage(src, 0, 0, null);
 
-        // rotate canvas slightly for diagonal flow
         double angle = Math.toRadians(-22);
         AffineTransform oldTx = g.getTransform();
         g.translate(w / 2.0, h / 2.0);
         g.rotate(angle);
 
-        int L = (int) Math.ceil(Math.hypot(w, h)); // cover whole rotated bounds
+        int L = (int) Math.ceil(Math.hypot(w, h));
 
-        // subtle font sizing
-        float fontSize = Math.max(12f, Math.min(w, h) * 0.045f); // ~4.5% of short side
+        float fontSize = Math.max(12f, Math.min(w, h) * 0.045f);
         Font font = new Font(Font.SANS_SERIF, Font.BOLD, Math.round(fontSize));
         g.setFont(font);
         FontMetrics fm = g.getFontMetrics();
         int textW = fm.stringWidth(text);
-        int stepX = Math.max(60, textW + (int)(fontSize * 0.8)); // horizontal spacing
-        int stepY = Math.max(40, (int)(fontSize * 2.1));         // row spacing
+        int stepX = Math.max(60, textW + (int)(fontSize * 0.8));
+        int stepY = Math.max(40, (int)(fontSize * 2.1));
 
-        // 1) faint white pass for contrast on dark regions
         g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.08f));
         g.setColor(Color.WHITE);
         for (int y = -L; y <= L; y += stepY) {
-            int xOffset = ((y / stepY) & 1) == 0 ? 0 : stepX / 2; // stagger rows
+            int xOffset = ((y / stepY) & 1) == 0 ? 0 : stepX / 2;
             for (int x = -L - stepX; x <= L + stepX; x += stepX) {
                 g.drawString(text, x + xOffset, y);
             }
         }
 
-        // 2) slightly stronger dark pass (+1px offset) for light regions
         g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.14f));
         g.setColor(new Color(0, 0, 0));
         for (int y = -L; y <= L; y += stepY) {
@@ -629,14 +590,10 @@ public class CatalogService {
             }
         }
 
-        // restore transform
         g.setTransform(oldTx);
         g.dispose();
         return out;
     }
-
-
-
 
     private static String guessContentType(String name, String fallback) {
         if (name == null) return fallback;
@@ -650,16 +607,15 @@ public class CatalogService {
         if (n.endsWith(".gif")) return "image/gif";
         return fallback;
     }
+
     private byte[] convertAnyToJpegBytes(byte[] raw, String filename, String contentType) throws IOException {
         String ct = (contentType == null || contentType.isBlank())
                 ? guessContentType(filename, "application/octet-stream")
                 : contentType;
 
         try {
-            // primary in-process pipeline
             return ImageMagickUtil.ensureJpeg(raw, filename, ct);
         } catch (Exception primaryFail) {
-            // fallback only if it looks like HEIC/HEIF — use external IM bridge
             if (MagickBridge.looksLikeHeic(ct, filename)) {
                 try {
                     return MagickBridge.heicToJpeg(raw, magickCmd);
@@ -667,34 +623,9 @@ public class CatalogService {
                     throw new IOException("Image conversion failed (HEIC). " + primaryFail.getMessage(), magickFail);
                 }
             }
-            // otherwise rethrow primary error
             throw new IOException("Image conversion failed. " + primaryFail.getMessage(), primaryFail);
         }
     }
-
-
-
-
-// ================== Helpers (paste in same service) ==================
-
-   /* private BufferedImage applyWatermark(BufferedImage original) {
-        BufferedImage out = new BufferedImage(original.getWidth(), original.getHeight(), BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = out.createGraphics();
-        g.drawImage(original, 0, 0, null);
-        try {
-            BufferedImage watermark = ImageIO.read(new File("watermark.png"));
-            int stepX = Math.max(1, original.getWidth() / 3);
-            int stepY = Math.max(1, original.getHeight() / 3);
-            g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.10f));
-            for (int y = 0; y < original.getHeight(); y += stepY) {
-                for (int x = 0; x < original.getWidth(); x += stepX) {
-                    g.drawImage(watermark, x, y, stepX, stepY, null);
-                }
-            }
-        } catch (Exception ignored) {}
-        g.dispose();
-        return out;
-    }*/
 
     // --- 1) Presign a browser PUT to R2 (10 min)
     public PresignResponse presignPut(String filename, String contentType) {
@@ -718,11 +649,11 @@ public class CatalogService {
     // --- 2) Read temp object, process, upload final, delete temp, persist
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
-    public ProductImageDto createImageFromTempKey(Long productId, String tempKey, String altText, Integer sortOrder) throws IOException, InterruptedException {
+    public ProductImageDto createImageFromTempKey(Long productId, String tempKey, String altText, Integer sortOrder)
+            throws IOException, InterruptedException {
         if (productId == null || tempKey == null || tempKey.isBlank())
             throw new IllegalArgumentException("productId and key are required");
 
-        // stream from R2
         S3Object obj = r2Client.getObject(bucketName, tempKey);
         BufferedImage original;
         try (InputStream in = obj.getObjectContent()) {
@@ -730,12 +661,10 @@ public class CatalogService {
         }
         if (original == null) throw new IllegalArgumentException("Uploaded file is not a supported image");
 
-        // fast pipeline (balanced watermark)
         BufferedImage resized  = ImageUtil.fitWithin(original, ImageUtil.MAX_DIM);
         BufferedImage stamped  = applyTiledTextWatermark(resized, "BLOSSOM BUDS", 0.18f, -25.0, 0.045, 0.22);
         byte[] jpegBytes       = ImageUtil.toJpegUnderCap(stamped);
 
-        // upload final
         String finalKey = "products/" + UUID.randomUUID() + ".jpg";
         ObjectMetadata meta = new ObjectMetadata();
         meta.setContentType("image/jpeg");
@@ -744,10 +673,8 @@ public class CatalogService {
             r2Client.putObject(new PutObjectRequest(bucketName, finalKey, up, meta));
         }
 
-        // cleanup temp (best-effort)
         try { r2Client.deleteObject(new DeleteObjectRequest(bucketName, tempKey)); } catch (Exception ignored) {}
 
-        // save DB (store publicId only)
         ProductImage img = new ProductImage();
         img.setProduct(productRepo.getReferenceById(productId));
         img.setPublicId(finalKey);
@@ -758,7 +685,7 @@ public class CatalogService {
         img.setActive(true);
 
         ProductImage saved = imageRepo.save(img);
-        return toResponse(saved); // returns signed GET url(s)
+        return toResponse(saved);
     }
 
     private byte[] toJpegBytes(BufferedImage image, float quality) throws IOException {
@@ -776,14 +703,15 @@ public class CatalogService {
         }
         return baos.toByteArray();
     }
+
     /** Draw a diagonal tiled text watermark onto an RGB copy and return it. */
     private BufferedImage applyTiledTextWatermark(
             BufferedImage src,
             String text,
-            float alpha,        // e.g. 0.24
-            double angleDeg,    // e.g. -25
-            double fontScale,   // e.g. 0.07
-            double gapFactor    // e.g. 0.18
+            float alpha,
+            double angleDeg,
+            double fontScale,
+            double gapFactor
     ) {
         int w = src.getWidth(), h = src.getHeight();
         BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
@@ -791,59 +719,47 @@ public class CatalogService {
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 
-        // draw original
         g.drawImage(src, 0, 0, null);
 
-        // font ~7% of width (heavier)
         int fontSize = Math.max(16, (int)Math.round(w * fontScale));
         Font font = new Font("SansSerif", Font.BOLD, fontSize);
         g.setFont(font);
 
-        // rotate canvas for diagonal tiles
         double theta = Math.toRadians(angleDeg);
         g.rotate(theta, w / 2.0, h / 2.0);
 
-        // measure text
         FontMetrics fm = g.getFontMetrics();
         int textW = Math.max(1, fm.stringWidth(text));
         int textH = Math.max(1, fm.getAscent());
 
-        // tighter spacing → more visible
         int stepX = (int)Math.round(textW * (1.0 + gapFactor));
-        int stepY = (int)Math.round(textH * (1.6 + gapFactor)); // slightly closer rows
+        int stepY = (int)Math.round(textH * (1.6 + gapFactor));
 
-        // stronger alpha + thicker outline
-        //AlphaComposite ac = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha);
-        g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, Math.min(alpha * 0.45f, 0.08f)));;
+        g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, Math.min(alpha * 0.45f, 0.08f)));
 
         float strokePx = Math.max(1f, fontSize * 0.009f);
         g.setStroke(new BasicStroke(strokePx, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
 
-        // colors
-        Color shadow = new Color(0, 0, 0, 220);       // strong shadow
-        Color outlineLight = new Color(255, 255, 255, 235); // bright outline
-        Color fillDark = new Color(0, 0, 0, 235);          // dark fill
+        Color shadow = new Color(0, 0, 0, 220);
+        Color outlineLight = new Color(255, 255, 255, 235);
+        Color fillDark = new Color(0, 0, 0, 235);
 
         int startX = -w * 2, endX = w * 2;
         int startY = -h * 2, endY = h * 2;
 
-        // draw grid
         for (int y = startY; y < endY; y += stepY) {
             int rowOffset = ((y / stepY) % 2 == 0) ? 0 : (stepX / 2);
             for (int x = startX; x < endX; x += stepX) {
                 int dx = x + rowOffset;
                 int dy = y;
 
-                // 1) drop shadow (offset a couple pixels)
                 g.setColor(shadow);
                 g.drawString(text, dx + Math.max(2, fontSize / 16), dy + Math.max(2, fontSize / 16));
-                g.fillRect(0,0,0,0); // no-op to ensure stroke state applied
+                g.fillRect(0,0,0,0);
 
-                // 2) light outline
                 g.setColor(outlineLight);
                 g.drawString(text, dx, dy);
 
-                // 3) dark fill
                 g.setColor(fillDark);
                 g.drawString(text, dx, dy);
             }
@@ -853,8 +769,6 @@ public class CatalogService {
         return out;
     }
 
-
-
     private String signGetUrl(String key, java.time.Duration ttl) {
         Date exp = Date.from(Instant.now().plus(ttl));
         GeneratePresignedUrlRequest req = new GeneratePresignedUrlRequest(bucketName, key)
@@ -863,11 +777,12 @@ public class CatalogService {
         URL url = r2Client.generatePresignedUrl(req);
         return url.toString();
     }
+
     public List<ProductImageDto> listProductImageResponses(Long productId) {
         if (productId == null) throw new IllegalArgumentException("productId is required");
         return imageRepo.findByProduct_IdOrderBySortOrderAscIdAsc(productId)
                 .stream()
-                .map(this::toResponse)  // <-- takes ProductImage
+                .map(this::toResponse)
                 .toList();
     }
 
@@ -887,15 +802,6 @@ public class CatalogService {
         return r;
     }
 
-
-    /** Lists images for a product ordered by sort order then id. */
-   /* public List<ProductImageDto> listProductImages(Long productId) {
-        if (productId == null) throw new IllegalArgumentException("productId is required");
-        return imageRepo.findByProduct_IdOrderBySortOrderAscIdAsc(productId)
-                .stream().map(this::toResponse).toList();
-    }*/
-
-
     /** Soft-deletes a product image (active=false via @SQLDelete). */
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
@@ -910,11 +816,9 @@ public class CatalogService {
             if (img.getPublicId() != null) {
                 r2Client.deleteObject(new DeleteObjectRequest(bucketName, img.getPublicId()));
             }
-            imageRepo.delete(img); // @SQLDelete or soft-delete as you prefer
+            imageRepo.delete(img);
         });
     }
-
-
 
     /** Makes an image primary (sortOrder=0) and pushes others down. */
     @Transactional
@@ -950,6 +854,7 @@ public class CatalogService {
         opt.setRequired(dto.getRequired() != null ? dto.getRequired() : Boolean.TRUE);
         opt.setMaxSelect(dto.getMaxSelect());
         opt.setSortOrder(dto.getSortOrder() != null ? dto.getSortOrder() : 0);
+        opt.setVisible(dto.getVisible() != null ? dto.getVisible() : Boolean.TRUE);
         opt.setActive(dto.getActive() != null ? dto.getActive() : Boolean.TRUE);
         return optionRepo.save(opt);
     }
@@ -980,8 +885,9 @@ public class CatalogService {
         if (dto.getRequired() != null) opt.setRequired(dto.getRequired());
         if (dto.getMaxSelect() != null) opt.setMaxSelect(dto.getMaxSelect());
         if (dto.getSortOrder() != null) opt.setSortOrder(dto.getSortOrder());
+        if (dto.getVisible() != null) opt.setVisible(dto.getVisible());
         if (dto.getActive() != null) opt.setActive(dto.getActive());
-        return opt; // dirty checking
+        return opt;
     }
 
     /** Soft-deletes a product option (active=false via @SQLDelete). */
@@ -1007,6 +913,7 @@ public class CatalogService {
         val.setValueLabel(dto.getValueLabel());
         val.setPriceDelta(dto.getPriceDelta());
         val.setSortOrder(dto.getSortOrder() != null ? dto.getSortOrder() : 0);
+        val.setVisible(dto.getVisible() != null ? dto.getVisible() : Boolean.TRUE);
         val.setActive(dto.getActive() != null ? dto.getActive() : Boolean.TRUE);
         return valueRepo.save(val);
     }
@@ -1042,8 +949,9 @@ public class CatalogService {
         if (dto.getValueLabel() != null) v.setValueLabel(dto.getValueLabel());
         if (dto.getPriceDelta() != null) v.setPriceDelta(dto.getPriceDelta());
         if (dto.getSortOrder() != null) v.setSortOrder(dto.getSortOrder());
+        if (dto.getVisible() != null) v.setVisible(dto.getVisible());
         if (dto.getActive() != null) v.setActive(dto.getActive());
-        return v; // dirty checking
+        return v;
     }
 
     /** Soft-deletes an option value (active=false via @SQLDelete). */
@@ -1056,8 +964,8 @@ public class CatalogService {
         ProductOptionValue v = getProductOptionValue(optionId, valueId);
         valueRepo.delete(v);
     }
-    // at the bottom of CatalogService, replace your current validateFile(...) with this:
 
+    // at the bottom of CatalogService, replace your current validateFile(...) with this:
     public void validateFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("File cannot be empty");
@@ -1066,7 +974,6 @@ public class CatalogService {
             throw new IllegalArgumentException("Max 10 MB per image");
         }
 
-        // Accept common image extensions even if Content-Type is application/octet-stream
         String name = (file.getOriginalFilename() == null ? "" : file.getOriginalFilename().toLowerCase());
         String ct   = (file.getContentType() == null ? "" : file.getContentType().toLowerCase());
 
@@ -1077,12 +984,45 @@ public class CatalogService {
                         name.endsWith(".tif")  || name.endsWith(".tiff") ||
                         name.endsWith(".heic") || name.endsWith(".heif");
 
-        boolean typeOk = ct.startsWith("image/") || extOk; // <- allow octet-stream if extension is image
+        boolean typeOk = ct.startsWith("image/") || extOk;
 
         if (!typeOk) {
             throw new IllegalArgumentException("Only image files are supported (JPG, PNG, WebP, HEIC…)");
         }
     }
+    // ───────────────────── Featured Products ─────────────────────
+
+    /** Page only featured (active=true via @Where). */
+    public Page<Product> listFeaturedProducts(int page, int size) {
+        return productRepo.findByFeaturedTrue(
+                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
+        );
+
+        // If you want to ALSO require visible=true at DB level, use this
+        // return productRepo.findByFeaturedTrueAndVisibleTrue(
+        //        PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
+    }
+
+    /** Top-N featured (newest first). */
+    public List<Product> listFeaturedTop(int limit) {
+        int lim = Math.max(1, Math.min(100, limit));
+        return productRepo.findByFeaturedTrue(
+                PageRequest.of(0, lim, Sort.by(Sort.Direction.DESC, "createdAt"))
+        ).getContent();
+
+        // Visible-gated variant:
+        // return productRepo.findByFeaturedTrueAndVisibleTrue(
+        //        PageRequest.of(0, lim, Sort.by(Sort.Direction.DESC, "createdAt"))
+        // ).getContent();
+    }
+    @Transactional
+    public Product setProductFeatured(Long id, boolean featured) {
+        Product p = getProduct(id);
+        p.setFeatured(featured);
+        return p; // dirty checking persists
+    }
+
+
 
 
 }

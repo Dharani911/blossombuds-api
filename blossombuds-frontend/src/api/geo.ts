@@ -2,7 +2,7 @@
 import http from "./http";
 
 /** API models (adjust if your backend returns different fields) */
-export type Country = { id: number; name: string; isoCode?: string };
+export type Country = { id: number; name: string};
 export type State = { id: number; name: string; countryId?: number };
 export type District = { id: number; name: string; stateId?: number };
 

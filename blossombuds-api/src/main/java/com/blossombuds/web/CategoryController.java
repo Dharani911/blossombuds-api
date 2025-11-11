@@ -49,6 +49,7 @@ public class CategoryController {
             dto.setId(p.getId());
             dto.setSlug(p.getSlug());
             dto.setName(p.getName());
+            dto.setVisible(p.getVisible());
             dto.setPrice(p.getPrice());
             return dto;
         });

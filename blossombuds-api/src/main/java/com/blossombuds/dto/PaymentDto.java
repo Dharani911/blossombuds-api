@@ -3,6 +3,7 @@ package com.blossombuds.dto;
 import com.blossombuds.domain.PaymentStatus;
 import lombok.Data;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 
 /** DTO for payment details associated with an order. */
@@ -17,8 +18,5 @@ public class PaymentDto {
     private String rzpPaymentId;
     private Boolean active;
 
-    private String createdBy;
-    private OffsetDateTime createdAt;
-    private String modifiedBy;
-    private OffsetDateTime modifiedAt;
+
 }

@@ -5,11 +5,18 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.Where;
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedBy;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 
 /** Postal address belonging to a customer. */
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor
+@EntityListeners(AuditingEntityListener.class)
 @ToString @EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @Entity
 @Table(name = "addresses")
@@ -84,15 +91,19 @@ public class Address {
     private Boolean active = Boolean.TRUE;
 
     // --- audit ---
+    @CreatedBy
     @Column(name = "created_by", length = 120)
     private String createdBy;
 
+    @CreatedDate
     @Column(name = "created_at")
-    private OffsetDateTime createdAt;
+    private LocalDateTime createdAt;
 
+    @LastModifiedBy
     @Column(name = "modified_by", length = 120)
     private String modifiedBy;
 
+    @LastModifiedDate
     @Column(name = "modified_at")
-    private OffsetDateTime modifiedAt;
+    private LocalDateTime modifiedAt;
 }

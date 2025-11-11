@@ -5,23 +5,20 @@ import com.blossombuds.domain.OrderItem;
 import com.blossombuds.domain.Setting;
 import com.blossombuds.repository.OrderItemRepository;
 import com.blossombuds.repository.OrderRepository;
-import com.lowagie.text.Document;
-import com.lowagie.text.Font;
-import com.lowagie.text.PageSize;
-import com.lowagie.text.Paragraph;
-import com.lowagie.text.Phrase;
-import com.lowagie.text.Rectangle;
-import com.lowagie.text.pdf.PdfPCell;
-import com.lowagie.text.pdf.PdfPTable;
-import com.lowagie.text.pdf.PdfWriter;
+import com.lowagie.text.*;
+import com.lowagie.text.pdf.*;
 import lombok.RequiredArgsConstructor;
+import org.hibernate.LazyInitializationException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 
 /** PDF generator for invoices & packing slips using OpenPDF (minimal, template-friendly). */
@@ -34,45 +31,54 @@ public class PrintService {
     private final OrderItemRepository orderItemRepository;
     private final SettingsService settingsService;
 
+    @Value("${app.mail.logo.png:static/BB_logo.png}")
+    private String logoPngPath;
+
+    @Value("${app.mail.logo.svg:static/BB_logo.svg}")
+    private String logoSvgPath;
+
     /** Generates invoice PDF bytes for a given order id. */
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, propagation = Propagation.NOT_SUPPORTED)
     public byte[] renderInvoicePdf(Long orderId) {
         if (orderId == null) throw new IllegalArgumentException("orderId is required");
 
-        Order order = orderRepository.findById(orderId)
+        // Fetch with geo to avoid lazy issues
+        Order order = orderRepository.findByIdWithShipGeo(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+
         List<OrderItem> items = orderItemRepository.findByOrder_Id(orderId);
 
-        String brandName = safe(setting("brand.name", "Blossom & Buds"));
-        String fromAddress = safe(setting("invoice.from_address", "Chennai, TN"));
+        String brandName    = safe(setting("brand.name", "Blossom & Buds"));
+        String fromAddress  = safe(setting("brand.address", "Chennai, TN"));
         String supportEmail = safe(setting("brand.support_email", "support@example.com"));
-        String supportPhone = safe(setting("brand.support_phone", "+91-00000-00000"));
+        String supportPhone = safe(setting("brand.whatsapp", "+91-00000-00000"));
 
         return buildPdf(doc -> {
-            // Header
-            doc.add(title(brandName + " — Tax Invoice"));
+            doc.add(brandHeader(brandName + " — Tax Invoice", /*uppercase*/ false, logoUrl(), logoMaxH()));
+
             doc.add(new Paragraph("Order: " + displayPublicCode(order.getPublicCode())));
             doc.add(new Paragraph("Placed: " + fmt(order.getCreatedAt())));
             doc.add(new Paragraph("Invoice To: " + safe(order.getShipName())));
             doc.add(new Paragraph(joinLines(
                     safe(order.getShipLine1()),
                     safe(order.getShipLine2()),
-                    safe(order.getShipDistrict() != null ? order.getShipDistrict().getName() : null)
-                            + (order.getShipState() != null ? ", " + safe(order.getShipState().getName()) : "")
-                            + (order.getShipPincode() != null ? " " + safe(order.getShipPincode()) : ""),
-                    safe(order.getShipCountry() != null ? order.getShipCountry().getName() : null)
+                    // lazy-safe accessors
+                    mergeCityStatePin(
+                            safeDistrictName(order),
+                            safeStateName(order),
+                            safe(order.getShipPincode())
+                    ),
+                    safeCountryName(order)
             )));
             doc.add(spacer());
 
-            // Items table
             doc.add(itemsTable(items));
 
-            // Totals
             doc.add(spacerSmall());
             BigDecimal subtotal = nvl(order.getItemsSubtotal());
             BigDecimal shipping = nvl(order.getShippingFee());
             BigDecimal discount = nvl(order.getDiscountTotal());
-            BigDecimal grand = nvl(order.getGrandTotal());
+            BigDecimal grand    = nvl(order.getGrandTotal());
 
             PdfPTable totals = new PdfPTable(new float[]{6f, 2f});
             totals.setWidthPercentage(100);
@@ -89,58 +95,599 @@ public class PrintService {
     }
 
     /** Generates packing slip PDF bytes for a given order id (no pricing). */
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, propagation = Propagation.SUPPORTS, noRollbackFor = Exception.class)
     public byte[] renderPackingSlipPdf(Long orderId) {
         if (orderId == null) throw new IllegalArgumentException("orderId is required");
 
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+        Order order = orderRepository.findByIdWithShipGeo(orderId)
+                .orElseGet(() -> orderRepository.findById(orderId)
+                        .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId)));
+
         List<OrderItem> items = orderItemRepository.findByOrder_Id(orderId);
 
-        String brandName = safe(setting("brand.name", "Blossom & Buds"));
+        // Settings
+        String brandName   = safe(setting("brand.name", "Blossom Buds Floral Artistry")).toUpperCase();
+        String fromAddress = safe(setting("brand.address",
+                "Blossom Buds Floral Artistry\n12, Market Road\nChennai, TN 600001\nPhone: +91 9XXXXXXXXX"));
 
-        return buildPdf(doc -> {
-            // Header
-            doc.add(title(brandName + " — Packing Slip"));
-            doc.add(new Paragraph("Order: " + displayPublicCode(order.getPublicCode())));
-            doc.add(new Paragraph("Packed Date: " + fmt(order.getModifiedAt())));
-            doc.add(spacer());
+        // Data (strings only to avoid lazy-loading nested entities)
+        String orderCode     = safe(order.getPublicCode());
+        String customerName  = safe(order.getShipName());
+        String customerPhone = safe(order.getShipPhone());
+        String notes         = safe(order.getOrderNotes());
+        String courier       = safe(order.getCourierName());
 
-            // Ship To
-            doc.add(new Paragraph("Ship To: " + safe(order.getShipName())));
-            doc.add(new Paragraph(joinLines(
-                    safe(order.getShipLine1()),
-                    safe(order.getShipLine2()),
-                    safe(order.getShipDistrict() != null ? order.getShipDistrict().getName() : null)
-                            + (order.getShipState() != null ? ", " + safe(order.getShipState().getName()) : "")
-                            + (order.getShipPincode() != null ? " " + safe(order.getShipPincode()) : ""),
-                    safe(order.getShipCountry() != null ? order.getShipCountry().getName() : null),
-                    "Phone: " + safe(order.getShipPhone())
-            )));
-            doc.add(spacer());
+        BigDecimal itemsSubtotal = nvl(order.getItemsSubtotal());
+        BigDecimal shipping      = nvl(order.getShippingFee());
+        BigDecimal grand         = nvl(order.getGrandTotal());
+        BigDecimal discount      = nvl(order.getDiscountTotal());
 
-            // Items (no pricing)
-            PdfPTable t = new PdfPTable(new float[]{7f, 1.5f});
-            t.setWidthPercentage(100);
-            t.addCell(th("Item"));
-            t.addCell(th("Qty"));
-            for (OrderItem it : items) {
-                t.addCell(td(safe(it.getProductName()) + optionsBlock(it)));
-                t.addCell(td(String.valueOf(nvl(it.getQuantity()))));
+        final String toBlock = joinLines(
+                customerName + (order.getCustomerId() != null && !orderCode.isBlank() ? " (BB" + orderCode + ")" :
+                        order.getCustomerId() != null ? " (" + order.getCustomerId() + ")" :
+                                !orderCode.isBlank() ? " (BB" + orderCode + ")" : ""),
+                safe(order.getShipLine1()),
+                safe(order.getShipLine2()),
+                mergeCityStatePin(
+                        safeDistrictName(order),
+                        safeStateName(order),
+                        safe(order.getShipPincode())
+                ),
+                safeCountryName(order),
+                (customerPhone.isBlank() ? "" : "Phone: " + customerPhone)
+        );
+
+        return buildPdfWithWriter((doc, writer) -> {
+            // Page geometry
+            Rectangle page = doc.getPageSize();
+            float left   = doc.left();
+            float right  = doc.right();
+            float top    = doc.top();
+            float bottom = doc.bottom();
+
+            // Reserve a compact zone at the bottom for addresses (TO/FROM)
+            float bottomZoneHeight = 175f; // compact address zone height
+            float lineGap          = 10f;  // small gap between line and addresses
+            float yCut             = bottom + bottomZoneHeight + lineGap; // line sits just above addresses
+
+            // Draw the cut/fold line exactly above the addresses
+            writer.setPageEvent(new CutFoldLineEvent(yCut));
+
+            // Top guard so content never kisses the line
+            float guardTop = 12f;
+
+            // ───────────────── TOP FRAME 1: Header + Meta + Notes + "ITEMS" header ─────────────────
+            ColumnText topCt = new ColumnText(writer.getDirectContent());
+            topCt.setSimpleColumn(left, yCut + guardTop, right, top);
+
+            // Brand
+            topCt.addElement(brandHeader(brandName, /*uppercase*/ true, logoUrl(), logoMaxH()));
+
+
+            // Meta row
+            PdfPTable hdr = new PdfPTable(new float[]{2.2f, 2f, 2.2f, 2.2f});
+            hdr.setWidthPercentage(100);
+            hdr.getDefaultCell().setBorder(Rectangle.NO_BORDER);
+            hdr.addCell(noBorder(td("Order #: " + (orderCode.isBlank() ? order.getId() : orderCode))));
+            hdr.addCell(noBorder(td("Date: " + fmtDate(order.getCreatedAt()))));
+            hdr.addCell(noBorder(td("Customer: " + (customerName.isBlank() ? "—" : customerName))));
+            hdr.addCell(noBorder(td("Phone: " + (customerPhone.isBlank() ? "—" : customerPhone))));
+            topCt.addElement(hdr);
+
+            if (!notes.isBlank()) {
+                Paragraph p = new Paragraph("Order Notes: \"" + notes + "\"",
+                        new Font(Font.HELVETICA, 10, Font.NORMAL));
+                p.setSpacingBefore(8f);   // ↑ a bit more breathing room
+                p.setSpacingAfter(8f);    // ↓ so it won’t touch the ITEMS header
+                topCt.addElement(p);
             }
-            doc.add(t);
 
-            doc.add(spacer());
-            if (order.getOrderNotes() != null && !order.getOrderNotes().isBlank()) {
-                doc.add(new Paragraph("Notes: " + order.getOrderNotes()));
+            Paragraph itemsHdr = new Paragraph("ITEMS", new Font(Font.HELVETICA, 11, Font.BOLD));
+            itemsHdr.setSpacingBefore(6f);
+            itemsHdr.setSpacingAfter(6f); // space after ensures separation from first item
+            topCt.addElement(itemsHdr);
+
+            // Lay out the above and capture the remaining top Y line
+            topCt.go();
+            float itemsTopY = topCt.getYLine();
+            if (itemsTopY <= 0 || Float.isNaN(itemsTopY)) {
+                itemsTopY = top - 90f; // conservative fallback
             }
+            itemsTopY -= 6f; // tiny padding just below the "ITEMS" header
+
+            // Reserve a band for totals just above the cut line
+            float totalsBandHeight = 64f;
+            float itemsBottomY     = yCut + totalsBandHeight + 6f; // items must stay above this
+
+            // ───────────────── TOP FRAME 2: Multi-column items (bounded) ─────────────────
+            int n = items.size();
+            int cols = (n > 24) ? 3 : (n > 12 ? 2 : 1); // auto-expand columns
+            float colGap = 12f;
+            float colWidth = (right - left - (colGap * (cols - 1))) / cols;
+
+            Font fItem = new Font(Font.HELVETICA, 11, Font.NORMAL);
+            Font fVar  = new Font(Font.HELVETICA, 10, Font.ITALIC);
+
+            int perCol = (int) Math.ceil(n / (double) cols);
+            for (int ci = 0; ci < cols; ci++) {
+                int start = ci * perCol;
+                if (start >= n) break;
+                int end = Math.min(n, start + perCol);
+
+                float x1 = left + ci * (colWidth + colGap);
+                float x2 = x1 + colWidth;
+
+                ColumnText col = new ColumnText(writer.getDirectContent());
+                // Use dynamic top (itemsTopY) and keep well above totals band
+                col.setSimpleColumn(x1, itemsBottomY, x2, itemsTopY);
+
+                for (int i = start; i < end; i++) {
+                    OrderItem it = items.get(i);
+
+                    // Visible universal "checkbox": ASCII [ ]
+                    Paragraph li = new Paragraph("[ ]  " + nvl(it.getQuantity()) + " × " + safe(it.getProductName()), fItem);
+                    li.setSpacingAfter(2f);
+                    col.addElement(li);
+
+                    if (it.getOptionsText() != null && !it.getOptionsText().isBlank()) {
+                        Paragraph vi = new Paragraph("Variants: " + it.getOptionsText(), fVar);
+                        vi.setIndentationLeft(16f);
+                        vi.setSpacingAfter(3f);
+                        col.addElement(vi);
+                    }
+                }
+                col.go();
+            }
+
+            // ───────────────── TOP FRAME 3: Totals band right above the line ─────────────────
+            ColumnText totalsCt = new ColumnText(writer.getDirectContent());
+            totalsCt.setSimpleColumn(left, yCut + 6f, right, yCut + totalsBandHeight);
+            Paragraph totalsHdr = new Paragraph("TOTALS (INR)", new Font(Font.HELVETICA, 11, Font.BOLD));
+            totalsHdr.setSpacingAfter(3f);
+            Paragraph totalsP = new Paragraph(
+                    "Items: " + inr(itemsSubtotal) + "  +  " +
+                            "Shipping: " + inr(shipping) + "  -  " +
+                            "Discount: " + inr(discount) + "  =  " +
+                            "Total: " + inr(grand),
+                    new Font(Font.HELVETICA, 10, Font.BOLD)
+            );
+            totalsCt.addElement(totalsHdr);
+            totalsCt.addElement(totalsP);
+            totalsCt.go();
+
+            // ───────────────── BOTTOM FRAME: Addresses (wider L/R margins) ─────────────────
+            float extraMargin = 56f;
+            float innerLeft  = left  + extraMargin;
+            float innerRight = right - extraMargin;
+            float colGapBtm  = 18f;
+            float colWidthB  = (innerRight - innerLeft - colGapBtm) / 2f;
+
+            float bottomBlockTop = bottom + bottomZoneHeight; // absolute cap for bottom content
+
+            // TO (left) — slightly higher
+            ColumnText toCt = new ColumnText(writer.getDirectContent());
+            toCt.setSimpleColumn(
+                    innerLeft,
+                    bottom,
+                    innerLeft + colWidthB,
+                    bottomBlockTop - 2f // never cross into the line gap
+            );
+            Paragraph toH = new Paragraph("TO:", new Font(Font.HELVETICA, 11, Font.BOLD));
+            toH.setSpacingAfter(4f);
+            toCt.addElement(toH);
+            for (String ln : toBlock.split("\\r?\\n")) {
+                if (!ln.isBlank()) {
+                    Paragraph l = new Paragraph(ln, new Font(Font.HELVETICA, 10, Font.NORMAL));
+                    toCt.addElement(l);
+                }
+            }
+            if (!courier.isBlank()) {
+                Paragraph c = new Paragraph("COURIER: " + courier, new Font(Font.HELVETICA, 10, Font.BOLD));
+                c.setSpacingBefore(6f);
+                toCt.addElement(c);
+            }
+            toCt.go();
+
+            // FROM (right) — a bit lower/staggered vs TO
+            ColumnText frCt = new ColumnText(writer.getDirectContent());
+            frCt.setSimpleColumn(
+                    innerLeft + colWidthB + colGapBtm,
+                    bottom,
+                    innerRight,
+                    bottomBlockTop - 18f // visually lower than TO but still capped
+            );
+            Paragraph fromH = new Paragraph("FROM:", new Font(Font.HELVETICA, 11, Font.BOLD));
+            fromH.setAlignment(Paragraph.ALIGN_RIGHT);
+            fromH.setSpacingAfter(4f);
+            frCt.addElement(fromH);
+            for (String ln : fromAddress.split("\\r?\\n")) {
+                if (!ln.isBlank()) {
+                    Paragraph l = new Paragraph(ln, new Font(Font.HELVETICA, 10, Font.NORMAL));
+                    l.setAlignment(Paragraph.ALIGN_RIGHT);
+                    frCt.addElement(l);
+                }
+            }
+            frCt.go();
         });
     }
+    /**
+     * Generates a single PDF that contains packing slips for all given order IDs.
+     * Each order renders on its own page using the same layout as renderPackingSlipPdf().
+     */
+    @Transactional(readOnly = true, propagation = Propagation.SUPPORTS, noRollbackFor = Exception.class)
+    public byte[] renderPackingSlipsPdf(List<Long> orderIds) {
+        if (orderIds == null || orderIds.isEmpty()) {
+            throw new IllegalArgumentException("orderIds is required and must be non-empty");
+        }
+
+        // Read settings once for all pages
+        final String brandName = safe(setting("brand.name", "Blossom Buds Floral Artistry")).toUpperCase();
+        final String fromAddress = safe(setting("brand.address",
+                "Blossom Buds Floral Artistry\n12, Market Road\nChennai, TN 600001\nPhone: +91 9XXXXXXXXX"));
+
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Document doc = new Document(PageSize.A4, 36, 36, 36, 36);
+            PdfWriter writer = PdfWriter.getInstance(doc, out);
+            doc.open();
+
+            boolean first = true;
+            List<Long> processed = new ArrayList<>();
+
+            for (Long id : orderIds) {
+                if (id == null) continue;
+
+                // Try with geo; if not, fallback to lazy-safe
+                Order order = orderRepository.findByIdWithShipGeo(id)
+                        .orElseGet(() -> orderRepository.findById(id).orElse(null));
+                if (order == null) {
+                    // Skip silently; or throw if you prefer fail-fast
+                    continue;
+                }
+                List<OrderItem> items = orderItemRepository.findByOrder_Id(id);
+
+                if (!first) doc.newPage();
+                first = false;
+
+                // Render one full packing slip page
+                writePackingSlipPage(doc, writer, order, items, brandName, fromAddress);
+
+                processed.add(id);
+            }
+
+            if (processed.isEmpty()) {
+                throw new IllegalArgumentException("No valid orders to print.");
+            }
+
+            doc.close();
+            return out.toByteArray();
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to generate bulk packing slips PDF", e);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // REFACTORED: Single-page writer used by both single & bulk methods
+    // ─────────────────────────────────────────────────────────────────────────────
+    private void writePackingSlipPage(
+            Document doc, PdfWriter writer,
+            Order order, List<OrderItem> items,
+            String brandName, String fromAddress
+    ) throws Exception {
+
+        // Data strings (stay stringy to avoid LAZY trips)
+        String orderCode     = safe(order.getPublicCode());
+        String customerName  = safe(order.getShipName());
+        String customerPhone = safe(order.getShipPhone());
+        String notes         = safe(order.getOrderNotes());
+        String courier       = safe(order.getCourierName());
+
+        BigDecimal itemsSubtotal = nvl(order.getItemsSubtotal());
+        BigDecimal shipping      = nvl(order.getShippingFee());
+        BigDecimal grand         = nvl(order.getGrandTotal());
+        BigDecimal discount      = nvl(order.getDiscountTotal());
+
+        final String toBlock = joinLines(
+                customerName + (order.getCustomerId() != null && !orderCode.isBlank() ? " (BB" + orderCode + ")" :
+                        order.getCustomerId() != null ? " (" + order.getCustomerId() + ")" :
+                                !orderCode.isBlank() ? " (BB" + orderCode + ")" : ""),
+                safe(order.getShipLine1()),
+                safe(order.getShipLine2()),
+                mergeCityStatePin(
+                        safeDistrictName(order),
+                        safeStateName(order),
+                        safe(order.getShipPincode())
+                ),
+                safeCountryName(order),
+                (customerPhone.isBlank() ? "" : "Phone: " + customerPhone)
+        );
+
+        // Page geometry
+        Rectangle page = doc.getPageSize();
+        float left   = doc.left();
+        float right  = doc.right();
+        float top    = doc.top();
+        float bottom = doc.bottom();
+
+        // Bottom address zone + cut line (same numbers as your single renderer)
+        float bottomZoneHeight = 175f;
+        float lineGap          = 10f;
+        float yCut             = bottom + bottomZoneHeight + lineGap;
+
+        // Set/replace page event for this page
+        writer.setPageEvent(new CutFoldLineEvent(yCut));
+
+        float guardTop = 12f;
+
+        // ── TOP FRAME 1: Header, Meta, Notes, "ITEMS" ──
+        ColumnText topCt = new ColumnText(writer.getDirectContent());
+        topCt.setSimpleColumn(left, yCut + guardTop, right, top);
+
+        topCt.addElement(brandHeader(brandName, /*uppercase*/ true, logoUrl(), logoMaxH()));
+
+
+        PdfPTable hdr = new PdfPTable(new float[]{2.2f, 2f, 2.2f, 2.2f});
+        hdr.setWidthPercentage(100);
+        hdr.getDefaultCell().setBorder(Rectangle.NO_BORDER);
+        hdr.addCell(noBorder(td("Order #: " + (orderCode.isBlank() ? order.getId() : orderCode))));
+        hdr.addCell(noBorder(td("Date: " + fmtDate(order.getCreatedAt()))));
+        hdr.addCell(noBorder(td("Customer: " + (customerName.isBlank() ? "—" : customerName))));
+        hdr.addCell(noBorder(td("Phone: " + (customerPhone.isBlank() ? "—" : customerPhone))));
+        topCt.addElement(hdr);
+
+        if (!notes.isBlank()) {
+            Paragraph p = new Paragraph("Order Notes: \"" + notes + "\"",
+                    new Font(Font.HELVETICA, 10, Font.NORMAL));
+            p.setSpacingBefore(8f);
+            p.setSpacingAfter(8f);
+            topCt.addElement(p);
+        }
+
+        Paragraph itemsHdr = new Paragraph("ITEMS", new Font(Font.HELVETICA, 11, Font.BOLD));
+        itemsHdr.setSpacingBefore(6f);
+        itemsHdr.setSpacingAfter(6f);
+        topCt.addElement(itemsHdr);
+
+        topCt.go();
+        float itemsTopY = topCt.getYLine();
+        if (itemsTopY <= 0 || Float.isNaN(itemsTopY)) itemsTopY = top - 90f;
+        itemsTopY -= 6f;
+
+        float totalsBandHeight = 64f;
+        float itemsBottomY     = yCut + totalsBandHeight + 6f;
+
+        // ── TOP FRAME 2: Items in dynamic columns ──
+        int n = items.size();
+        int cols = (n > 24) ? 3 : (n > 12 ? 2 : 1);
+        float colGap = 12f;
+        float colWidth = (right - left - (colGap * (cols - 1))) / cols;
+
+        Font fItem = new Font(Font.HELVETICA, 11, Font.NORMAL);
+        Font fVar  = new Font(Font.HELVETICA, 10, Font.ITALIC);
+
+        int perCol = (int) Math.ceil(n / (double) cols);
+        for (int ci = 0; ci < cols; ci++) {
+            int start = ci * perCol;
+            if (start >= n) break;
+            int end = Math.min(n, start + perCol);
+
+            float x1 = left + ci * (colWidth + colGap);
+            float x2 = x1 + colWidth;
+
+            ColumnText col = new ColumnText(writer.getDirectContent());
+            col.setSimpleColumn(x1, itemsBottomY, x2, itemsTopY);
+
+            for (int i = start; i < end; i++) {
+                OrderItem it = items.get(i);
+                Paragraph li = new Paragraph("[ ]  " + nvl(it.getQuantity()) + " × " + safe(it.getProductName()), fItem);
+                li.setSpacingAfter(2f);
+                col.addElement(li);
+
+                if (it.getOptionsText() != null && !it.getOptionsText().isBlank()) {
+                    Paragraph vi = new Paragraph("Variants: " + it.getOptionsText(), fVar);
+                    vi.setIndentationLeft(16f);
+                    vi.setSpacingAfter(3f);
+                    col.addElement(vi);
+                }
+            }
+            col.go();
+        }
+
+        // ── TOP FRAME 3: Totals band ──
+        ColumnText totalsCt = new ColumnText(writer.getDirectContent());
+        totalsCt.setSimpleColumn(left, yCut + 6f, right, yCut + totalsBandHeight);
+        Paragraph totalsHdr = new Paragraph("TOTALS (INR)", new Font(Font.HELVETICA, 11, Font.BOLD));
+        totalsHdr.setSpacingAfter(3f);
+        Paragraph totalsP = new Paragraph(
+                "Items: " + inr(itemsSubtotal) + "  +  " +
+                        "Shipping: " + inr(shipping) + "  -  " +
+                        "Discount: " + inr(discount) + "  =  " +
+                        "Total: " + inr(grand),
+                new Font(Font.HELVETICA, 10, Font.BOLD)
+        );
+        totalsCt.addElement(totalsHdr);
+        totalsCt.addElement(totalsP);
+        totalsCt.go();
+
+        // ── BOTTOM FRAME: Addresses ──
+        float extraMargin = 56f;
+        float innerLeft  = left  + extraMargin;
+        float innerRight = right - extraMargin;
+        float colGapBtm  = 18f;
+        float colWidthB  = (innerRight - innerLeft - colGapBtm) / 2f;
+
+        float bottomBlockTop = bottom + 175f; // keep in sync with bottomZoneHeight
+
+        // TO (left)
+        ColumnText toCt = new ColumnText(writer.getDirectContent());
+        toCt.setSimpleColumn(
+                innerLeft,
+                bottom,
+                innerLeft + colWidthB,
+                bottomBlockTop - 2f
+        );
+        Paragraph toH = new Paragraph("TO:", new Font(Font.HELVETICA, 11, Font.BOLD));
+        toH.setSpacingAfter(4f);
+        toCt.addElement(toH);
+        for (String ln : toBlock.split("\\r?\\n")) {
+            if (!ln.isBlank()) {
+                Paragraph l = new Paragraph(ln, new Font(Font.HELVETICA, 10, Font.NORMAL));
+                toCt.addElement(l);
+            }
+        }
+        if (!courier.isBlank()) {
+            Paragraph c = new Paragraph("COURIER: " + courier, new Font(Font.HELVETICA, 10, Font.BOLD));
+            c.setSpacingBefore(6f);
+            toCt.addElement(c);
+        }
+        toCt.go();
+
+        // FROM (right)
+        ColumnText frCt = new ColumnText(writer.getDirectContent());
+        frCt.setSimpleColumn(
+                innerLeft + colWidthB + colGapBtm,
+                bottom,
+                innerRight,
+                bottomBlockTop - 18f
+        );
+        Paragraph fromH = new Paragraph("FROM:", new Font(Font.HELVETICA, 11, Font.BOLD));
+        fromH.setAlignment(Paragraph.ALIGN_RIGHT);
+        fromH.setSpacingAfter(4f);
+        frCt.addElement(fromH);
+        for (String ln : fromAddress.split("\\r?\\n")) {
+            if (!ln.isBlank()) {
+                Paragraph l = new Paragraph(ln, new Font(Font.HELVETICA, 10, Font.NORMAL));
+                l.setAlignment(Paragraph.ALIGN_RIGHT);
+                frCt.addElement(l);
+            }
+        }
+        frCt.go();
+    }
+
+
 
     // ---------------- helpers ----------------
 
+    // === Brand header with optional logo (NEW) =========================
+    /** Builds a logo + brand header. Falls back to text-only if logo is unavailable. */
+    /** Builds a super-compact logo + brand header row (no extra gap). */
+    /** Compact left-aligned logo + brand name in one line (no extra gaps). */
+    /** Compact left-aligned logo + brand name with visual centers aligned. */
+    private Element brandHeader(String brandName, boolean uppercase, String logoUrlSetting, float maxLogoH) {
+        try {
+            Image logo = tryLoadLogoImage(logoUrlSetting); // your existing loader; returns null if not found
+            if (logo != null) {
+                final float maxH = (maxLogoH > 0 ? maxLogoH : 28f);
+
+                // Scale logo to target max height, keep aspect ratio
+                logo.scaleToFit(1000f, maxH); // huge width cap, strict height cap
+                final float imgH = logo.getScaledHeight();
+
+                // Title font
+                String text = uppercase ? safe(brandName).toUpperCase() : safe(brandName);
+                Font f = new Font(Font.HELVETICA, 16, Font.BOLD);
+                final float fontPx = f.getSize(); // close to text box height for this purpose
+
+                // Compute vertical offset so image center ≈ text center
+                // Positive y lifts image up; negative y pushes it down.
+                // We subtract a tiny tweak to counter baseline optical bias.
+                final float fineTweak = -0.5f; // adjust between [-1.5, +1.5] if needed
+                final float yOffset = (fontPx - imgH) / 2f + fineTweak;
+
+                Paragraph p = new Paragraph();
+                p.setAlignment(Element.ALIGN_LEFT);
+                p.setSpacingBefore(0f);
+                p.setSpacingAfter(8f);
+                p.setLeading(0f, 1.1f);
+
+                // Inline: logo, thin spacer, text
+                p.add(new Chunk(logo, 0f, yOffset, true));
+                p.add(new Chunk(" ", f)); // tiny gap
+                p.add(new Chunk(text, f));
+
+                return p;
+            }
+        } catch (Exception ignore) {
+            // fall through
+        }
+
+        // Fallback: text-only, left aligned
+        String text = uppercase ? safe(brandName).toUpperCase() : safe(brandName);
+        Paragraph p = new Paragraph(text, new Font(Font.HELVETICA, 16, Font.BOLD));
+        p.setAlignment(Element.ALIGN_LEFT);
+        p.setSpacingAfter(8f);
+        return p;
+    }
+
+
+
+    /**
+     * Tries to load a logo image in this priority:
+     *  1) brand.logo_url (if provided)
+     *  2) @Value logoPngPath as classpath resource (e.g., static/BB_logo.png)
+     *  3) @Value logoPngPath as filesystem path
+     * Returns null if nothing works.
+     */
+    private Image tryLoadLogoImage(String logoUrlSetting) {
+        // 1) If settings provided a direct URL/path, try it first
+        try {
+            if (logoUrlSetting != null && !logoUrlSetting.isBlank()) {
+                return Image.getInstance(logoUrlSetting);
+            }
+        } catch (Exception ignore) {}
+
+        // 2) Try classpath resource for PNG path (e.g., "static/BB_logo.png")
+        //    Works when the file is under src/main/resources/static/...
+        for (String cp : new String[] { logoPngPath, (logoPngPath != null && !logoPngPath.startsWith("/")) ? ("/" + logoPngPath) : null }) {
+            if (cp == null || cp.isBlank()) continue;
+            try (java.io.InputStream in = getClass().getResourceAsStream(cp)) {
+                if (in != null) {
+                    byte[] bytes = in.readAllBytes();
+                    return Image.getInstance(bytes);
+                }
+            } catch (Exception ignore) {}
+            try (java.io.InputStream in = Thread.currentThread().getContextClassLoader().getResourceAsStream(cp.startsWith("/") ? cp.substring(1) : cp)) {
+                if (in != null) {
+                    byte[] bytes = in.readAllBytes();
+                    return Image.getInstance(bytes);
+                }
+            } catch (Exception ignore) {}
+        }
+
+        // 3) Try filesystem path as a fallback
+        try {
+            if (logoPngPath != null && !logoPngPath.isBlank()) {
+                java.io.File f = new java.io.File(logoPngPath);
+                if (f.exists() && f.isFile()) {
+                    return Image.getInstance(f.getAbsolutePath());
+                }
+            }
+        } catch (Exception ignore) {}
+
+        // NOTE: SVG not supported natively by OpenPDF; keep PNG as the reliable source.
+        return null;
+    }
+    /** Reads logo URL and max height from settings. */
+    private String logoUrl() {
+        // If you prefer to force the @Value path always, return "" here.
+        return safe(setting("brand.logo_url", ""));
+    }
+
+    /** Max logo height in points (PDF units). Optional (defaults to ~10mm). */
+    private float logoMaxH() {
+        try {
+            String v = setting("brand.logo_max_h", "28");
+            return Float.parseFloat(v);
+        } catch (Exception e) {
+            return 28f;
+        }
+    }
+
+
     /** Minimal functional interface to write into a PDF document. */
     private interface PdfWriterFn { void accept(Document doc) throws Exception; }
+
+    /** Variant that also exposes the PdfWriter (for page events, etc.). */
+    private interface PdfWriterFn2 { void accept(Document doc, PdfWriter writer) throws Exception; }
 
     /** Builds a PDF with common margins and returns bytes. */
     private byte[] buildPdf(PdfWriterFn fn) {
@@ -153,6 +700,54 @@ public class PrintService {
             return out.toByteArray();
         } catch (Exception e) {
             throw new IllegalStateException("Failed to generate PDF", e);
+        }
+    }
+
+    /** Builds a PDF (exposes writer) with common margins and returns bytes. */
+    private byte[] buildPdfWithWriter(PdfWriterFn2 fn) {
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Document doc = new Document(PageSize.A4, 36, 36, 36, 36);
+            PdfWriter writer = PdfWriter.getInstance(doc, out);
+            doc.open();
+            fn.accept(doc, writer);
+            doc.close();
+            return out.toByteArray();
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to generate PDF", e);
+        }
+    }
+
+    /** Page event: dashed CUT / FOLD LINE at a fixed Y position. */
+    private static class CutFoldLineEvent extends PdfPageEventHelper {
+        private final float yCut;
+        CutFoldLineEvent(float yCut) { this.yCut = yCut; }
+
+        @Override
+        public void onEndPage(PdfWriter writer, Document document) {
+            PdfContentByte cb = writer.getDirectContent();
+            cb.saveState();
+            cb.setLineWidth(0.8f);
+            cb.setLineDash(4f, 4f);
+
+            float left  = document.left();
+            float right = document.right();
+
+            cb.moveTo(left, yCut);
+            cb.lineTo(right, yCut);
+            cb.stroke();
+
+            try {
+                BaseFont bf = BaseFont.createFont(BaseFont.HELVETICA_BOLD, BaseFont.WINANSI, false);
+                String label = "CUT / FOLD LINE";
+                float tw = bf.getWidthPoint(label, 8);
+                float x = (left + right - tw) / 2f;
+                cb.beginText();
+                cb.setFontAndSize(bf, 8);
+                cb.setTextMatrix(x, yCut + 3f);
+                cb.showText(label);
+                cb.endText();
+            } catch (Exception ignore) {}
+            cb.restoreState();
         }
     }
 
@@ -178,7 +773,7 @@ public class PrintService {
         return p;
     }
 
-    /** Renders the order items table with pricing. */
+    /** Renders the order items table with pricing (invoice). */
     private PdfPTable itemsTable(List<OrderItem> items) {
         PdfPTable t = new PdfPTable(new float[]{5f, 1.2f, 1.6f, 1.6f});
         t.setWidthPercentage(100);
@@ -262,10 +857,22 @@ public class PrintService {
         return yyNNNN.startsWith("BB") ? yyNNNN : "BB" + yyNNNN;
     }
 
-    /** Formats an OffsetDateTime or returns empty string. */
-    private String fmt(OffsetDateTime ts) {
+    /** Formats LocalDateTime (invoice detailed). */
+    private String fmt(LocalDateTime ts) {
         if (ts == null) return "";
         return ts.format(DateTimeFormatter.ofPattern("dd-MMM-uuuu HH:mm"));
+    }
+
+    /** Short date (e.g., "16 Oct 2025"). */
+    private String fmtDate(LocalDateTime ts) {
+        if (ts == null) return "";
+        return ts.format(DateTimeFormatter.ofPattern("d MMM uuuu"));
+    }
+
+    /** INR formatting. */
+    private String inr(BigDecimal v) {
+        BigDecimal x = nvl(v);
+        return "₹ " + x.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
     }
 
     /** Null-safe string. */
@@ -284,6 +891,41 @@ public class PrintService {
         }
         return sb.toString();
     }
+
+    /** Build "District, State PIN" line. */
+    private String mergeCityStatePin(String district, String state, String pincode) {
+        String left = "";
+        if (!district.isBlank()) left = district;
+        if (!state.isBlank()) left = left.isBlank() ? state : left + ", " + state;
+        if (!pincode.isBlank()) left = left + " " + pincode;
+        return left;
+    }
+
+    /** Safely read district name without triggering LazyInitializationException. */
+    private String safeDistrictName(Order o) {
+        try { if (hasText(o.getShipDistrict().getName())) return o.getShipDistrict().getName(); }
+        catch (Throwable ignore) {}
+        try { return (o.getShipDistrict() != null) ? safe(o.getShipDistrict().getName()) : ""; }
+        catch (LazyInitializationException ex) { return ""; }
+    }
+
+    /** Safely read state name without triggering LazyInitializationException. */
+    private String safeStateName(Order o) {
+        try { if (hasText(o.getShipState().getName())) return o.getShipState().getName(); }
+        catch (Throwable ignore) {}
+        try { return (o.getShipState() != null) ? safe(o.getShipState().getName()) : ""; }
+        catch (LazyInitializationException ex) { return ""; }
+    }
+
+    /** Safely read country name without triggering LazyInitializationException. */
+    private String safeCountryName(Order o) {
+        try { if (hasText(o.getShipCountry().getName())) return o.getShipCountry().getName(); }
+        catch (Throwable ignore) {}
+        try { return (o.getShipCountry() != null) ? safe(o.getShipCountry().getName()) : ""; }
+        catch (LazyInitializationException ex) { return ""; }
+    }
+
+    private boolean hasText(String s) { return s != null && !s.isBlank(); }
 
     /** Null-coalescing BigDecimal -> zero. */
     private BigDecimal nvl(BigDecimal v) {

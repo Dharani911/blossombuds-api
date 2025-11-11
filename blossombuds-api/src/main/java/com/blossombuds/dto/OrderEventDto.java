@@ -1,6 +1,8 @@
 package com.blossombuds.dto;
 
 import lombok.Data;
+
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 
 /** DTO for immutable order lifecycle events. */
@@ -11,5 +13,5 @@ public class OrderEventDto {
     private String eventType;
     private String note;
     private String createdBy;
-    private OffsetDateTime createdAt;
+    private LocalDateTime createdAt;
 }

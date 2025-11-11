@@ -33,49 +33,60 @@ export default function ProductPage() {
 
   // fetch product, images, and options (values include absolute prices)
   useEffect(() => {
+    // guard invalid/empty param
+    if (!Number.isFinite(productId) || productId <= 0) {
+      setErr("Invalid product.");
+      setLoading(false);
+      return;
+    }
+
     let live = true;
     (async () => {
       try {
-        setLoading(true); setErr(null);
+        setLoading(true);
+        setErr(null);
         const [prod, imgs, options] = await Promise.all([
           getProduct(productId),
           listProductImages(productId),
-          listOptionValues(productId), // returns [{id,name,required,values:[{priceDelta as absolutePrice}]}]
+          // returns [{id,name,required,active?,values:[{id,valueLabel,active?,priceDelta as absolutePrice}]}]
+          listOptionValues(productId),
         ]);
         if (!live) return;
 
         setP(prod || null);
+
         const sortedImgs = (imgs || [])
-          .filter(im => im?.url)
-          .sort((a,b)=>(a.sortOrder ?? 0)-(b.sortOrder ?? 0));
+          .filter((im) => im?.url)
+          .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
         setImages(sortedImgs);
 
-        // default select 1st active value for each option
+        // only active options; pick 1st active value for defaults
+        const activeOptions = (options || []).filter((o) => o.active !== false);
         const initialSel: Record<number, number> = {};
-        (options || []).forEach(o => {
-          const vals = (o.values || []).filter(v => v.active !== false);
+        activeOptions.forEach((o) => {
+          const vals = (o.values || []).filter((v) => v.active !== false);
           if (vals.length > 0) initialSel[o.id] = vals[0].id;
         });
-        setOpts(options || []);
+        setOpts(activeOptions);
         setSel(initialSel);
-      } catch (e:any) {
+      } catch (e: any) {
         if (!live) return;
         setErr(e?.response?.data?.message || "Could not load product.");
       } finally {
         if (live) setLoading(false);
       }
     })();
-    return () => { live = false; };
+    return () => {
+      live = false;
+    };
   }, [productId]);
 
   // Price = price of the currently selected value on the FIRST priced option (or base price)
-  // If your “values” hold the absolute price, prefer the last changed option’s value;
-  // here we’ll display selected value’s price when available, else base product price.
+  // If your “values” hold the absolute price, prefer the selected value’s price; else fallback to product base price.
   const unitPrice = useMemo(() => {
-    // try to find a selected value with an absolute price
     for (const o of opts) {
       const vId = sel[o.id];
-      const v = o.values.find(x => x.id === vId);
+      const v = o.values.find((x) => x.id === vId);
       if (v && typeof v.priceDelta === "number") return Number(v.priceDelta); // absolute
     }
     return Number(p?.price ?? 0);
@@ -83,8 +94,12 @@ export default function ProductPage() {
 
   const priceText = useMemo(() => {
     try {
-      return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(unitPrice);
-    } catch { return `₹${unitPrice.toFixed(2)}`; }
+      return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(
+        unitPrice
+      );
+    } catch {
+      return `₹${unitPrice.toFixed(2)}`;
+    }
   }, [unitPrice]);
 
   function onPick(optionId: number, valueId: number) {
@@ -105,12 +120,16 @@ export default function ProductPage() {
       id: `${p.id}:${optionValueIds.sort().join("-") || "base"}`,
       name: p.name,
       price: unitPrice,
-      qty: Math.max(1, qty|0),
+      qty: Math.max(1, qty | 0),
       image: images[0]?.url || p.primaryImageUrl || "",
-      variant: opts.map(o => {
-        const v = o.values.find(x=>x.id===sel[o.id]);
-        return v ? `${o.name}: ${v.valueLabel}` : null;
-      }).filter(Boolean).join(" • ") || undefined,
+      variant:
+        opts
+          .map((o) => {
+            const v = o.values.find((x) => x.id === sel[o.id]);
+            return v ? `${o.name}: ${v.valueLabel}` : null;
+          })
+          .filter(Boolean)
+          .join(" • ") || undefined,
     });
     // small “added” nudge
     setAdded(true);
@@ -124,7 +143,9 @@ export default function ProductPage() {
   }
   useEffect(() => {
     if (!isModal) return;
-    function onKey(e: KeyboardEvent){ if (e.key === "Escape") close(); }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") close();
+    }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [isModal]);
@@ -147,13 +168,15 @@ export default function ProductPage() {
             {hero ? <img src={hero} alt={p?.name || "Product"} /> : <div className="ph" />}
           </div>
           {images.length > 1 && (
-            <div className="dots">
+            <div className="dots" role="tablist" aria-label="Product images">
               {images.map((_, i) => (
                 <button
                   key={i}
-                  className={"dot" + (i===cur ? " on": "")}
-                  onClick={()=>setCur(i)}
-                  aria-label={`Image ${i+1}`}
+                  className={"dot" + (i === cur ? " on" : "")}
+                  onClick={() => setCur(i)}
+                  aria-label={`Image ${i + 1}`}
+                  role="tab"
+                  aria-selected={i === cur}
                 />
               ))}
             </div>
@@ -166,13 +189,16 @@ export default function ProductPage() {
         <div className="price">{priceText}</div>
 
         {opts.map((o) => {
-          const activeValues = o.values.filter(v => v.active !== false);
+          const activeValues = o.values.filter((v) => v.active !== false);
           return (
             <div key={o.id} className="opt">
-              <label>{o.name}{o.required ? " *" : ""}</label>
+              <label>
+                {o.name}
+                {o.required ? " *" : ""}
+              </label>
               <div className="select">
                 <select
-                  value={sel[o.id] ?? ""}
+                  value={sel[o.id] ?? activeValues[0]?.id ?? ""}
                   onChange={(e) => onPick(o.id, Number(e.target.value))}
                 >
                   {activeValues.map((v) => (
@@ -205,7 +231,11 @@ export default function ProductPage() {
           <button className={"btn add" + (added ? " pulse" : "")} onClick={onAdd}>
             Add to cart
           </button>
-          {!isModal && <Link to="/cart" className="btn secondary">Go to cart</Link>}
+          {!isModal && (
+            <Link to="/cart" className="btn secondary">
+              Go to cart
+            </Link>
+          )}
         </div>
 
         {p?.description && (
@@ -220,7 +250,9 @@ export default function ProductPage() {
       <Seo title={p ? `${p.name} • Blossom & Buds` : "Product • Blossom & Buds"} />
       <div className="overlay" ref={overlayRef} onMouseDown={onBackdropClick}>
         <div className="modal" role="dialog" aria-modal="true" aria-label={p?.name || "Product"}>
-          <button className="close" aria-label="Close" onClick={close}>✕</button>
+          <button className="close" aria-label="Close" onClick={close}>
+            ✕
+          </button>
           {err && <div className="alert">{err}</div>}
           {loading ? <div className="loading">Loading…</div> : Content}
         </div>
@@ -232,12 +264,18 @@ export default function ProductPage() {
       <style>{pageCss}</style>
       <Seo title={p ? `${p.name} • Blossom & Buds` : "Product • Blossom & Buds"} />
       <nav className="crumbs">
-        <Link to="/">Home</Link><span>›</span>
-        <Link to="/categories">Categories</Link><span>›</span>
+        <Link to="/">Home</Link>
+        <span>›</span>
+        <Link to="/categories">Categories</Link>
+        <span>›</span>
         <span className="cur">{p?.name || "Product"}</span>
       </nav>
       {err && <div className="alert">{err}</div>}
-      {loading ? <div className="loading">Loading…</div> : <div className="page-shell">{Content}</div>}
+      {loading ? (
+        <div className="loading">Loading…</div>
+      ) : (
+        <div className="page-shell">{Content}</div>
+      )}
     </div>
   );
 }

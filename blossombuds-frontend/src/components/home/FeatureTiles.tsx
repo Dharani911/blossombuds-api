@@ -59,45 +59,21 @@ function Tile({
 /* Minimal line icons (no external deps) */
 function SparkIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      width="20"
-      height="20"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      aria-hidden="true"
-    >
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
       <path d="M12 2v4M12 18v4M4 12H0M24 12h-4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8" />
     </svg>
   );
 }
 function ArrowIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      width="20"
-      height="20"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      aria-hidden="true"
-    >
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
       <path d="M5 12h14M13 5l7 7-7 7" />
     </svg>
   );
 }
 function StarIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      width="20"
-      height="20"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      aria-hidden="true"
-    >
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
       <path d="M12 2l3.2 6.5 7.1 1-5.1 5 1.2 7L12 18l-6.4 3.5 1.2-7-5.1-5 7.1-1L12 2z" />
     </svg>
   );
@@ -114,32 +90,60 @@ const styles = `
   --ft-accent-2: var(--bb-accent-2, #F6C320);
 }
 
-.ft{ padding: 18px 0 28px; color: var(--ft-ink); }
+.ft{
+  padding: 18px 0 28px;
+  color: var(--ft-ink);
+  padding-left: max(0px, env(safe-area-inset-left, 0px));
+  padding-right: max(0px, env(safe-area-inset-right, 0px));
+}
 .container{ max-width:1200px; margin:0 auto; padding:0 16px; }
 
+/* Heading rule */
 .hdr{ display:flex; align-items:center; gap:10px; margin: 2px 0 12px; }
-.hdr .dot{ width:8px; height:8px; border-radius:999px; background: var(--ft-accent); box-shadow: 0 0 0 4px color-mix(in oklab, var(--ft-accent), transparent 80%); }
-.hdr .rule{ height:2px; flex:1; background: linear-gradient(90deg, color-mix(in oklab, var(--ft-accent), #fff 75%), color-mix(in oklab, var(--ft-accent-2), #fff 70%)); border-radius:2px; }
-
-.grid{
-  display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:14px;
+.hdr .dot{
+  width:8px; height:8px; border-radius:999px; background: var(--ft-accent);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--ft-accent), transparent 80%);
+}
+.hdr .rule{
+  height:2px; flex:1;
+  background: linear-gradient(90deg,
+    color-mix(in oklab, var(--ft-accent), #fff 75%),
+    color-mix(in oklab, var(--ft-accent-2), #fff 70%));
+  border-radius:2px;
 }
 
+/* Grid — mobile first */
+.grid{
+  display:grid;
+  grid-template-columns: 1fr;
+  gap:12px;
+}
+@media (min-width: 520px){
+  .grid{ grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px; }
+}
+@media (min-width: 900px){
+  .grid{ grid-template-columns: repeat(3, minmax(0,1fr)); gap:14px; }
+}
+
+/* Tile card */
 .tile{
   position:relative;
   display:flex; align-items:flex-start; gap:12px;
-  background: var(--ft-bg); border-radius: 16px; padding: 16px;
+  background: var(--ft-bg); border-radius: 16px; padding: 14px;
   box-shadow: var(--ft-shadow);
   border: 1px solid var(--ft-ink-soft);
   outline:none;
-  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+  min-height: 72px; /* ensures 44px+ touch target with padding */
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease, background .16s ease;
 }
+.tile:active{ transform: scale(.995); }
+.tile:hover{ transform: translateY(-2px); box-shadow: 0 14px 34px rgba(0,0,0,.12); }
 .tile:focus-visible{
   border-color: color-mix(in oklab, var(--ft-accent), transparent 50%);
   box-shadow: 0 14px 34px rgba(0,0,0,.12), 0 0 0 4px color-mix(in oklab, var(--ft-accent), transparent 85%);
 }
-.tile:hover{ transform: translateY(-2px); box-shadow: 0 14px 34px rgba(0,0,0,.12); }
 
+/* Icon puck */
 .ic{
   flex:0 0 auto;
   width:44px; height:44px; border-radius:12px;
@@ -148,18 +152,33 @@ const styles = `
   box-shadow: 0 6px 16px rgba(0,0,0,.08), inset 0 0 0 1px var(--ft-ink-soft);
 }
 
-.copy h3{ margin:0 0 4px; color: var(--bb-primary, #4A4F41); font-weight:900; letter-spacing:.2px; }
-.copy p{ margin:0; color: var(--ft-ink-2); line-height:1.45; }
+/* Copy: fluid type and tighter leading on mobile */
+.copy h3{
+  margin:0 0 4px;
+  color: var(--bb-primary, #4A4F41);
+  font-weight:900; letter-spacing:.2px;
+  font-size: clamp(15px, 3.4vw, 18px);
+  line-height: 1.2;
+}
+.copy p{
+  margin:0;
+  color: var(--ft-ink-2);
+  line-height: 1.45;
+  font-size: clamp(13px, 3.2vw, 15.5px);
+}
 
+/* Subtle hover ring (desktop only) */
 .hover-ring{
   position:absolute; inset:-2px; border-radius:16px; pointer-events:none;
   background: radial-gradient(120% 200% at 0% 0%, color-mix(in oklab, var(--ft-accent), transparent 92%), transparent 60%);
   opacity:0; transition: opacity .16s ease;
 }
-.tile:hover .hover-ring{ opacity:1; }
+@media (hover:hover){
+  .tile:hover .hover-ring{ opacity:1; }
+}
 
-/* Responsive */
-@media (max-width: 900px){
-  .grid{ grid-template-columns: 1fr; }
+/* Motion safety */
+@media (prefers-reduced-motion: reduce){
+  .tile{ transition: none; }
 }
 `;

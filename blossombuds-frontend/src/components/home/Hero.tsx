@@ -1,7 +1,7 @@
 // src/components/home/Hero.tsx
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { listCarouselImages, type CarouselImage } from "../../api/carouselImages";
+import { listFeatureImagesPublic, type FeatureImage } from "../../api/featureImages";
 
 /** Fallback hero images if admin hasn't configured any yet */
 const FALLBACK_IMAGES = [
@@ -20,10 +20,10 @@ export default function Hero() {
     let live = true;
     (async () => {
       try {
-        const list = await listCarouselImages(); // [{ key, url, altText, sortOrder }]
+        const list = await listFeatureImagesPublic(); // [{ key, url, altText, sortOrder }]
         if (!live) return;
         const valid = (Array.isArray(list) ? list : [])
-          .filter((x: CarouselImage) => !!x?.url)
+          .filter((x: FeatureImage) => !!x?.url)
           .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
         setUrls(valid.length ? valid.map((x) => x.url) : []);
       } catch {
@@ -80,32 +80,70 @@ export default function Hero() {
 }
 
 const styles = `
-.hp-hero{ padding: 0 0 22px; }
+.hp-hero{
+  padding: 0 0 20px;
+  padding-left: max(0px, env(safe-area-inset-left, 0px));
+  padding-right: max(0px, env(safe-area-inset-right, 0px));
+}
+
+/* Stage sizing: mobile-first, never overflows */
 .stage{
-  position:relative; height: 64vh; min-height: 420px; max-height: 720px; overflow:hidden;
-  border-radius: 22px; margin: 12px auto 0; max-width: 1200px;
+  position:relative;
+  height: clamp(48vh, 62vh, 680px);
+  min-height: 320px;
+  max-height: 720px;
+  overflow:hidden;
+  border-radius: 22px;
+  margin: 10px auto 0;
+  max-width: min(1200px, 100%);
   box-shadow: 0 18px 48px rgba(0,0,0,.14);
 }
+
+/* Prefer dvh on modern mobile for browser-UI-safe height */
+@supports (height: 100dvh){
+  .stage{ height: clamp(46dvh, 58dvh, 66dvh); }
+}
+
+/* Tighten on very small devices */
+@media (max-width: 560px){
+  .stage{
+    height: clamp(44vh, 56vh, 60vh);
+    min-height: 300px;
+    border-radius: 14px;
+    margin: 6px 8px 0;
+    box-shadow: 0 12px 32px rgba(0,0,0,.12);
+  }
+}
+
 .slide{ position:absolute; inset:0; opacity:0; transition: opacity .6s ease; }
 .slide.on{ opacity:1; }
 .slide img{
-  width:100%; height:100%; object-fit:cover;
+  width:100%; height:100%; object-fit:cover; object-position:center;
   transform: scale(1.04); transition: transform 5s ease;  /* gentler Ken Burns */
 }
 .slide.on img{ transform: scale(1.08); }
+
+/* Veil adapts on mobile for stronger readability */
 .veil{
   position:absolute; inset:0;
-  /* Stronger blend so text never gets lost */
   background:
-    linear-gradient(180deg, rgba(0,0,0,.35), rgba(0,0,0,.35));
+    linear-gradient(180deg, rgba(0,0,0,.32), rgba(0,0,0,.36));
   mix-blend-mode: multiply;
 }
+@media (max-width: 560px){
+  .veil{
+    background:
+      linear-gradient(180deg, rgba(0,0,0,.45), rgba(0,0,0,.55));
+  }
+}
+
 .content{
   position:absolute; inset:0; display:grid; place-items:center; padding: 0 16px;
 }
+
+/* Glass card scales fluidly */
 .panel{
-  max-width: 820px; text-align:center; color:#fff;
-  /* translucent card to lift text off imagery */
+  max-width: 820px; width: min(92vw, 820px); text-align:center; color:#fff;
   background: radial-gradient(120% 120% at 50% 0%, rgba(0,0,0,.22), rgba(0,0,0,.45));
   border: 1px solid rgba(255,255,255,.14);
   backdrop-filter: blur(4px) saturate(120%);
@@ -113,25 +151,49 @@ const styles = `
   border-radius: 20px; padding: 18px 20px;
   text-shadow: 0 1px 0 rgba(0,0,0,.35);
 }
+@media (max-width: 560px){
+  .panel{ border-radius: 14px; padding: 14px 14px; }
+}
+
 .panel h1{
   margin:0 0 8px; font-weight:900; letter-spacing:.2px;
-  font-size: clamp(28px, 4vw, 42px);
+  font-size: clamp(24px, 6vw, 40px);
   color:#ffffff !important;
   text-shadow: 0 2px 8px rgba(0,0,0,.45);
 }
 .panel p{
   margin:0; opacity:1;
-  font-size: clamp(14px, 1.4vw, 18px);
+  font-size: clamp(14px, 3.8vw, 18px);
+  line-height: 1.5;
   color:#ffffff !important;
   text-shadow: 0 1px 6px rgba(0,0,0,.45);
 }
-.actions{ display:flex; gap:10px; margin-top: 14px; flex-wrap: wrap; justify-content:center; }
+
+/* Actions: wrap nicely, big touch targets */
+.actions{
+  display:flex; gap:10px; margin-top: 14px; flex-wrap: wrap; justify-content:center;
+}
 .btn{
-  display:inline-flex; align-items:center; justify-content:center; padding:.75rem 1.25rem; border-radius:999px; border:none; cursor:pointer;
-  background: var(--bb-accent); color:#fff; font-weight:900; box-shadow: 0 12px 28px rgba(240,93,139,.38);
-  transition: transform .15s ease, box-shadow .15s ease;
+  display:inline-flex; align-items:center; justify-content:center;
+  padding:.8rem 1.25rem; min-height: 44px; border-radius:999px; border:none; cursor:pointer;
+  background: var(--bb-accent); color:#fff; font-weight:900; letter-spacing:.2px;
+  box-shadow: 0 12px 28px rgba(240,93,139,.38);
+  transition: transform .15s ease, box-shadow .15s ease, opacity .15s ease;
 }
 .btn:hover{ transform: translateY(-1px); box-shadow: 0 16px 34px rgba(240,93,139,.42); }
+.btn:active{ transform: scale(.98); }
 .btn.secondary{ background: var(--bb-accent-2); color:#2b2b2b; box-shadow: 0 12px 28px rgba(246,195,32,.28); }
 .btn.secondary:hover{ box-shadow: 0 16px 34px rgba(246,195,32,.34); }
+
+/* On narrow screens, let buttons fill rows neatly */
+@media (max-width: 420px){
+  .actions{ gap:8px; }
+  .actions .btn{ flex:1 1 calc(50% - 8px); min-width: 140px; }
+}
+
+/* Motion safety */
+@media (prefers-reduced-motion: reduce){
+  .slide{ transition: none; }
+  .slide img, .slide.on img{ transform: none !important; transition: none !important; }
+}
 `;

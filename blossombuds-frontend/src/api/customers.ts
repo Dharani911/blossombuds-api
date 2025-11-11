@@ -1,6 +1,29 @@
 // src/api/customers.ts
 import http from "./http";
 
+/** ─────────────────── Types (aligned with backend) ─────────────────── **/
+
+export type Customer = {
+  id: number;
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  active?: boolean | null;
+  createdAt?: string | null;
+  modifiedAt?: string | null;
+};
+
+export type CustomerDto = Partial<{
+  name: string;
+  email: string;
+  phone: string;
+  active: boolean;
+}>;
+
+/**
+ * AddressView (what your controller returns) — uses id refs for region fields.
+ * This matches what CheckoutPage and Admin use (countryId/stateId/districtId).
+ */
 export type Address = {
   id: number;
   customerId: number;
@@ -31,6 +54,43 @@ export type AddressDto = Partial<{
   active: boolean;
 }>;
 
+export type OrderSummary = {
+  id: number;
+  orderNumber?: string | null;
+  status?: string | null;
+  totalAmount?: number | null;
+  currency?: string | null; // e.g., "INR"
+  placedAt?: string | null;
+};
+
+/** ─────────────────── Customer endpoints ─────────────────── **/
+
+// GET /api/customers  (admin only)
+export async function listCustomers(): Promise<Customer[]> {
+  const { data } = await http.get<Customer[]>("/api/customers");
+  return data ?? [];
+}
+
+// GET /api/customers/{customerId}
+export async function getCustomer(customerId: number): Promise<Customer> {
+  const { data } = await http.get<Customer>(`/api/customers/${customerId}`);
+  return data;
+}
+
+// POST /api/customers  (admin only)
+export async function createCustomer(dto: CustomerDto): Promise<Customer> {
+  const { data } = await http.post<Customer>("/api/customers", dto);
+  return data;
+}
+
+// PATCH /api/customers/{customerId}  (admin only)
+export async function updateCustomer(customerId: number, dto: CustomerDto): Promise<Customer> {
+  const { data } = await http.patch<Customer>(`/api/customers/${customerId}`, dto);
+  return data;
+}
+
+/** ─────────────────── Address endpoints ─────────────────── **/
+
 // GET /api/customers/{customerId}/addresses
 export async function listAddresses(customerId: number): Promise<Address[]> {
   const { data } = await http.get<Address[]>(`/api/customers/${customerId}/addresses`);
@@ -58,4 +118,12 @@ export async function setDefaultAddress(addressId: number): Promise<Address> {
 // DELETE /api/customers/addresses/{addressId}
 export async function deleteAddress(addressId: number): Promise<void> {
   await http.delete(`/api/customers/addresses/${addressId}`);
+}
+
+/** ─────────────────── Orders by customer (admin) ─────────────────── **/
+
+// GET /api/orders/by-customer/{customerId}  (adjust if your real route differs)
+export async function listOrdersByCustomer(customerId: number): Promise<OrderSummary[]> {
+  const { data } = await http.get<OrderSummary[]>(`/api/orders/by-customer/${customerId}`);
+  return data ?? [];
 }

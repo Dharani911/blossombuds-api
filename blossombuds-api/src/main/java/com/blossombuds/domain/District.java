@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter; import lombok.Setter;
 import org.hibernate.annotations.SQLDelete; import org.hibernate.annotations.Where;
 
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 
 @Getter @Setter
@@ -28,7 +29,7 @@ public class District {
     // audit / soft-delete
     private Boolean active = Boolean.TRUE;
     @Column(name = "created_by", length = 120)  private String createdBy;
-    @Column(name = "created_at")                private OffsetDateTime createdAt;
+    @Column(name = "created_at")                private LocalDateTime createdAt;
     @Column(name = "modified_by", length = 120) private String modifiedBy;
-    @Column(name = "modified_at")               private OffsetDateTime modifiedAt;
+    @Column(name = "modified_at")               private LocalDateTime modifiedAt;
 }

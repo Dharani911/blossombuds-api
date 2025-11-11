@@ -11,12 +11,13 @@ import org.springframework.stereotype.Component;
 @Component
 @ConfigurationProperties(prefix = "app.razorpay")
 public class RazorPayProperties {
-    /** Public key id (NOT secret). */
     private String keyId;
-    /** API secret (server-side only). */
     private String keySecret;
-    /** Webhook secret used to verify Razorpay webhooks. */
-    private String webhookSecret;
-    /** Base API URL (default Razorpay production). */
     private String baseUrl = "https://api.razorpay.com/v1";
+
+    // Webhook secrets (env-specific)
+    private String webhookSecret;        // live
+    private String webhookSecretTest;    // /webhook/test
+    private String webhookSecretStage;   // /webhook/stage
 }
+

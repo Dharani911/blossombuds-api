@@ -142,5 +142,154 @@
             <dropColumn tableName="coupons" columnName="min_items"/>
         </rollback>
     </changeSet>
+    <changeSet id="0019-05-products-feature-visibility" author="dharani">
+        <comment>Add featured flags and visibility to products</comment>
+
+        <addColumn tableName="products">
+            <column name="featured" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="featured_rank" type="integer" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="visible" type="boolean" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+
+        <!-- Helpful indexes for common storefront queries -->
+        <createIndex tableName="products" indexName="idx_products_featured_rank">
+            <column name="featured"/>
+            <column name="featured_rank"/>
+            <column name="id"/>
+        </createIndex>
+
+        <createIndex tableName="products" indexName="idx_products_visible">
+            <column name="visible"/>
+        </createIndex>
+
+        <rollback>
+            <dropIndex tableName="products" indexName="idx_products_visible"/>
+            <dropIndex tableName="products" indexName="idx_products_featured_rank"/>
+            <dropColumn tableName="products" columnName="visible"/>
+            <dropColumn tableName="products" columnName="featured_rank"/>
+            <dropColumn tableName="products" columnName="featured"/>
+        </rollback>
+    </changeSet>
+
+    <!-- ===================== 2) product_options: visible ===================== -->
+    <changeSet id="0019-06-product-options-visibility" author="dharani">
+        <comment>Add visibility flag to product_options</comment>
+
+        <addColumn tableName="product_options">
+            <column name="visible" type="boolean" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+
+        <createIndex tableName="product_options" indexName="idx_product_options_visible">
+            <column name="visible"/>
+        </createIndex>
+
+        <rollback>
+            <dropIndex tableName="product_options" indexName="idx_product_options_visible"/>
+            <dropColumn tableName="product_options" columnName="visible"/>
+        </rollback>
+    </changeSet>
+
+    <!-- ===================== 3) product_option_values: visible ===================== -->
+    <changeSet id="0019-07-product-option-values-visibility" author="dharani">
+        <comment>Add visibility flag to product_option_values</comment>
+
+        <addColumn tableName="product_option_values">
+            <column name="visible" type="boolean" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+
+        <createIndex tableName="product_option_values" indexName="idx_pov_visible">
+            <column name="visible"/>
+        </createIndex>
+
+        <rollback>
+            <dropIndex tableName="product_option_values" indexName="idx_pov_visible"/>
+            <dropColumn tableName="product_option_values" columnName="visible"/>
+        </rollback>
+    </changeSet>
+    <changeSet id="0019-08-add-external-reference-to-orders" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="orders" columnName="external_reference"/>
+            </not>
+        </preConditions>
+
+        <addColumn tableName="orders">
+            <column name="external_reference" type="varchar(128)">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+
+        <!-- Handy for quick lookups by payment ref -->
+        <createIndex indexName="idx_orders_external_reference" tableName="orders">
+            <column name="external_reference"/>
+        </createIndex>
+
+        <rollback>
+            <dropIndex indexName="idx_orders_external_reference" tableName="orders"/>
+            <dropColumn tableName="orders" columnName="external_reference"/>
+        </rollback>
+    </changeSet>
+    <changeSet id="0019-09-ship-country-alter-inplace" author="dharani">
+
+
+        <!-- 1) Drop the default 'IN' -->
+        <dropDefaultValue
+
+                tableName="orders"
+                columnName="ship_country"/>
+
+        <!-- 2) Widen type to VARCHAR(100) -->
+        <modifyDataType
+
+                tableName="orders"
+                columnName="ship_country"
+                newDataType="VARCHAR(100)"/>
+
+        <rollback>
+            <!-- Rollback: narrow back to CHAR(2) and restore default 'IN' -->
+            <modifyDataType
+
+                    tableName="orders"
+                    columnName="ship_country"
+                    newDataType="CHAR(2)"/>
+            <addDefaultValue
+
+                    tableName="orders"
+                    columnName="ship_country"
+                    defaultValue="IN"/>
+        </rollback>
+    </changeSet>
+    <changeSet id="0019-10-add-concern-column-product-reviews" author="dharani">
+        <addColumn tableName="product_reviews">
+            <column name="concern" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+
+        <!-- Optional: index for admin filters -->
+        <createIndex tableName="product_reviews" indexName="idx_product_reviews_status_concern">
+            <column name="status"/>
+            <column name="concern"/>
+        </createIndex>
+
+        <!-- If you need to backfill existing approved rows to concern=true, uncomment:
+        <update tableName="product_reviews">
+            <column name="concern" valueBoolean="true"/>
+            <where>status = 'APPROVED'</where>
+        </update>
+        -->
+    </changeSet>
+
+
 
 </databaseChangeLog>

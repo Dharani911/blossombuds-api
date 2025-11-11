@@ -144,6 +144,51 @@ export async function listProductsPage(page = 0, size = 24): Promise<PageResp<Pr
   return normalizePage<Product>(data);
 }
 
+/**
+ * New Arrivals (public).
+ * Tries common server patterns:
+ *  - sort by createdAt desc
+ *  - fallback to id desc
+ *  - final fallback to first page
+ */
+export async function listNewArrivals(limit = 12): Promise<Product[]> {
+  // helper to unwrap Page/content/array shapes
+  const unwrap = (data: any): Product[] => {
+    if (Array.isArray(data)) return data as Product[];
+    if (Array.isArray(data?.content)) return data.content as Product[];
+    if (Array.isArray(data?.items)) return data.items as Product[];
+    return [];
+  };
+
+  // 1) explicit “new-arrivals” endpoint
+  try {
+    const r1 = await http.get("/api/catalog/products/new-arrivals", { params: { size: limit } });
+    const rows = unwrap(r1.data).slice(0, limit);
+    if (rows.length) return rows;
+  } catch { /* ignore and try next */ }
+
+  // 2) sort by createdAt desc on general products list
+  try {
+    const r2 = await http.get("/api/catalog/products", {
+      params: { page: 0, size: limit, sort: "createdAt,desc", active: true },
+    });
+    const rows = unwrap(r2.data).slice(0, limit);
+    if (rows.length) return rows;
+  } catch { /* ignore and try next */ }
+
+  // 3) flag-style filter
+  try {
+    const r3 = await http.get("/api/catalog/products", {
+      params: { page: 0, size: limit, newArrivals: true, active: true },
+    });
+    const rows = unwrap(r3.data).slice(0, limit);
+    if (rows.length) return rows;
+  } catch { /* ignore */ }
+
+  // last resort: empty list (component shows "No new arrivals" message)
+  return [];
+}
+
 /* =========================
  * Product images (public)
  * Controller: GET /api/catalog/products/{productId}/images
@@ -213,6 +258,7 @@ export default {
   // products
   getProduct,
   listProductsPage,
+  listNewArrivals,
   // images
   listProductImages,
   // options + values

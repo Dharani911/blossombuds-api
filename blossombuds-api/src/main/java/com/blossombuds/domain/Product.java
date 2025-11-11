@@ -5,60 +5,76 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.Where;
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedBy;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
 /** Represents a sellable product in the catalog. */
-@SQLDelete(sql = "UPDATE products SET active = false, modified_at = now() WHERE id = ?")
-@Where(clause = "active = true")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor
-@Entity @Table(name = "products")
+@Entity
+@Table(name = "products")
+@EntityListeners(AuditingEntityListener.class)
+// Soft-delete = hide from lists (visible=false), but keep the row.
+@SQLDelete(sql = "UPDATE products SET active = false, modified_at = now() WHERE id = ?")
+@Where(clause = "active = true") //
+
 public class Product {
 
-    /** Surrogate primary key for products. */
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** URL-friendly unique identifier for the product. */
     @Column(length = 200, unique = true)
     private String slug;
 
-    /** Display name of the product. */
     @Column(length = 200, nullable = false)
     private String name;
 
-    /** Long-form product description. */
     @Column(columnDefinition = "text")
     private String description;
 
-    /** Current list price of the product. */
     @Column(precision = 12, scale = 2)
     private BigDecimal price;
 
-    /** Soft-visibility flag to hide/show the product. */
+    /** Buyable flag. false = show as disabled/“coming soon”. */
     @Column(nullable = false)
     private Boolean active = Boolean.TRUE;
 
-    /** Username/actor who created this record. */
+    /** Listable flag. false = fully hidden from storefront lists/search. */
+    @Column(nullable = false)
+    private Boolean visible = Boolean.TRUE;
+
+    /** Home/Featured rail toggle + order. */
+    @Column(nullable = false)
+    private Boolean featured = Boolean.FALSE;
+
+    @Column(name = "featured_rank", nullable = false)
+    private Integer featuredRank = 0;
+
     @Column(name = "created_by", length = 120)
+    @CreatedBy
     private String createdBy;
 
-    /** Timestamp when the record was created. */
     @Column(name = "created_at")
-    private OffsetDateTime createdAt;
+    @CreatedDate
+    private LocalDateTime createdAt;
 
-    /** Username/actor who last modified this record. */
     @Column(name = "modified_by", length = 120)
+    @LastModifiedBy
     private String modifiedBy;
 
     /** Timestamp when the record was last modified. */
     @Column(name = "modified_at")
-    private OffsetDateTime modifiedAt;
+    @LastModifiedDate
+    private LocalDateTime modifiedAt;
 
-    /** Category links for this product (join rows). */
     @OneToMany(mappedBy = "product", fetch = FetchType.LAZY)
     @JsonIgnore
     @ToString.Exclude @EqualsAndHashCode.Exclude

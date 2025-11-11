@@ -1,7 +1,6 @@
-// src/api/featureImages.ts
-import http from "./http";
 import adminHttp from "./adminHttp";
 
+/** Server DTO */
 export type FeatureImage = {
   key: string;
   url: string;
@@ -9,45 +8,79 @@ export type FeatureImage = {
   sortOrder?: number | null;
 };
 
-export type PresignResponse = {
-  key: string;             // R2 object key you must send back in /from-key
-  url: string;             // presigned PUT URL
-  headers?: Record<string, string>; // optional headers to include on PUT
-};
+/** GET /api/settings/ui/feature-images (public read for storefront) */
+export async function listFeatureImagesPublic(): Promise<FeatureImage[]> {
+  const { data } = await adminHttp.get<FeatureImage[]>("/api/settings/ui/feature-images");
+  return data ?? [];
+}
 
-/** Public list for homepage */
-export async function listFeatureImages(): Promise<FeatureImage[]> {
-  const { data } = await http.get("/api/settings/ui/feature-images");
+/**
+ * POST /api/settings/feature-images/upload  (ADMIN)
+ * Multipart upload — mirrors product image upload (no presign/CORS hassle).
+ */
+export async function uploadFeatureImage(
+  file: File,
+  opts?: { altText?: string; sortOrder?: number }
+): Promise<FeatureImage> {
+  const fd = new FormData();
+  fd.append("file", file);
+  if (opts?.altText) fd.append("altText", opts.altText);
+  if (typeof opts?.sortOrder === "number") fd.append("sortOrder", String(opts.sortOrder));
+
+  const { data } = await adminHttp.post<FeatureImage>(
+    "/api/settings/admin/feature-images",
+    fd,
+    { headers: { /* let the browser set multipart boundary */ } }
+  );
   return data;
 }
 
-/** ADMIN: get a presigned PUT (NOTE: use query params, not JSON body) */
-export async function presignFeatureImage(filename: string, contentType?: string): Promise<PresignResponse> {
-  const { data } = await adminHttp.post("/api/catalog/uploads/presign", null, {
-    params: { filename, contentType },
-    withCredentials: true,
-  });
-  return data;
+/**
+ * PUT /api/settings/feature-images  (ADMIN)
+ * Replace entire list (order + text).
+ */
+export async function replaceFeatureImages(items: Array<{
+  key: string;
+  altText?: string | null;
+  sortOrder?: number | null;
+}>) {
+  await adminHttp.put("/api/settings/feature-images", items);
 }
 
-/** ADMIN: finalize by telling backend the temp key to store in settings */
-export async function addFeatureImageFromKey(p: { key: string; altText?: string; sortOrder?: number }) {
-  const { data } = await adminHttp.post("/api/settings/feature-images/from-key", null, {
-    params: { key: p.key, altText: p.altText, sortOrder: p.sortOrder },
-    withCredentials: true,
-  });
-  return data as FeatureImage;
-}
-
-/** ADMIN: replace all images (keys + alt/sort) */
-export async function replaceFeatureImages(items: Array<{ key: string; altText?: string; sortOrder?: number }>) {
-  await adminHttp.put("/api/settings/feature-images", items, { withCredentials: true });
-}
-
-/** ADMIN: delete one (optionally delete the object too) */
+/**
+ * DELETE /api/settings/feature-images?key=...&deleteObject=false  (ADMIN)
+ * Removes an entry from settings; optionally delete R2 object.
+ */
 export async function deleteFeatureImage(key: string, deleteObject = false) {
-  await adminHttp.delete("/api/settings/feature-images", {
+  await adminHttp.delete("/api/settings/admin/feature-images", {
     params: { key, deleteObject },
-    withCredentials: true,
   });
+}
+export async function reorderFeatureImages(keys: string[]) {
+  await adminHttp.put(
+    "/api/settings/admin/feature-images/order",
+    { keys },                                     // <— wrap in object
+    { headers: { "Content-Type": "application/json" } }
+  );
+}
+export async function updateFeatureImageMeta(key: string, altText?: string, sortOrder?: number) {
+  await adminHttp.patch("/api/settings/admin/feature-images/meta", null, {
+    params: { key, altText, sortOrder },
+  });
+}
+
+/* -------- Optional: keep presign finalize if you still need it somewhere --------
+   POST /api/settings/feature-images/from-key (ADMIN)
+   Finalize a previously uploaded tmp key (if you keep presign flow around). */
+export async function finalizeFeatureImageFromKey(
+  key: string,
+  altText?: string,
+  sortOrder?: number
+) {
+  const { data } = await adminHttp.post<FeatureImage>(
+    "/api/settings/feature-images/from-key",
+    null,
+    { params: { key, altText, sortOrder } }
+  );
+  return data;
 }

@@ -6,6 +6,7 @@ import lombok.*;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.Where;
 
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 
 /** Back-office admin account for managing the store. */
@@ -47,7 +48,7 @@ public class Admin {
 
     /** Audit: when created. */
     @Column(name = "created_at")
-    private OffsetDateTime createdAt;
+    private LocalDateTime createdAt;
 
     /** Audit: last modifier. */
     @Column(name = "modified_by", length = 120)
@@ -55,5 +56,5 @@ public class Admin {
 
     /** Audit: when modified. */
     @Column(name = "modified_at")
-    private OffsetDateTime modifiedAt;
+    private LocalDateTime modifiedAt;
 }

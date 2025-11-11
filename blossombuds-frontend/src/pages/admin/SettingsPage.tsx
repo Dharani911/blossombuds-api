@@ -5,7 +5,7 @@ import {
   deleteSetting,
   type SettingView,
 } from "../../api/adminSettings";
-import AdminCarouselImagesSetting from "../../components/admin/AdminCarouselImagesSetting";
+import AdminFeatureImagesSetting  from "../../components/admin/AdminFeatureImagesSetting";
 import AdminCoupons from "../../components/admin/AdminCoupons";
 import AdminDeliveryPartners from "../../components/admin/AdminDeliveryPartners";
 import AdminDeliveryFeeRules from "../../components/admin/AdminDeliveryFeeRules";
@@ -309,7 +309,7 @@ export default function SettingsPage() {
         </div>
         <div className="block-body card">
           <div className="block-inner">
-            <AdminCarouselImagesSetting />
+            <AdminFeatureImagesSetting  />
           </div>
         </div>
       </section>
@@ -480,9 +480,12 @@ export default function SettingsPage() {
 const css = `
 .set-wrap{ padding:12px; color:${PRIMARY}; }
 
-/* header */
-.hd{ display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-bottom:12px; }
-.hd h2{ margin:0; font-family:"DM Serif Display", Georgia, serif; }
+/* =============== Header =============== */
+.hd{
+  display:flex; align-items:flex-end; justify-content:space-between; gap:12px;
+  margin-bottom:12px; padding:10px 12px;
+}
+.hd h2{ margin:0; font-family:"DM Serif Display", Georgia, serif; line-height:1.15; }
 .muted{ opacity:.75; font-size:12px; }
 .title .muted code{ background:rgba(0,0,0,.05); padding:2px 6px; border-radius:6px; }
 
@@ -490,47 +493,53 @@ const css = `
 .search{ position:relative; }
 .search input{
   height:38px; border:1px solid ${INK}; border-radius:12px; padding:0 36px 0 12px; background:#fff; outline:none; min-width:280px;
+  transition: box-shadow .12s ease, border-color .12s ease;
 }
-.search svg{ position:absolute; right:10px; top:10px; opacity:.6; }
+.search input:focus-visible{ box-shadow:0 0 0 3px rgba(240,93,139,.20); border-color: rgba(240,93,139,.45); }
+.search svg{ position:absolute; right:10px; top:10px; opacity:.55; }
 
-/* pill primary action */
+/* =============== Primary pill button =============== */
 .pill-btn{
-  display:inline-flex; align-items:center; gap:8px;
-  height:32px; padding:0 12px; border:none; border-radius:999px; cursor:pointer;
-  background: #fff; color:${PRIMARY}; font-weight:800; letter-spacing:.2px;
+  display:inline-flex; align-items:center; gap:8px; height:32px; padding:0 12px; border:none; border-radius:999px; cursor:pointer;
+  background:#fff; color:${PRIMARY}; font-weight:800; letter-spacing:.2px;
   box-shadow: 0 6px 18px rgba(0,0,0,.08), inset 0 0 0 1px ${INK};
-  transition: transform .12s ease, box-shadow .18s ease, background .18s ease;
+  transition: transform .12s ease, box-shadow .18s ease, background .18s ease, outline .12s ease;
 }
 .pill-btn:hover{
   transform: translateY(-1px);
-  box-shadow: 0 10px 26px rgba(0,0,0,.10), inset 0 0 0 1px rgba(246,195,32,.45);
-  background: linear-gradient(180deg, #fff, rgba(255,255,255,.92));
+  box-shadow: 0 10px 24px rgba(0,0,0,.10), inset 0 0 0 1px rgba(246,195,32,.45);
+  background: linear-gradient(180deg, #fff, rgba(255,255,255,.96));
 }
+.pill-btn:focus-visible{ outline: none; box-shadow: 0 0 0 3px rgba(240,93,139,.20), inset 0 0 0 1px rgba(246,195,32,.45); }
 .pill-btn.strong{ box-shadow: 0 8px 22px rgba(0,0,0,.10), inset 0 0 0 1px rgba(246,195,32,.45); }
 
-/* composer */
-.card{ border:1px solid ${INK}; border-radius:14px; background:#fff; box-shadow:0 12px 36px rgba(0,0,0,.08); overflow:hidden; }
+/* =============== Cards / Blocks =============== */
+.card{
+  border:1px solid ${INK}; border-radius:14px; background:#fff;
+  box-shadow:0 10px 28px rgba(0,0,0,.07); overflow:hidden;
+}
 .composer{ padding:12px; margin-bottom:12px; }
 .composer .row{ display:grid; gap:8px; margin-bottom:8px; }
 .composer .row.two{ grid-template-columns: 1fr 1fr; gap:12px; }
-.composer label{ font-size:12px; font-weight:800; opacity:.8; }
+.composer label{ font-size:12px; font-weight:800; opacity:.82; }
 .composer input{
   height:36px; border:1px solid ${INK}; border-radius:10px; padding:0 10px; outline:none; background:#fff;
+  transition: box-shadow .12s ease, border-color .12s ease;
 }
+.composer input:focus-visible{ box-shadow:0 0 0 3px rgba(240,93,139,.18); border-color: rgba(240,93,139,.45); }
 .composer .act{ display:flex; gap:8px; }
 
-/* block */
 .block{ margin-bottom:14px; }
 .block-hd{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding:0 2px 4px; }
 .block-hd h3{ margin:0; font-size:18px; font-weight:900; letter-spacing:.2px; color:${PRIMARY}; }
 .block-body.card{ padding:10px 12px; }
 .block-inner{}
 
-/* table wrapper */
+/* =============== Table-ish list =============== */
 .table{ display:block; overflow-x:auto; }
 .trow{
   display:grid;
-  grid-template-columns: 320px 1fr 180px; /* key | value | actions (for settings table) */
+  grid-template-columns: 320px minmax(0, 1fr) 180px; /* was: 320px 1fr 180px */
   align-items:center; padding:12px 14px;
   border-bottom:1px solid rgba(0,0,0,.06);
   transition: background .12s ease;
@@ -539,15 +548,25 @@ const css = `
 .trow:hover{ background: rgba(0,0,0,.02); }
 .trow:last-child{ border-bottom:none; }
 
-.lbl{ font-size:12px; font-weight:800; opacity:.8; margin-bottom:4px; display:block; }
+.lbl{ font-size:12px; font-weight:800; opacity:.82; margin-bottom:4px; display:block; }
 .in{
-  height:34px; width:100%; border:1px solid ${INK}; border-radius:8px; padding:0 10px; background:#fff; outline:none;
+  width:100%;
+  min-width: 0;                /* allow shrinking inside grid cell */
+}
+.in:focus-visible{ box-shadow:0 0 0 3px rgba(240,93,139,.18); border-color: rgba(240,93,139,.45); }
+.cell-val{ min-width: 0; }
+.cell{ min-width: 0; }
+.val{
+  display:block;
+  max-width:100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  overflow-wrap: anywhere;     /* handles super-long tokens */
+  word-break: break-word;      /* legacy fallback */
 }
 
-.cell{ min-width:0; }
-.val{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-
-/* section cards */
+/* =============== Section cards (expandable) =============== */
 .sec-card{ margin-bottom:12px; }
 .sec-hd{
   display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px;
@@ -556,20 +575,23 @@ const css = `
     linear-gradient(180deg, rgba(255,255,255,.98), rgba(255,255,255,.96));
   border-bottom:1px solid ${INK};
   cursor:pointer;
-  transition: background .2s ease, box-shadow .2s ease, border-color .2s ease;
+  transition: background .18s ease, box-shadow .18s ease, border-color .18s ease, transform .06s ease;
 }
 .sec-hd:hover{
-  box-shadow: 0 8px 22px rgba(0,0,0,.07);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(0,0,0,.07);
   border-color: rgba(246,195,32,.35);
 }
+.sec-hd:focus-visible{ outline:none; box-shadow:0 0 0 3px rgba(240,93,139,.20); border-color: rgba(240,93,139,.45); }
+
 .sec-title{ display:flex; align-items:center; gap:8px; min-width:0; }
 .sec-title .chev{
   display:inline-flex; align-items:center; justify-content:center;
-  width:22px; height:22px; border-radius:999px; background: rgba(0,0,0,.04);
-  transition: transform .18s ease, background .18s ease;
+  width:22px; height:22px; border-radius:999px; background: rgba(0,0,0,.05);
+  transition: transform .18s ease, background .12s ease;
   margin-right:2px;
 }
-.sec-hd:hover .chev{ background: rgba(0,0,0,.06); }
+.sec-hd:hover .chev{ background: rgba(0,0,0,.07); }
 .sep{ opacity:.35; font-weight:900; }
 .pill{
   display:inline-flex; align-items:center; height:24px; padding:0 10px; border-radius:999px;
@@ -579,21 +601,25 @@ const css = `
 .count{ font-size:12.5px; opacity:.7; white-space:nowrap; }
 .right-actions{ display:flex; align-items:center; gap:8px; }
 
-/* buttons */
+/* =============== Button styles =============== */
 .act{ display:flex; gap:8px; flex-wrap:nowrap; white-space:nowrap; }
 .ghost{
-  height:32px; padding:0 10px; border-radius:10px; border:1px solid ${INK}; background:#fff; color:${PRIMARY}; cursor:pointer;
+  height:32px; padding:0 10px; border-radius:10px; border:1px solid ${INK};
+  background:#fff; color:${PRIMARY}; cursor:pointer;
+  transition: box-shadow .12s ease, transform .06s ease, border-color .12s ease;
 }
+.ghost:hover{ box-shadow:0 8px 18px rgba(0,0,0,.08); transform: translateY(-1px); }
+.ghost:focus-visible{ outline:none; box-shadow:0 0 0 3px rgba(74,79,65,.18); }
 .ghost.sm{ height:28px; padding: 0 10px; border-radius:8px; font-size:12.5px; }
-.ghost.ok{ border-color: rgba(89,178,107,.4); }
-.ghost.bad{ border-color: rgba(240,93,139,.5); color:#b0003a; }
+.ghost.ok{ border-color: rgba(89,178,107,.45); }
+.ghost.bad{ border-color: rgba(240,93,139,.55); color:#b0003a; }
 
-/* draft row key group */
+/* =============== Key group =============== */
 .key-group{ display:flex; align-items:center; gap:6px; }
 .key-group .sec{ background:rgba(0,0,0,.05); padding:2px 6px; border-radius:6px; }
 .key-group .dot{ opacity:.5; font-weight:900; }
 
-/* empty state */
+/* =============== Empty state =============== */
 .empty{
   display:flex; flex-direction:column; align-items:center; justify-content:center;
   gap:8px; padding:24px 16px; text-align:center; color:${PRIMARY};
@@ -601,7 +627,7 @@ const css = `
 .empty-icon{ font-size:34px; opacity:.6; line-height:1; }
 .empty h3{ margin:0; font-size:18px; font-weight:900; letter-spacing:.2px; }
 
-/* toast */
+/* =============== Toast =============== */
 .toast{
   position: fixed; right:14px; bottom:14px; z-index:101;
   padding:10px 12px; border-radius:12px; color:#fff; animation: toast .22s ease both;
@@ -610,11 +636,21 @@ const css = `
 .toast.bad{ background: #d32f2f; }
 @keyframes toast{ from{ transform: translateY(8px); opacity:0 } to{ transform:none; opacity:1 } }
 
-/* responsive tweaks for settings table */
-@media (max-width: 860px){
+/* =============== Responsive (settings table) =============== */
+@media (max-width: 980px){
   .trow{ grid-template-columns: 280px 1fr 160px; min-width: 640px; }
 }
-@media (max-width: 680px){
+@media (max-width: 760px){
   .trow{ grid-template-columns: 240px 1fr 140px; min-width: 560px; }
+  .search input{ min-width: 220px; }
 }
+@media (max-width: 520px){
+  .trow{ grid-template-columns: 1fr; min-width: 0; }
+  .right{ gap:8px; }
+  .pill-btn{ height:30px; padding:0 10px; }
+}
+@media (prefers-reduced-motion: reduce){
+  .pill-btn,.ghost,.trow,.composer input,.search input,.sec-hd{ transition:none !important; }
+}
+
 `;

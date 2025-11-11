@@ -1,7 +1,9 @@
 package com.blossombuds.dto;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.Data;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 
 /** DTO for returning/creating an order line item. */
@@ -15,13 +17,13 @@ public class OrderItemDto {
     private Integer quantity;
     private BigDecimal unitPrice;
     private BigDecimal lineTotal;
-    private String optionsJson;   // JSON text as stored
+    private JsonNode optionsJson;   // JSON text as stored
     private String optionsText;   // human-readable variant text
     private Boolean active;
 
     // Optional audit echoes if you plan to show them
     private String createdBy;
-    private OffsetDateTime createdAt;
+    private LocalDateTime createdAt;
     private String modifiedBy;
-    private OffsetDateTime modifiedAt;
+    private LocalDateTime modifiedAt;
 }

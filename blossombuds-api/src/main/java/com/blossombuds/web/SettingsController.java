@@ -43,6 +43,26 @@ public class SettingsController {
     public Setting upsert(@Valid @RequestBody SettingDto dto, Authentication auth) {
         return settings.upsert(dto, actor(auth));
     }
+    // Reorder only: body is ["key1","key2", ...] in desired order
+    public record ReorderRequest(List<String> keys) {}
+
+    @PutMapping(value = "/admin/feature-images/order", consumes = "application/json")
+    @PreAuthorize("hasRole('ADMIN')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void reorderFeatureImages(@RequestBody ReorderRequest body) {
+        featureImages.reorder(body.keys());
+    }
+
+    // (optional) Update metadata of a single entry (altText and/or sortOrder)
+    @PatchMapping("/admin/feature-images/meta")
+    @PreAuthorize("hasRole('ADMIN')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void updateFeatureImageMeta(@RequestParam String key,
+                                       @RequestParam(required = false) String altText,
+                                       @RequestParam(required = false) Integer sortOrder) {
+        featureImages.updateMeta(key, altText, sortOrder);
+    }
+
 
     /** Get a setting by key (admin). */
     @GetMapping("/{key}")
@@ -74,6 +94,7 @@ public class SettingsController {
         return (auth != null && auth.getName() != null) ? auth.getName() : "system";
         // For admins authenticated via JWT, this will usually be their username.
     }
+    public record PresignView(String key, String url, String contentType) {}
 
     @GetMapping("/ui/feature-images")
     public List<FeatureImageDto> listFeatureImagesPublic() {
@@ -82,20 +103,49 @@ public class SettingsController {
 
     /* ---------- FEATURE TILES: ADMIN ---------- */
 
-    /**
-     * FE flow:
-     *  1) POST /api/catalog/uploads/presign  (you already have this)
-     *  2) PUT to presigned URL (browser)
-     *  3) POST /api/admin/settings/feature-images/from-key?key=tmp/abc.jpg&altText=...&sortOrder=0
-     */
-    @PostMapping("/feature-images/from-key")
+    @PostMapping("/admin/feature-images/presign")
     @PreAuthorize("hasRole('ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
-    public FeatureImageDto finalizeFromTempKey(@RequestParam String key,
-                                               @RequestParam(required = false) String altText,
-                                               @RequestParam(required = false) Integer sortOrder) {
+    public PresignView presignFeatureImage(@RequestParam String filename,
+                                           @RequestParam(required = false) String contentType) {
+        var p = featureImages.presignPut(filename, contentType); // uses the service method
+        return new PresignView(p.key(), p.url(), p.contentType());
+    }
+
+    @PostMapping("/admin/feature-images/from-key")
+    @PreAuthorize("hasRole('ADMIN')")
+    @ResponseStatus(HttpStatus.CREATED)
+    public FeatureImageDto finalizeFeatureFromTempKey(@RequestParam String key,
+                                                      @RequestParam(required = false) String altText,
+                                                      @RequestParam(required = false) Integer sortOrder) {
         return featureImages.addFromTempKey(key, altText, sortOrder);
     }
+    // Return the raw list (keys, altText, sortOrder) with fresh signed GET urls for preview
+    @GetMapping("/admin/feature-images")
+    @PreAuthorize("hasRole('ADMIN')")
+    public List<FeatureImageDto> listFeatureImagesAdmin() {
+        return featureImages.listPublic(); // same as public but signed URLs; good for admin UI previews
+    }
+
+    // Replace entire array (reorder/edit altText/sortOrder); payload is array of objects:
+// [{ "key":"ui/feature_tiles/..", "altText":"...", "sortOrder":0 }, ...]
+    @PutMapping("/admin/feature-images")
+    @PreAuthorize("hasRole('ADMIN')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void replaceFeatureImages(@RequestBody List<Map<String,Object>> items) {
+        featureImages.replaceAll(items);
+    }
+
+    // Delete one entry from settings; optionally remove the object in R2 (deleteObject=true)
+    @DeleteMapping("/admin/feature-images")
+    @PreAuthorize("hasRole('ADMIN')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteFeatureImage(@RequestParam String key,
+                                   @RequestParam(defaultValue = "false") boolean deleteObject) {
+        featureImages.remove(key, deleteObject);
+    }
+
+
 
     /* ---------- PUBLIC (homepage will call this) ---------- */
     @GetMapping("/ui/carousel-images")
@@ -106,15 +156,18 @@ public class SettingsController {
     /* ---------- ADMIN ---------- */
 
     // Upload one image -> saved to disk -> added to settings
-    @PostMapping(value = "/admin/carousel-images", consumes = "multipart/form-data")
+    // --- FEATURE IMAGES (admin, multipart like product images) ---
+    @PostMapping(value = "/admin/feature-images", consumes = "multipart/form-data")
     @PreAuthorize("hasRole('ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
-    public FeatureImageDto upload(@RequestPart("file") @NotNull MultipartFile file,
-                                  @RequestParam(required=false) String altText,
-                                  @RequestParam(required=false) Integer sortOrder) throws IOException {
-        var saved = files.saveFeatureTile(file);           // returns key + url (/media/…)
-        return carousel.addLocal(saved.key(), altText, sortOrder);
+    public FeatureImageDto uploadFeatureImage(
+            @RequestPart("file") @NotNull MultipartFile file,
+            @RequestParam(required = false) String altText,
+            @RequestParam(required = false) Integer sortOrder
+    ) throws IOException, InterruptedException {
+        return featureImages.addFromUpload(file, altText, sortOrder);
     }
+
 
     // Replace entire array (reorder, edit altText)
     @PutMapping("/admin/carousel-images")

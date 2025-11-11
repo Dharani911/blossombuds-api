@@ -20,6 +20,8 @@ import CustomerReviewsPage from "../pages/ReviewsPage";
 import CmsPage from "../pages/CmsPage";
 import PoliciesIndexPage from "../pages/PoliciesIndexPage";
 import PolicyPage from "../pages/PolicyPage";
+import ForgotPasswordPage from "../pages/ForgotPasswordPage";
+import ResetPasswordPage from "../pages/ResetPasswordPage";
 
 
 
@@ -33,6 +35,7 @@ import OrdersPage from "../pages/admin/OrdersPage";
 import AdminReviewsPage from "../pages/admin/ReviewsPage";
 import SettingsPage from "../pages/admin/SettingsPage";
 import CustomersPage from "../pages/admin/CustomersPage";
+import CreateOrderPageAdmin from "../pages/admin/CreateOrderPage";
 
 
 
@@ -57,6 +60,8 @@ export default function AppRoutes() {
           <Route path="/pages/:slug" element={<CmsPage />} />
           <Route path="/policies" element={<PoliciesIndexPage />} />
           <Route path="/policies/:slug" element={<PolicyPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
 
 
 
@@ -78,6 +83,7 @@ export default function AppRoutes() {
             <Route path="products" element={<ProductsPage />} />
             <Route path="categories" element={<CategoriesPage />} />
             <Route path="orders" element={<OrdersPage />} />
+            <Route path="orders/new" element={<CreateOrderPageAdmin />} />
             <Route path="reviews" element={<AdminReviewsPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="customers" element={<CustomersPage />} />

@@ -4,6 +4,7 @@ import com.blossombuds.domain.Order;
 import com.blossombuds.service.PrintService;
 import com.blossombuds.repository.OrderRepository;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotEmpty;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -12,6 +13,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 /** Print endpoints: invoice & packing slip PDFs. */
 @RestController
@@ -31,6 +34,21 @@ public class PrintController {
         byte[] pdf = printService.renderInvoicePdf(orderId);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=invoice-" + orderId + ".pdf")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf);
+    }
+    /**
+     * Generate a single PDF that contains packing slips for all given order IDs.
+     * Admin-only (to avoid per-order ownership checks in bulk).
+     */
+    @PostMapping(value = "/orders/packing-slips", produces = MediaType.APPLICATION_PDF_VALUE)
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<byte[]> bulkPackingSlips(
+            @RequestBody @NotEmpty List<@Min(1) Long> orderIds
+    ) {
+        byte[] pdf = printService.renderPackingSlipsPdf(orderIds);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=packing-slips.pdf")
                 .contentType(MediaType.APPLICATION_PDF)
                 .body(pdf);
     }

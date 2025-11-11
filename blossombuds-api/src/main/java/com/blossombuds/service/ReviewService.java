@@ -1,26 +1,43 @@
+// com.blossombuds.service.ReviewService
 package com.blossombuds.service;
 
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.model.*;
+import com.blossombuds.domain.Customer;
 import com.blossombuds.domain.ProductReview;
 import com.blossombuds.domain.ProductReviewImage;
-import com.blossombuds.dto.ProductReviewDto;
-import com.blossombuds.dto.ProductReviewImageDto;
+import com.blossombuds.dto.*;
+import com.blossombuds.repository.CustomerRepository;
 import com.blossombuds.repository.ProductReviewImageRepository;
 import com.blossombuds.repository.ProductReviewRepository;
+import com.blossombuds.util.ImageMagickUtil;
+import com.blossombuds.util.MagickBridge;
+import jakarta.persistence.criteria.Subquery;
+import jakarta.validation.Valid;
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.http.MediaType;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.multipart.MultipartFile;
 
-import java.time.OffsetDateTime;
-import java.util.ArrayList;
-import java.util.List;
+import java.io.*;
+import java.net.URL;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.*;
 
-/** Application service for product reviews: submit, moderate, list, and delete. */
+@Slf4j
 @Service
 @Validated
 @RequiredArgsConstructor
@@ -29,171 +46,648 @@ public class ReviewService {
 
     private final ProductReviewRepository reviewRepo;
     private final ProductReviewImageRepository imageRepo;
+    private  final CustomerRepository customerRepository;
 
-    /** Creates a review in PENDING state and persists optional images (customer or admin). */
+    // R2 / S3 (reuse your existing config)
+    private final AmazonS3 r2Client;
+    @Value("${cloudflare.r2.bucket}")   private String bucketName;
+    @Value("${cloudflare.r2.endpoint}") private String r2Endpoint;
+
+    @Value("${app.imagemagick.cmd}")    private String magickCmd;
+
+    @Value("${reviews.images.alwaysNormalize:true}")
+    private boolean alwaysNormalize;
+
+    private static final long MAX_BYTES = 10L * 1024 * 1024;
+
+    // ───────────────────────── Reviews ─────────────────────────
+
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
-    public ProductReview submit(ProductReviewDto dto, String actor) {
+    public ProductReview submit(com.blossombuds.dto.@Valid ProductReviewDto dto, String actor) {
         if (dto == null) throw new IllegalArgumentException("ProductReviewDto is required");
         if (dto.getProductId() == null) throw new IllegalArgumentException("productId is required");
         if (dto.getCustomerId() == null) throw new IllegalArgumentException("customerId is required");
-        if (dto.getRating() == null || dto.getRating() < 1 || dto.getRating() > 5) {
+        if (dto.getRating() == null || dto.getRating() < 1 || dto.getRating() > 5)
             throw new IllegalArgumentException("rating must be between 1 and 5");
-        }
-        // Ownership: customers may only submit on their own behalf
+        if (dto.getConcern() == null)
+            throw new IllegalArgumentException("concern boolean is required");
+
         ensureActorIsAdminOrCustomerSelf(actor, dto.getCustomerId());
+
+        // (Optional) Enforce: only after delivery if orderId present.
+        // Hook here to verify delivered status via OrderRepository if you want.
 
         ProductReview r = new ProductReview();
         r.setProductId(dto.getProductId());
         r.setOrderId(dto.getOrderId());
         r.setOrderItemId(dto.getOrderItemId());
         r.setCustomerId(dto.getCustomerId());
+
         r.setRating(dto.getRating());
-        r.setTitle(safeTrim(dto.getTitle()));
-        r.setBody(safeTrim(dto.getBody()));
+        r.setTitle(safeTrim(limit(dto.getTitle(), 200)));
+        r.setBody(safeTrim(limit(dto.getBody(), 4000)));
+        r.setConcern(Boolean.TRUE.equals(dto.getConcern())); // NEW
         r.setStatus("PENDING");
         r.setActive(Boolean.TRUE);
-        r.setCreatedBy(actor);
-        r.setCreatedAt(OffsetDateTime.now());
         reviewRepo.save(r);
 
-        if (dto.getImages() != null && !dto.getImages().isEmpty()) {
-            List<ProductReviewImage> batch = new ArrayList<>(dto.getImages().size());
-            int idx = 0;
-            for (ProductReviewImageDto imgDto : dto.getImages()) {
-                if (imgDto == null) continue;
-                ProductReviewImage img = new ProductReviewImage();
-                img.setReviewId(r.getId());
-                img.setPublicId(safeTrim(imgDto.getPublicId()));
-                img.setUrl(safeTrim(imgDto.getUrl()));
-                img.setSortOrder(imgDto.getSortOrder() != null ? imgDto.getSortOrder() : idx++);
-                img.setActive(Boolean.TRUE);
-                img.setCreatedBy(actor);
-                img.setCreatedAt(OffsetDateTime.now());
-                batch.add(img);
-            }
-            if (!batch.isEmpty()) {
-                imageRepo.saveAll(batch);
-            }
+        // Attach any pre-uploaded images (max 3)
+        List<ProductReviewImageDto> src = dto.getImages() == null ? List.of() : dto.getImages();
+        int count = Math.min(src.size(), 3);
+        List<ProductReviewImage> batch = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            ProductReviewImageDto imgDto = src.get(i);
+            if (imgDto == null) continue;
+            ProductReviewImage img = new ProductReviewImage();
+            img.setReviewId(r.getId());
+            img.setPublicId(safeTrim(imgDto.getPublicId()));
+            img.setUrl(safeTrim(imgDto.getUrl()));
+            img.setSortOrder(i);
+            img.setActive(Boolean.TRUE);
+            batch.add(img);
         }
+        if (!batch.isEmpty()) imageRepo.saveAll(batch);
+
         return r;
     }
 
-    /** Sets status to APPROVED or REJECTED (admin only). */
+    /** Admin approve/reject; APPROVE requires concern=true unless override. */
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
-    public ProductReview moderate(Long reviewId, String status, String actor) {
+    public ProductReview moderate(Long reviewId, String status, String actor, boolean overrideConsent) {
         if (reviewId == null) throw new IllegalArgumentException("reviewId is required");
         String s = safeTrim(status);
-        if (!"APPROVED".equals(s) && !"REJECTED".equals(s)) {
+        if (!"APPROVED".equals(s) && !"REJECTED".equals(s))
             throw new IllegalArgumentException("status must be APPROVED or REJECTED");
-        }
         ProductReview r = reviewRepo.findById(reviewId)
                 .orElseThrow(() -> new IllegalArgumentException("Review not found: " + reviewId));
+
+        if ("APPROVED".equals(s) && !Boolean.TRUE.equals(r.getConcern()) && !overrideConsent) {
+            throw new IllegalStateException("Cannot approve without customer concern=true");
+        }
         r.setStatus(s);
-        r.setModifiedBy(actor);
-        r.setModifiedAt(OffsetDateTime.now());
         return r;
     }
 
-    /** Lists approved reviews for a product (public). */
-    public List<ProductReview> listApprovedForProduct(Long productId) {
+    /** Public site: only APPROVED and concern=true. */
+    public List<ProductReviewDetailView> listApprovedForProduct(Long productId) {
         if (productId == null) throw new IllegalArgumentException("productId is required");
-        return reviewRepo.findByProductIdAndStatusOrderByIdDesc(productId, "APPROVED");
+        // Ensure repo method filters active=true OR filter here after fetching
+        List<ProductReview> rows =
+                reviewRepo.findByProductIdAndStatusOrderByIdDesc(productId, "APPROVED");
+        List<ProductReviewDetailView> out = new ArrayList<>();
+        for (ProductReview r : rows) {
+            if (!Boolean.TRUE.equals(r.getActive())) continue;            // <— add
+            if (!Boolean.TRUE.equals(r.getConcern())) continue;           // already present logic
+            out.add(toDetail(r));
+        }
+        return out;
     }
 
-    /** Lists reviews authored by a customer (that customer or admin). */
+    /** Admin/owner read detail with images (signed URLs). */
     @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
-    public List<ProductReview> listByCustomer(Long customerId, String actor) {
-        if (customerId == null) throw new IllegalArgumentException("customerId is required");
-        ensureActorIsAdminOrCustomerSelf(actor, customerId);
-        return reviewRepo.findByCustomerIdOrderByIdDesc(customerId);
+    public ProductReviewDetailView getDetail(Long reviewId, String actor) {
+        ProductReview r = reviewRepo.findById(reviewId)
+                .orElseThrow(() -> new IllegalArgumentException("Review not found: " + reviewId));
+        if (actor.startsWith("cust:")) ensureActorIsAdminOrCustomerSelf(actor, r.getCustomerId());
+        return toDetail(r);
     }
 
-    /** Soft-deletes a review (active=false) (owner or admin). */
+    /** Owner/admin soft delete. */
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
     public void delete(Long reviewId, String actor) {
+        ProductReview r = reviewRepo.findById(reviewId)
+                .orElseThrow(() -> new IllegalArgumentException("Review not found: " + reviewId));
+        ensureActorIsAdminOrCustomerSelf(actor, r.getCustomerId());
+        r.setActive(Boolean.FALSE);
+    }
+
+    // ───────────── Image upload (Multipart) — HEIC OK, no watermark ─────────────
+
+    @Transactional
+    @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
+    public ProductReviewImage uploadImage(Long reviewId, MultipartFile file, String actor)
+            throws IOException, InterruptedException {
+
+        if (reviewId == null) throw new IllegalArgumentException("reviewId is required");
+        if (file == null || file.isEmpty()) throw new IllegalArgumentException("File cannot be empty");
+
+        ProductReview r = reviewRepo.findById(reviewId)
+                .orElseThrow(() -> new IllegalArgumentException("Review not found: " + reviewId));
+        ensureActorIsAdminOrCustomerSelf(actor, r.getCustomerId());
+
+        List<ProductReviewImage> existing = imageRepo.findByReviewIdAndActiveTrueOrderBySortOrderAsc(reviewId);
+        if (existing.size() >= 3) throw new IllegalStateException("Maximum 3 images per review");
+
+        // Validate like CatalogService
+        validateFile(file);
+
+        // Normalize any input → JPEG (HEIC-safe)
+        byte[] normalizedJpeg = convertAnyToJpegBytes(
+                file.getBytes(), file.getOriginalFilename(), file.getContentType()
+        );
+
+        // (No watermark for reviews) Optionally cap/compress to reasonable size
+        // If you have ImageMagickUtil.targetSizeJpeg(...) use it; else keep normalizedJpeg
+        try {
+            normalizedJpeg = ImageMagickUtil.targetSizeJpeg(ImageMagickUtil.readImage(normalizedJpeg));
+        } catch (Exception ignore) { /* keep normalizedJpeg */ }
+
+        // Upload to R2 under reviews/{reviewId}/
+        String key = "reviews/" + reviewId + "/" + UUID.randomUUID() + ".jpg";
+        ObjectMetadata meta = new ObjectMetadata();
+        meta.setContentType("image/jpeg");
+        meta.setContentLength(normalizedJpeg.length);
+        try (InputStream in = new ByteArrayInputStream(normalizedJpeg)) {
+            r2Client.putObject(new PutObjectRequest(bucketName, key, in, meta));
+        }
+        String fileUrl = r2Endpoint + "/" + bucketName + "/" + key;
+
+        ProductReviewImage row = new ProductReviewImage();
+        row.setReviewId(reviewId);
+        row.setPublicId(key);
+        row.setUrl(fileUrl);
+        row.setSortOrder(existing.size());
+        row.setActive(Boolean.TRUE);
+
+        return imageRepo.save(row);
+    }
+
+    // ───── Presign + finalize (browser uploads to temp key; then attach) ─────
+
+    public PresignResponse presignPutForReview(String filename, String contentType) {
+        String safeName = (filename == null ? "file" : filename.replaceAll("[^A-Za-z0-9._-]", "_"));
+        String key = "uploads/reviews/tmp/" + UUID.randomUUID() + "/" + safeName;
+        Date exp = Date.from(Instant.now().plus(Duration.ofMinutes(10)));
+
+        GeneratePresignedUrlRequest req = new GeneratePresignedUrlRequest(bucketName, key)
+                .withMethod(com.amazonaws.HttpMethod.PUT)
+                .withExpiration(exp);
+        if (contentType != null && !contentType.isBlank()) {
+            req.addRequestParameter("Content-Type", contentType);
+        }
+        URL url = r2Client.generatePresignedUrl(req);
+        return new PresignResponse(key, url.toString(),
+                (contentType == null || contentType.isBlank()) ? "application/octet-stream" : contentType);
+    }
+
+    @Transactional
+    @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
+    public ProductReviewImageDto attachImageFromTempKey(Long reviewId, String tempKey, String actor) throws IOException {
+        if (reviewId == null || !StringUtils.hasText(tempKey))
+            throw new IllegalArgumentException("reviewId and key are required");
+
+        var r = reviewRepo.findById(reviewId)
+                .orElseThrow(() -> new IllegalArgumentException("Review not found: " + reviewId));
+        ensureActorIsAdminOrCustomerSelf(actor, r.getCustomerId());
+
+        var existing = imageRepo.findByReviewIdAndActiveTrueOrderBySortOrderAsc(reviewId);
+        if (existing.size() >= 3) throw new IllegalStateException("Maximum 3 images per review");
+
+        // Peek metadata only (no download)
+        var om = r2Client.getObjectMetadata(bucketName, tempKey);
+        String ctMeta = Optional.ofNullable(om.getContentType()).orElse("");
+        String ctGuess = guessContentType(tempKey, "application/octet-stream");
+        String ct = ctMeta.isBlank() ? ctGuess : ctMeta;
+
+        boolean isHeic = "image/heic".equalsIgnoreCase(ct)
+                || tempKey.toLowerCase().endsWith(".heic")
+                || tempKey.toLowerCase().endsWith(".heif");
+
+        String destKey;
+        if (!isHeic) {
+            // FAST PATH: server-side copy, keep format
+            String ext = extFromKey(tempKey);
+            destKey = "reviews/" + reviewId + "/" + UUID.randomUUID() + ext;
+            var copy = new CopyObjectRequest(bucketName, tempKey, bucketName, destKey);
+            var newMeta = new ObjectMetadata();
+            if (!ct.isBlank()) newMeta.setContentType(ct);
+            copy.setNewObjectMetadata(newMeta);
+            r2Client.copyObject(copy);
+            try { r2Client.deleteObject(new DeleteObjectRequest(bucketName, tempKey)); } catch (Exception ignore) {}
+        } else {
+            // HEIC: copy now, convert later (async)
+            destKey = "reviews/" + reviewId + "/" + UUID.randomUUID()
+                    + (tempKey.toLowerCase().endsWith(".heif") ? ".heif" : ".heic");
+            var copy = new CopyObjectRequest(bucketName, tempKey, bucketName, destKey);
+            var newMeta = new ObjectMetadata();
+            newMeta.setContentType("image/heic");
+            copy.setNewObjectMetadata(newMeta);
+            r2Client.copyObject(copy);
+            try { r2Client.deleteObject(new DeleteObjectRequest(bucketName, tempKey)); } catch (Exception ignore) {}
+        }
+
+        var row = new ProductReviewImage();
+        row.setReviewId(reviewId);
+        row.setPublicId(destKey);
+        row.setUrl(r2Endpoint + "/" + bucketName + "/" + destKey);
+        row.setSortOrder(existing.size());
+        row.setActive(Boolean.TRUE);
+        var saved = imageRepo.save(row);
+
+        if (isHeic) {
+            transcodeHeicToJpegAsync(saved.getId(), destKey);
+        }
+
+        // Return immediately (milliseconds)
+        ProductReviewImageDto dto = new ProductReviewImageDto();
+        dto.setId(saved.getId());
+        dto.setPublicId(saved.getPublicId());
+        dto.setUrl(saved.getUrl());
+        dto.setSortOrder(saved.getSortOrder());
+        return dto;
+    }
+    @Async("reviewExecutor")
+    @Transactional
+    public void transcodeHeicToJpegAsync(Long imageRowId, String heicKey) {
+        try (S3Object obj = r2Client.getObject(bucketName, heicKey);
+             InputStream in = obj.getObjectContent();
+             ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+
+            in.transferTo(baos);
+            byte[] raw = baos.toByteArray();
+
+            byte[] jpeg = convertAnyToJpegBytes(raw, heicKey, "image/heic");
+            try { jpeg = ImageMagickUtil.targetSizeJpeg(ImageMagickUtil.readImage(jpeg)); } catch (Exception ignore) {}
+
+            String jpgKey = heicKey.replaceAll("\\.(heic|heif)$", ".jpg");
+            if (jpgKey.equals(heicKey)) {
+                jpgKey = "reviews/" + imageRowId + "/" + UUID.randomUUID() + ".jpg";
+            }
+
+            var meta = new ObjectMetadata();
+            meta.setContentType("image/jpeg");
+            meta.setContentLength(jpeg.length);
+            try (InputStream up = new ByteArrayInputStream(jpeg)) {
+                r2Client.putObject(new PutObjectRequest(bucketName, jpgKey, up, meta));
+            }
+
+            try { r2Client.deleteObject(new DeleteObjectRequest(bucketName, heicKey)); } catch (Exception ignore) {}
+
+            var row = imageRepo.findById(imageRowId)
+                    .orElseThrow(() -> new IllegalArgumentException("Image not found: " + imageRowId));
+            row.setPublicId(jpgKey);
+            row.setUrl(r2Endpoint + "/" + bucketName + "/" + jpgKey);
+            imageRepo.save(row);
+        } catch (Exception e) {
+            log.warn("HEIC async transcode failed imageId={} key={} err={}", imageRowId, heicKey, e.toString());
+        }
+    }
+
+
+    // tiny helper
+    private static String extFromKey(String key) {
+        String k = key.toLowerCase(Locale.ROOT);
+        if (k.endsWith(".jpg") || k.endsWith(".jpeg")) return ".jpg";
+        if (k.endsWith(".png")) return ".png";
+        if (k.endsWith(".webp")) return ".webp";
+        if (k.endsWith(".gif")) return ".gif";
+        if (k.endsWith(".tif") || k.endsWith(".tiff")) return ".tiff";
+        if (k.endsWith(".bmp")) return ".bmp";
+        if (k.endsWith(".heic")) return ".heic";
+        if (k.endsWith(".heif")) return ".heif";
+        return ".bin";
+    }
+
+
+    // ───────────── Manage images (reorder/delete) ─────────────
+
+    @Transactional
+    @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
+    public void reorderImages(Long reviewId, List<Long> imageIds, String actor) {
         if (reviewId == null) throw new IllegalArgumentException("reviewId is required");
         ProductReview r = reviewRepo.findById(reviewId)
                 .orElseThrow(() -> new IllegalArgumentException("Review not found: " + reviewId));
-
-        // Ownership: customers may only delete their own review
         ensureActorIsAdminOrCustomerSelf(actor, r.getCustomerId());
 
-        r.setActive(Boolean.FALSE);
-        r.setModifiedBy(actor);
-        r.setModifiedAt(OffsetDateTime.now());
+        List<ProductReviewImage> current = imageRepo.findByReviewIdAndActiveTrueOrderBySortOrderAsc(reviewId);
+
+        Map<Long, ProductReviewImage> byId = new LinkedHashMap<>();
+        for (ProductReviewImage im : current) byId.put(im.getId(), im);
+
+        List<ProductReviewImage> ordered = new ArrayList<>();
+        if (imageIds != null) {
+            for (Long id : imageIds) {
+                ProductReviewImage im = byId.remove(id);
+                if (im != null) ordered.add(im);
+            }
+        }
+        ordered.addAll(byId.values());
+
+        for (int i = 0; i < ordered.size(); i++) ordered.get(i).setSortOrder(i);
+        imageRepo.saveAll(ordered);
     }
 
-    // ───────────────────────── helpers ─────────────────────────
+    @Transactional
+    @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
+    public void deleteImage(Long reviewId, Long imageId, String actor) {
+        if (reviewId == null || imageId == null) throw new IllegalArgumentException("ids required");
+        ProductReview r = reviewRepo.findById(reviewId)
+                .orElseThrow(() -> new IllegalArgumentException("Review not found: " + reviewId));
+        ensureActorIsAdminOrCustomerSelf(actor, r.getCustomerId());
 
-    /** Trims a string, returning null if input is null. */
-    private static String safeTrim(String s) {
-        return s == null ? null : s.trim();
+        ProductReviewImage im = imageRepo.findById(imageId)
+                .orElseThrow(() -> new IllegalArgumentException("Image not found: " + imageId));
+        if (!reviewId.equals(im.getReviewId())) throw new IllegalArgumentException("Image does not belong to this review");
+
+        // delete file from R2 (optional but recommended)
+        if (im.getPublicId() != null) {
+            try { r2Client.deleteObject(new DeleteObjectRequest(bucketName, im.getPublicId())); } catch (Exception ignore) {}
+        }
+        im.setActive(Boolean.FALSE);
+        imageRepo.save(im);
+
+        // Repack sort order
+        List<ProductReviewImage> remain = imageRepo.findByReviewIdAndActiveTrueOrderBySortOrderAsc(reviewId);
+        for (int i = 0; i < remain.size(); i++) remain.get(i).setSortOrder(i);
+        imageRepo.saveAll(remain);
+    }
+    public Page<ProductReviewPublicView> searchPublicApproved(String q, Pageable pageable) {
+        // Reuse your existing search: APPROVED + concern=true + active=true
+        Page<ProductReview> page = search("APPROVED", Boolean.TRUE, q, pageable);
+
+        // 1) Batch load customers
+        List<Long> custIds = page.getContent().stream()
+                .map(ProductReview::getCustomerId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<Long, Customer> byId = customerRepository.findAllById(custIds)
+                .stream().collect(java.util.stream.Collectors.toMap(Customer::getId, c -> c));
+
+        // 2) Map each review → public DTO (with customerName)
+        List<ProductReviewPublicView> rows = new ArrayList<>(page.getNumberOfElements());
+        for (ProductReview r : page.getContent()) {
+            ProductReviewPublicView v = new ProductReviewPublicView();
+            v.setId(r.getId());
+            v.setProductId(r.getProductId());
+            v.setRating(r.getRating());
+            v.setTitle(r.getTitle());
+            v.setBody(r.getBody());
+            v.setCreatedAt(r.getCreatedAt());
+            v.setCustomerId(r.getCustomerId());
+
+            Customer cust = byId.get(r.getCustomerId());
+            v.setCustomerName(cust != null ? cust.getName() : null);
+
+            // OPTIONAL: include a signed URL for the first active image (if any)
+            try {
+                List<ProductReviewImage> imgs = imageRepo
+                        .findByReviewIdAndActiveTrueOrderBySortOrderAsc(r.getId());
+                if (!imgs.isEmpty()) {
+                    ProductReviewImage first = imgs.get(0);
+                    if (first.getPublicId() != null && !first.getPublicId().isBlank()) {
+                        v.setFirstImageUrl(signGetUrl(first.getPublicId(), Duration.ofMinutes(30)));
+                    } else if (first.getUrl() != null) {
+                        v.setFirstImageUrl(first.getUrl());
+                    }
+                }
+            } catch (Exception ignored) {
+                // keep firstImageUrl null on any error
+            }
+
+            rows.add(v);
+        }
+
+        return new PageImpl<>(rows, page.getPageable(), page.getTotalElements());
     }
 
-    /** Ensures the actor is an admin or the same customer (based on JWT subject convention). */
+    // ───────────── Search (admin) — status/concern/q ─────────────
+
+    //@PreAuthorize("hasRole('ADMIN',CUSTOMER)")
+    public Page<ProductReview> search(String status, Boolean concern, String q, Pageable pageable) {
+        Specification<ProductReview> spec = alwaysTrue();
+
+        // active = true by default
+        spec = spec.and((root, query, cb) -> cb.isTrue(root.get("active")));
+
+        if (status != null && !status.isBlank()) {
+            spec = spec.and((root, query, cb) ->
+                    cb.equal(cb.upper(root.get("status")), status.trim().toUpperCase()));
+        }
+
+        if (concern != null) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("concern"), concern));
+        }
+
+        if (q != null && !q.isBlank()) {
+            final String like = "%" + q.trim().toLowerCase() + "%";
+
+            // match title/body
+            Specification<ProductReview> text = (root, query, cb) -> cb.or(
+                    cb.like(cb.lower(root.get("title")), like),
+                    cb.like(cb.lower(root.get("body")),  like)
+            );
+            spec = spec.and(text);
+
+            // numeric id match (productId / customerId / review id)
+            try {
+                Long n = Long.valueOf(q.trim());
+                Specification<ProductReview> idMatch = (root, query, cb) -> cb.or(
+                        cb.equal(root.get("productId"), n),
+                        cb.equal(root.get("customerId"), n),
+                        cb.equal(root.get("id"),        n)
+                );
+                spec = spec.or(idMatch);
+            } catch (NumberFormatException ignored) {}
+
+            // 🔎 customer name match via subquery → root.customerId IN (SELECT c.id FROM Customer c WHERE LOWER(c.name) LIKE ?)
+            Specification<ProductReview> custNameMatch = (root, query, cb) -> {
+                Subquery<Long> sq = query.subquery(Long.class);
+                var c = sq.from(Customer.class);
+                sq.select(c.get("id"))
+                        .where(cb.like(cb.lower(c.get("name")), like));
+                return root.get("customerId").in(sq);
+            };
+            spec = spec.or(custNameMatch);
+        }
+
+        return reviewRepo.findAll(spec, pageable);
+    }
+
+    // in ReviewService
+    @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
+    public void deleteTempObject(String key) {
+        if (key == null || key.isBlank())
+            throw new IllegalArgumentException("key required");
+        // Safety: only allow deleting objects in the temp folder
+        if (!key.startsWith("uploads/reviews/tmp/"))
+            throw new IllegalArgumentException("not a temp key");
+        try {
+            r2Client.deleteObject(new DeleteObjectRequest(bucketName, key));
+        } catch (Exception e) {
+            log.warn("Temp delete failed for {}: {}", key, e.toString());
+        }
+    }
+
+
+
+    // ───────────────────── helpers (mirroring CatalogService) ─────────────────────
+
+    private void validateFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("File cannot be empty");
+        }
+        if (file.getSize() > MAX_BYTES) {
+            throw new IllegalArgumentException("Max 10 MB per image");
+        }
+
+        String name = (file.getOriginalFilename() == null ? "" : file.getOriginalFilename().toLowerCase());
+        String ct   = (file.getContentType() == null ? "" : file.getContentType().toLowerCase());
+
+        boolean extOk =
+                name.endsWith(".jpg")  || name.endsWith(".jpeg") ||
+                        name.endsWith(".png")  || name.endsWith(".webp") ||
+                        name.endsWith(".gif")  || name.endsWith(".bmp")  ||
+                        name.endsWith(".tif")  || name.endsWith(".tiff") ||
+                        name.endsWith(".heic") || name.endsWith(".heif");
+
+        boolean typeOk = ct.startsWith("image/") || extOk;
+        if (!typeOk) {
+            throw new IllegalArgumentException("Only image files are supported (JPG, PNG, WebP, HEIC…)");
+        }
+    }
+
+    private byte[] convertAnyToJpegBytes(byte[] raw, String filename, String contentType) throws IOException {
+        String ct = (contentType == null || contentType.isBlank())
+                ? guessContentType(filename, "application/octet-stream")
+                : contentType;
+
+        try {
+            return ImageMagickUtil.ensureJpeg(raw, filename, ct);
+        } catch (Exception primaryFail) {
+            if (MagickBridge.looksLikeHeic(ct, filename)) {
+                try {
+                    return MagickBridge.heicToJpeg(raw, magickCmd);
+                } catch (Exception magickFail) {
+                    throw new IOException("Image conversion failed (HEIC). " + primaryFail.getMessage(), magickFail);
+                }
+            }
+            throw new IOException("Image conversion failed. " + primaryFail.getMessage(), primaryFail);
+        }
+    }
+
+    private String guessContentType(String name, String fallback) {
+        if (name == null) return fallback;
+        String n = name.toLowerCase();
+        if (n.endsWith(".heic") || n.endsWith(".heif")) return "image/heic";
+        if (n.endsWith(".jpg") || n.endsWith(".jpeg")) return "image/jpeg";
+        if (n.endsWith(".png")) return "image/png";
+        if (n.endsWith(".webp")) return "image/webp";
+        if (n.endsWith(".tif") || n.endsWith(".tiff")) return "image/tiff";
+        if (n.endsWith(".bmp")) return "image/bmp";
+        if (n.endsWith(".gif")) return "image/gif";
+        return fallback;
+    }
+
+    private String signGetUrl(String key, Duration ttl) {
+        Date exp = Date.from(Instant.now().plus(ttl));
+        GeneratePresignedUrlRequest req = new GeneratePresignedUrlRequest(bucketName, key)
+                .withMethod(com.amazonaws.HttpMethod.GET)
+                .withExpiration(exp);
+        URL url = r2Client.generatePresignedUrl(req);
+        return url.toString();
+    }
+
+
+    /** Returns the image bytes and content-type for a given review image (owner/admin). */
+    @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
+    public ImagePayload streamReviewImage(Long reviewId, Long imageId, String actor) throws IOException {
+        if (reviewId == null || imageId == null) throw new IllegalArgumentException("ids required");
+
+        ProductReview r = reviewRepo.findById(reviewId)
+                .orElseThrow(() -> new IllegalArgumentException("Review not found: " + reviewId));
+        // owner/admin check
+        ensureActorIsAdminOrCustomerSelf(actor, r.getCustomerId());
+
+        ProductReviewImage im = imageRepo.findById(imageId)
+                .orElseThrow(() -> new IllegalArgumentException("Image not found: " + imageId));
+        if (!reviewId.equals(im.getReviewId())) {
+            throw new IllegalArgumentException("Image does not belong to this review");
+        }
+        if (im.getPublicId() == null || im.getPublicId().isBlank()) {
+            throw new IllegalStateException("Image is missing storage key");
+        }
+
+        // Read bytes from R2 directly (no signed URL → same-origin stream)
+        try (S3Object obj = r2Client.getObject(bucketName, im.getPublicId());
+             InputStream in = obj.getObjectContent();
+             ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            in.transferTo(baos);
+            byte[] bytes = baos.toByteArray();
+
+            // Try to preserve content-type; default to JPEG
+            String ct = Optional.ofNullable(obj.getObjectMetadata())
+                    .map(ObjectMetadata::getContentType)
+                    .orElse(MediaType.IMAGE_JPEG_VALUE);
+
+            return new ImagePayload(bytes, ct);
+        }
+    }
+
+    @Data
+    public static class ImagePayload {
+        private final byte[] bytes;
+        private final String contentType;
+    }
+
+
+    private ProductReviewDetailView toDetail(ProductReview r) {
+        ProductReviewDetailView v = new ProductReviewDetailView();
+        v.setId(r.getId());
+        v.setProductId(r.getProductId());
+        v.setOrderId(r.getOrderId());
+        v.setOrderItemId(r.getOrderItemId());
+        v.setCustomerId(r.getCustomerId());
+        Customer cust = customerRepository.findById(r.getCustomerId()).orElseThrow(() -> new IllegalArgumentException("Customer not found: " + r.getCustomerId()));
+        v.setCustomerName(cust.getName());
+        v.setRating(r.getRating());
+        v.setTitle(r.getTitle());
+        v.setBody(r.getBody());
+        v.setStatus(r.getStatus());
+        v.setConcern(Boolean.TRUE.equals(r.getConcern()));
+        v.setCreatedAt(r.getCreatedAt());
+
+        List<ProductReviewImage> imgs = imageRepo.findByReviewIdAndActiveTrueOrderBySortOrderAsc(r.getId());
+        List<ProductReviewImageDto> out = new ArrayList<>(imgs.size());
+        for (ProductReviewImage im : imgs) {
+            ProductReviewImageDto d = new ProductReviewImageDto();
+            d.setId(im.getId());
+            d.setPublicId(im.getPublicId());
+            // return a signed URL for safe display (30 mins)
+            d.setUrl(im.getPublicId() != null ? signGetUrl(im.getPublicId(), Duration.ofMinutes(30)) : im.getUrl());
+            d.setSortOrder(im.getSortOrder());
+            out.add(d);
+        }
+        v.setImages(out);
+        return v;
+    }
+
+    private static String safeTrim(String s) { return s == null ? null : s.trim(); }
+    private static String limit(String s, int max) { return s == null ? null : (s.length() <= max ? s : s.substring(0, max)); }
+
     private void ensureActorIsAdminOrCustomerSelf(String actor, Long targetCustomerId) {
         if (targetCustomerId == null) throw new IllegalArgumentException("targetCustomerId is required");
-        if (actor == null || actor.isBlank()) {
-            throw new IllegalArgumentException("actor is required");
-        }
-        // Convention: customer JWT subject is "cust:<id>"; admins use another subject
+        if (actor == null || actor.isBlank()) throw new IllegalArgumentException("actor is required");
         if (actor.startsWith("cust:")) {
             try {
                 Long cid = Long.parseLong(actor.substring("cust:".length()));
-                if (!targetCustomerId.equals(cid)) {
-                    throw new IllegalArgumentException("Operation not permitted for this customer");
-                }
+                if (!targetCustomerId.equals(cid)) throw new IllegalArgumentException("Operation not permitted for this customer");
             } catch (NumberFormatException ex) {
                 throw new IllegalArgumentException("Invalid customer principal");
             }
         }
     }
 
-    public Page<ProductReview> search(String status, String q, Pageable pageable) {
-        Specification<ProductReview> spec = Specification.allOf(alwaysTrue());
 
-        // If you soft-delete with an active flag and don’t already have @Where(active=true),
-        // uncomment the next line:
-        // spec = spec.and((root, cq, cb) -> cb.isTrue(root.get("active")));
 
-        if (StringUtils.hasText(status)) {
-            // If your status is an enum, map it here; otherwise compare as string (case-insensitive).
-            spec = spec.and((root, cq, cb) ->
-                    cb.equal(cb.upper(root.get("status")), status.trim().toUpperCase()));
-        }
 
-        if (StringUtils.hasText(q)) {
-            String like = "%" + q.trim().toLowerCase() + "%";
 
-            Specification<ProductReview> text =
-                    (root, cq, cb) -> cb.or(
-                            cb.like(cb.lower(root.get("title")), like),
-                            cb.like(cb.lower(root.get("comment")), like)
-                    );
 
-            // Numeric exact matches for ids if q looks like a number
-            Specification<ProductReview> idMatch = null;
-            try {
-                Long n = Long.valueOf(q.trim());
-                idMatch = (root, cq, cb) -> cb.or(
-                        cb.equal(root.get("productId"), n),
-                        cb.equal(root.get("customerId"), n),
-                        cb.equal(root.get("id"), n)
-                );
-            } catch (NumberFormatException ignored) {}
 
-            spec = spec.and(text);
-            if (idMatch != null) spec = spec.or(idMatch);
-        }
-
-        // Sort: by createdAt desc (if present) then id desc as fallback
-        return reviewRepo.findAll(spec, pageable);
-    }
-
-    private static Specification<ProductReview> alwaysTrue() {
+    private static <T> Specification<T> alwaysTrue() {
         return (root, cq, cb) -> cb.conjunction();
     }
 }

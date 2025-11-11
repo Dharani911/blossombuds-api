@@ -3,16 +3,25 @@ package com.blossombuds.domain;
 import com.blossombuds.db.GenericPgEnumConverter;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcType;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.Where;
+import org.hibernate.dialect.PostgreSQLEnumJdbcType;
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedBy;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 
 /** Payment record associated with an order (Razorpay snapshots included). */
 @SQLDelete(sql = "UPDATE payments SET active = false, modified_at = now() WHERE id = ?")
 @Where(clause = "active = true")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor
+@EntityListeners(AuditingEntityListener.class)
 @Entity @Table(name = "payments")
 public class Payment {
 
@@ -27,8 +36,8 @@ public class Payment {
     private Order order;
 
     /** Payment lifecycle state (PostgreSQL enum: payment_status_enum). */
-    @Convert(converter = GenericPgEnumConverter.class)
     @Enumerated(EnumType.STRING)
+    @JdbcType(PostgreSQLEnumJdbcType.class)
     @Column(name = "status", columnDefinition = "payment_status_enum")
     private PaymentStatus status;
 
@@ -52,19 +61,20 @@ public class Payment {
     @Column(nullable = false)
     private Boolean active = Boolean.TRUE;
 
-    /** Audit: created by whom. */
     @Column(name = "created_by", length = 120)
+    @CreatedBy
     private String createdBy;
 
-    /** Audit: when created. */
     @Column(name = "created_at")
-    private OffsetDateTime createdAt;
+    @CreatedDate
+    private LocalDateTime createdAt;
 
-    /** Audit: last modifier. */
     @Column(name = "modified_by", length = 120)
+    @LastModifiedBy
     private String modifiedBy;
 
-    /** Audit: when modified. */
+    /** Timestamp when the record was last modified. */
     @Column(name = "modified_at")
-    private OffsetDateTime modifiedAt;
+    @LastModifiedDate
+    private LocalDateTime modifiedAt;
 }

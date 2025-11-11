@@ -38,8 +38,8 @@ public class AdminService {
         //a.setEnabled(dto.getEnabled() != null ? dto.getEnabled() : Boolean.TRUE);
         a.setActive(dto.getActive() != null ? dto.getActive() : Boolean.TRUE);
         a.setPasswordHash(passwordHash);
-        a.setCreatedBy(actor);
-        a.setCreatedAt(OffsetDateTime.now());
+        //a.setCreatedBy(actor);
+        //a.setCreatedAt(OffsetDateTime.now());
         return adminRepo.save(a);
     }
 
@@ -59,8 +59,8 @@ public class AdminService {
         //if (dto.getDisplayName() != null) a.setDisplayName(dto.getDisplayName());
         //if (dto.getEnabled() != null) a.setEnabled(dto.getEnabled());
         if (dto.getActive() != null) a.setActive(dto.getActive());
-        a.setModifiedBy(actor);
-        a.setModifiedAt(OffsetDateTime.now());
+        //a.setModifiedBy(actor);
+        //a.setModifiedAt(OffsetDateTime.now());
         return a; // JPA dirty checking persists changes on tx commit
     }
 
@@ -76,8 +76,8 @@ public class AdminService {
         }
         Admin a = get(adminId);
         a.setPasswordHash(passwordHash);
-        a.setModifiedBy(actor);
-        a.setModifiedAt(OffsetDateTime.now());
+        //a.setModifiedBy(actor);
+        //a.setModifiedAt(OffsetDateTime.now());
         return a;
     }
 
@@ -90,8 +90,8 @@ public class AdminService {
         }
         Admin a = get(adminId);
         //a.setEnabled(enabled);
-        a.setModifiedBy(actor);
-        a.setModifiedAt(OffsetDateTime.now());
+        //a.setModifiedBy(actor);
+        //a.setModifiedAt(OffsetDateTime.now());
         return a;
     }
 
@@ -104,8 +104,8 @@ public class AdminService {
         }
         Admin a = get(adminId);
         a.setActive(active);
-        a.setModifiedBy(actor);
-        a.setModifiedAt(OffsetDateTime.now());
+        //a.setModifiedBy(actor);
+        //a.setModifiedAt(OffsetDateTime.now());
         return a;
     }
 

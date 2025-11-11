@@ -21,8 +21,8 @@ public class TrackingLinkService {
 
         // Replace common placeholders; default to {tracking}
         String url = p.getTrackingUrlTemplate();
-        url = url.replace("{tracking}", trackingNumber.trim());
-        url = url.replace("{TRACKING}", trackingNumber.trim());
+        //url = url.replace("{tracking}", trackingNumber.trim());
+        //url = url.replace("{TRACKING}", trackingNumber.trim());
         return url;
     }
 }

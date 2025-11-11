@@ -16,6 +16,18 @@ import {
 /* Compact product card (slightly bigger, 2-line name) */
 function SmallProductCard({ p, onOpen }: { p: Product; onOpen: (id:number)=>void }) {
   const img = p.primaryImageUrl || "";
+  const priceText = (() => {
+    const v = (p as any)?.price;
+    if (v == null || v === "") return null;
+    const n = Number(v);
+    if (!Number.isFinite(n)) return String(v);
+    try {
+      return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(n);
+    } catch {
+      return String(v);
+    }
+  })();
+
   return (
     <button className="p" onClick={()=>onOpen(p.id)} title={p.name} aria-label={`Open ${p.name}`}>
       <div className="thumb">
@@ -23,11 +35,7 @@ function SmallProductCard({ p, onOpen }: { p: Product; onOpen: (id:number)=>void
       </div>
       <div className="meta">
         <div className="name" title={p.name}>{p.name}</div>
-        {typeof p.price === "number" && (
-          <div className="price">
-            {new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(p.price)}
-          </div>
-        )}
+        {priceText && <div className="price">{priceText}</div>}
       </div>
     </button>
   );
@@ -114,44 +122,66 @@ export default function ShopCategoriesPage() {
   }, [selectedParentId, cats]);
 
   // load products for each sub, fill image if missing
-  useEffect(() => {
-    if (subs.length === 0) { setProdBySub({}); return; }
-    let live = true;
-    (async () => {
-      try {
-        const entries = await Promise.all(
-          subs.map(async sc => {
-            const page: PageResp<Product> = await listProductsByCategory(sc.id, 0, 200);
-            const rows = (page?.content || []).map(p => ({ ...p })) as Product[];
+ // inside ShopCategoriesPage, in the "load products for each subcategory" effect:
+ useEffect(() => {
+   if (subs.length === 0) { setProdBySub({}); return; }
+   let live = true;
+   (async () => {
+     try {
+       const entries = await Promise.all(
+         subs.map(async sc => {
+           const page: PageResp<Product> = await listProductsByCategory(sc.id, 0, 200);
 
-            await Promise.all(rows.map(async (p, i) => {
-              if (!p.primaryImageUrl) {
-                try {
-                  const imgs = await listProductImages(p.id);
-                  if (imgs?.[0]?.url) rows[i].primaryImageUrl = imgs[0].url;
-                } catch {/* ignore */}
-              }
-            }));
+           // ✅ show only products explicitly marked visible (true)
+           let rows = (page?.content || []).filter((p: any) => {
+             const v = (p?.visible ?? p?.isVisible ?? null);
+             const isVisible = v === true;          // only explicit true passes
+             const isActive  = p?.active !== false; // keep soft-deleted out
+             return isActive && isVisible;
+           }) as Product[];
 
-            return [sc.id, rows] as const;
-          })
-        );
-        if (!live) return;
-        const map: Record<number, Product[]> = {};
-        const opens: Record<number, boolean> = {};
-        for (const [sid, rows] of entries) {
-          map[sid] = rows;
-          opens[sid] = true;
-        }
-        setProdBySub(map);
-        setOpen(opens);
-      } catch {
-        if (!live) return;
-        setProdBySub({});
-      }
-    })();
-    return () => { live = false; };
-  }, [subs]);
+           // featured first, then sortOrder, then name
+           rows = rows.sort((a: any, b: any) => {
+             const fa = a?.featured ? 1 : 0;
+             const fb = b?.featured ? 1 : 0;
+             if (fb - fa !== 0) return fb - fa;
+             const so = (a?.sortOrder ?? 0) - (b?.sortOrder ?? 0);
+             if (so !== 0) return so;
+             return String(a?.name || "").localeCompare(String(b?.name || ""));
+           });
+
+           // backfill primary image if missing
+           await Promise.all(rows.map(async (p, i) => {
+             if (!p.primaryImageUrl) {
+               try {
+                 const imgs = await listProductImages(p.id);
+                 if (imgs?.[0]?.url) rows[i].primaryImageUrl = imgs[0].url as any;
+               } catch {/* ignore */}
+             }
+           }));
+
+           return [sc.id, rows] as const;
+         })
+       );
+
+       if (!live) return;
+       const map: Record<number, Product[]> = {};
+       const opens: Record<number, boolean> = {};
+       for (const [sid, rows] of entries) {
+         map[sid] = rows;
+         opens[sid] = true;
+       }
+       setProdBySub(map);
+       setOpen(opens);
+     } catch {
+       if (!live) return;
+       setProdBySub({});
+     }
+   })();
+   return () => { live = false; };
+ }, [subs]);
+
+
 
   const setSelectedParent = (pid: number) => nav(`/categories/${pid}`);
   const toggle = (sid: number) => setOpen(m => ({ ...m, [sid]: !m[sid] }));
@@ -197,7 +227,12 @@ export default function ShopCategoriesPage() {
             const openNow = !!open[sc.id];
             return (
               <section key={sc.id} className="sec card">
-                <header className="sec-hd" onClick={() => toggle(sc.id)}>
+                <header
+                  className="sec-hd"
+                  onClick={() => toggle(sc.id)}
+                  role="button"
+                  aria-expanded={openNow}
+                >
                   <div className="sec-title">
                     <h3>{sc.name}</h3>
                     {sc.description && <p className="muted">{sc.description}</p>}

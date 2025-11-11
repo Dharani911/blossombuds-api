@@ -6,6 +6,7 @@ import lombok.Setter;
 import org.hibernate.annotations.Where;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 
 /** Temporary server-side stash of a checkout draft used to create Order only after payment capture. */
@@ -21,11 +22,11 @@ public class CheckoutIntent {
     private Long customerId;
 
     /** Serialized JSON of OrderDto (shipping snapshot etc.). */
-    @Lob @Column(name = "order_draft_json", nullable = false)
+    @Column(columnDefinition = "text")
     private String orderDraftJson;
 
     /** Serialized JSON of List<OrderItemDto>. */
-    @Lob @Column(name = "items_json", nullable = false)
+    @Column(columnDefinition = "text")
     private String itemsJson;
 
     /** Grand total that will be charged (for sanity check). */
@@ -51,8 +52,8 @@ public class CheckoutIntent {
     private OffsetDateTime expiresAt;
 
     // audit
-    @Column(name = "created_at") private OffsetDateTime createdAt;
+    @Column(name = "created_at") private LocalDateTime createdAt;
     @Column(name = "created_by", length = 64) private String createdBy;
-    @Column(name = "modified_at") private OffsetDateTime modifiedAt;
+    @Column(name = "modified_at") private LocalDateTime modifiedAt;
     @Column(name = "modified_by", length = 64) private String modifiedBy;
 }

@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Locale;
@@ -208,10 +209,10 @@ public class PromotionService {
         r.setCoupon(c);
         r.setOrder(order);
         r.setCustomerId(customerId);
-        r.setRedeemedAt(OffsetDateTime.now());
+        r.setAmountApplied(order.getDiscountTotal());
         r.setActive(Boolean.TRUE);
-        r.setCreatedBy(actor);
-        r.setCreatedAt(OffsetDateTime.now());
+        //r.setCreatedBy(actor);
+        //r.setCreatedAt(OffsetDateTime.now());
         return redemptionRepo.save(r);
     }
 
@@ -222,8 +223,8 @@ public class PromotionService {
         CouponRedemption r = redemptionRepo.findById(redemptionId)
                 .orElseThrow(() -> new IllegalArgumentException("Redemption not found: " + redemptionId));
         r.setActive(Boolean.FALSE);
-        r.setModifiedBy(actor);
-        r.setModifiedAt(OffsetDateTime.now());
+        //r.setModifiedBy(actor);
+        //r.setModifiedAt(OffsetDateTime.now());
     }
 
     /* ======================= Internal helpers ======================= */

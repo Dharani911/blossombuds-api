@@ -5,52 +5,69 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.Where;
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedBy;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 
-/** Value under a product option (e.g., L24, Gold Clip, Red). */
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor
+@Entity
+@Table(name = "product_option_values",
+        uniqueConstraints = @UniqueConstraint(name = "uk_pov_option_code", columnNames = {"option_id","value_code"}))
+@EntityListeners(AuditingEntityListener.class)
 @SQLDelete(sql = "UPDATE product_option_values SET active = false, modified_at = now() WHERE id = ?")
 @Where(clause = "active = true")
-@Getter @Setter @NoArgsConstructor @AllArgsConstructor
-@Entity @Table(name = "product_option_values",
-        uniqueConstraints = @UniqueConstraint(name = "uk_pov_option_code", columnNames = {"option_id","value_code"}))
+
 public class ProductOptionValue {
 
-    /** Surrogate primary key. */
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** Parent option. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "option_id", nullable = false)
     @JsonIgnore
     @ToString.Exclude @EqualsAndHashCode.Exclude
     private ProductOption option;
 
-    /** Internal key (e.g., L24). */
     @Column(name = "value_code", length = 80)
     private String valueCode;
 
-    /** Display label. */
     @Column(name = "value_label", length = 120)
     private String valueLabel;
 
-    /** Optional surcharge (default 0). */
     @Column(name = "price_delta", precision = 12, scale = 2)
     private BigDecimal priceDelta;
 
-    /** Value sort order. */
     @Column(name = "sort_order")
     private Integer sortOrder = 0;
 
-    /** Soft-visibility flag. */
+    /** Usable flag (false => blur + “coming soon”). */
     @Column(nullable = false)
     private Boolean active = Boolean.TRUE;
 
-    /** Audit. */
-    @Column(name = "created_by", length = 120) private String createdBy;
-    @Column(name = "created_at") private OffsetDateTime createdAt;
-    @Column(name = "modified_by", length = 120) private String modifiedBy;
-    @Column(name = "modified_at") private OffsetDateTime modifiedAt;
+    /** Listable flag (false => hidden entirely). */
+    @Column(nullable = false)
+    private Boolean visible = Boolean.TRUE;
+
+    @Column(name = "created_by", length = 120)
+    @CreatedBy
+    private String createdBy;
+
+    @Column(name = "created_at")
+    @CreatedDate
+    private LocalDateTime createdAt;
+
+    @Column(name = "modified_by", length = 120)
+    @LastModifiedBy
+    private String modifiedBy;
+
+    /** Timestamp when the record was last modified. */
+    @Column(name = "modified_at")
+    @LastModifiedDate
+    private LocalDateTime modifiedAt;
 }

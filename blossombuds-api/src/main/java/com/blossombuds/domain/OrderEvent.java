@@ -4,39 +4,70 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.Where;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedBy;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.util.Map;
 
-/** Immutable audit log for order lifecycle events. */
 @SQLDelete(sql = "UPDATE order_events SET active = false, modified_at = now() WHERE id = ?")
 @Where(clause = "active = true")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor
-@Entity @Table(name = "order_events")
+@EntityListeners(AuditingEntityListener.class)
+@Entity @Table(name = "order_events") // add schema if you use it
 public class OrderEvent {
 
-    /** Surrogate primary key for order events. */
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** Owning order for this event. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "order_id", nullable = false)
     @ToString.Exclude @EqualsAndHashCode.Exclude
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private Order order;
 
-    /** Event type label (e.g., CREATED, STATUS_CHANGED, PAYMENT_CAPTURED). */
-    @Column(name = "event_type", length = 60)
+    @Column(name = "event_type", length = 60, nullable = false)
     private String eventType;
 
-    /** Human-readable event note. */
-    @Column(name = "note", columnDefinition = "text")
-    private String note;
+    /** Store JSONB in DB; we project a simple { "note": "..." } shape by default. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "details", columnDefinition = "jsonb")
+    private Map<String, Object> details;
 
-    /** Audit: created by whom. */
     @Column(name = "created_by", length = 120)
+    @CreatedBy
     private String createdBy;
 
-    /** Audit: when created. */
     @Column(name = "created_at")
-    private OffsetDateTime createdAt;
+    @CreatedDate
+    private LocalDateTime createdAt;
+
+    @Column(name = "modified_by", length = 120)
+    @LastModifiedBy
+    private String modifiedBy;
+
+    /** Timestamp when the record was last modified. */
+    @Column(name = "modified_at")
+    @LastModifiedDate
+    private LocalDateTime modifiedAt;
+
+    @Column(name = "active")
+    private Boolean active = Boolean.TRUE;
+
+    // Convenience: keep old getter/setter semantics so service code need not change
+    @Transient
+    public String getNote() {
+        return details == null ? null : (String) details.get("note");
+    }
+
+    public void setNote(String note) {
+        // if you later want to store richer payloads, extend this map
+        this.details = Map.of("note", note);
+    }
 }

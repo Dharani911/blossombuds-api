@@ -6,13 +6,14 @@ const PRIMARY = "var(--bb-primary)";
 const INK = "rgba(0,0,0,.08)";
 const GOLD = "#F6C320";
 
+/* ---------------- Stars ---------------- */
 function Star({ filled = false, half = false }: { filled?: boolean; half?: boolean }) {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
       <defs>
         <linearGradient id="rv-half">
-          <stop offset="50%" stopColor={GOLD}/>
-          <stop offset="50%" stopColor="transparent"/>
+          <stop offset="50%" stopColor={GOLD} />
+          <stop offset="50%" stopColor="transparent" />
         </linearGradient>
       </defs>
       <path
@@ -26,8 +27,8 @@ function Star({ filled = false, half = false }: { filled?: boolean; half?: boole
 }
 
 function Stars({ rating }: { rating: number }) {
-  const full = Math.floor(rating);
-  const half = rating - full >= 0.5;
+  const full = Math.floor(rating || 0);
+  const half = (rating || 0) - full >= 0.5;
   return (
     <span className="stars">
       {Array.from({ length: 5 }).map((_, i) => (
@@ -37,28 +38,30 @@ function Stars({ rating }: { rating: number }) {
   );
 }
 
+/* ---------------- Page ---------------- */
+
 type SortKey = "new" | "rating";
 
-/** Optional: accept a productId to switch to the per-product list endpoint */
 export default function ReviewsPage({ productId }: { productId?: number }) {
   const [rows, setRows] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
   const [page, setPage] = useState(0);
-  const [size] = useState(10);
+  const [size] = useState(12);
   const [total, setTotal] = useState(0);
 
   const [q, setQ] = useState("");
-  const [pendingQ, setPendingQ] = useState(""); // debounced UI text
+  const [pendingQ, setPendingQ] = useState("");
   const [sort, setSort] = useState<SortKey>("new");
 
-  // Debounce search input → q
+  // Debounce search
   useEffect(() => {
     const t = setTimeout(() => setQ(pendingQ.trim()), 300);
     return () => clearTimeout(t);
   }, [pendingQ]);
 
+  // Fetch
   useEffect(() => {
     let live = true;
     (async () => {
@@ -70,7 +73,7 @@ export default function ReviewsPage({ productId }: { productId?: number }) {
           size,
           sort,
           q: q || undefined,
-          productId, // if provided, API switches to /product/{id}
+          productId,
         });
         if (!live) return;
         setRows(out.rows || []);
@@ -82,17 +85,37 @@ export default function ReviewsPage({ productId }: { productId?: number }) {
         if (live) setLoading(false);
       }
     })();
-    return () => { live = false; };
+    return () => {
+      live = false;
+    };
   }, [page, size, sort, q, productId]);
 
   const pageCount = Math.max(1, Math.ceil(total / size));
 
-  // Aggregate (from current page only, for snappy UI)
+  const items = useMemo(
+    () =>
+      rows.map((r) => {
+        const firstImageUrl =
+          (r.images && r.images[0]?.url) || (r as any).firstImageUrl || null;
+        return {
+          id: r.id,
+          when: r.createdAt,
+          title: r.title?.trim() || undefined,
+          text: (r.content ?? r.title ?? "").toString().trim() || "Rated without comment.",
+          rating: Number(r.rating || 0),
+          author: (r.authorName || "").trim() || "Customer",
+          productName: r.productName?.trim() || undefined,
+          img: firstImageUrl,
+        };
+      }),
+    [rows]
+  );
+
   const avgRating = useMemo(() => {
-    if (!rows?.length) return 0;
-    const sum = rows.reduce((s, r) => s + (r.rating || 0), 0);
-    return Math.round((sum / rows.length) * 10) / 10;
-  }, [rows]);
+    if (!items.length) return 0;
+    const sum = items.reduce((s, it) => s + (it.rating || 0), 0);
+    return Math.round((sum / items.length) * 10) / 10;
+  }, [items]);
 
   return (
     <div className="rv-wrap">
@@ -102,9 +125,10 @@ export default function ReviewsPage({ productId }: { productId?: number }) {
         <div className="inner">
           <h1>{productId ? "Product Reviews" : "Customer Reviews"}</h1>
           <p>{productId ? "Approved reviews for this product." : "What customers are saying."}</p>
+
           <div className="kpis">
             <div className="k">
-              <div className="n">{rows.length ? avgRating : "—"}</div>
+              <div className="n">{items.length ? avgRating : "—"}</div>
               <div className="l">Avg rating (this page)</div>
             </div>
             <div className="k">
@@ -117,7 +141,10 @@ export default function ReviewsPage({ productId }: { productId?: number }) {
             <div className="search">
               <input
                 value={pendingQ}
-                onChange={(e)=>{ setPendingQ(e.target.value); setPage(0); }}
+                onChange={(e) => {
+                  setPendingQ(e.target.value);
+                  setPage(0);
+                }}
                 placeholder="Search title, comment or product…"
                 aria-label="Search reviews"
               />
@@ -131,7 +158,10 @@ export default function ReviewsPage({ productId }: { productId?: number }) {
               <label>Sort</label>
               <select
                 value={sort}
-                onChange={e=>{ setSort(e.target.value as SortKey); setPage(0); }}
+                onChange={(e) => {
+                  setSort(e.target.value as SortKey);
+                  setPage(0);
+                }}
               >
                 <option value="new">Newest</option>
                 <option value="rating">Highest rated</option>
@@ -143,8 +173,10 @@ export default function ReviewsPage({ productId }: { productId?: number }) {
 
       <main className="body">
         {loading && (
-          <div className="list">
-            {Array.from({length: 6}).map((_,i)=>(<div className="card sk" key={i}/>))}
+          <div className="grid">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div className="card sk" key={i} />
+            ))}
           </div>
         )}
 
@@ -156,7 +188,7 @@ export default function ReviewsPage({ productId }: { productId?: number }) {
           </div>
         )}
 
-        {!loading && !err && rows.length === 0 && (
+        {!loading && !err && items.length === 0 && (
           <div className="empty">
             <div className="empty-icon">📝</div>
             <h3>No reviews found</h3>
@@ -164,24 +196,36 @@ export default function ReviewsPage({ productId }: { productId?: number }) {
           </div>
         )}
 
-        {!loading && !err && rows.length > 0 && (
-          <div className="list">
-            {rows.map(r=>(
+        {!loading && !err && items.length > 0 && (
+          <div className="grid">
+            {items.map((r) => (
               <article className="card" key={r.id}>
+                {r.img && (
+                  <div className="thumb">
+                    <img
+                      src={r.img}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
+                )}
+
                 <header className="h">
                   <div className="left">
                     <Stars rating={r.rating} />
                     <h3>{r.title || `Rated ${r.rating}★`}</h3>
                   </div>
                   <div className="right">
-                    <time dateTime={r.createdAt}>
-                      {new Date(r.createdAt).toLocaleDateString()}
-                    </time>
+                    <time dateTime={r.when}>{new Date(r.when).toLocaleDateString()}</time>
                   </div>
                 </header>
-                <p className="txt">{r.content}</p>
+
+                <p className="txt clamp">{r.text}</p>
+
                 <footer className="f">
-                  <span className="who">{r.authorName || "Customer"}</span>
+                  <span className="who">{r.author}</span>
                   {r.productName && <span className="prod">• {r.productName}</span>}
                 </footer>
               </article>
@@ -189,12 +233,17 @@ export default function ReviewsPage({ productId }: { productId?: number }) {
           </div>
         )}
 
-        {/* Pagination (server total) */}
         {!loading && !err && pageCount > 1 && (
           <nav className="pager" aria-label="Reviews pagination">
-            <button disabled={page<=0} onClick={()=>setPage(p=>p-1)}>Prev</button>
-            <span>Page {page+1} / {pageCount}</span>
-            <button disabled={page>=pageCount-1} onClick={()=>setPage(p=>p+1)}>Next</button>
+            <button disabled={page <= 0} onClick={() => setPage((p) => p - 1)}>
+              Prev
+            </button>
+            <span>
+              Page {page + 1} / {pageCount}
+            </span>
+            <button disabled={page >= pageCount - 1} onClick={() => setPage((p) => p + 1)}>
+              Next
+            </button>
           </nav>
         )}
       </main>
@@ -202,6 +251,7 @@ export default function ReviewsPage({ productId }: { productId?: number }) {
   );
 }
 
+/* ---------------- styles ---------------- */
 const css = `
 .rv-wrap{ background: var(--bb-bg); color: ${PRIMARY}; min-height: 60vh; }
 .hero{
@@ -212,7 +262,7 @@ const css = `
 .hero h1{ margin:0 0 6px; font-family:"DM Serif Display", Georgia, serif; font-size:30px; }
 .hero p{ margin:0 0 12px; opacity:.9; }
 
-.kpis{ display:flex; gap:14px; margin:8px 0 12px; }
+.kpis{ display:flex; flex-wrap: wrap; gap:14px; margin:8px 0 12px; }
 .k{ background:#fff; border:1px solid ${INK}; border-radius:12px; padding:10px 12px; box-shadow:0 10px 26px rgba(0,0,0,.08); }
 .k .n{ font-size:18px; font-weight:900; }
 .k .l{ font-size:12px; opacity:.75; }
@@ -229,30 +279,81 @@ const css = `
 
 .body{ max-width:1100px; margin:14px auto 40px; padding: 0 16px; }
 
-.list{ display:grid; gap:12px; }
-.card{
-  border:1px solid ${INK}; border-radius:14px; background:#fff; box-shadow:0 10px 28px rgba(0,0,0,.08); padding:12px;
+/* responsive grid for cards */
+.grid{
+  display:grid;
+  gap:16px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  align-items: start;
 }
-.card.sk{ height:110px; background:linear-gradient(90deg, #eee, #f8f8f8, #eee); background-size:200% 100%; animation: shimmer 1.2s linear infinite; border:none; }
+
+/* cards */
+.card{
+  border:1px solid ${INK};
+  border-radius:14px;
+  background:#fff;
+  box-shadow:0 10px 28px rgba(0,0,0,.08);
+  padding:12px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  min-width:0; /* prevent overflow in grid cells */
+}
+
+/* consistent image box */
+.thumb{
+  width:100%;
+  aspect-ratio: 4 / 3; /* consistent crop */
+  border-radius: 10px;
+  overflow:hidden;
+  background:#fafafa;
+  border:1px solid ${INK};
+}
+.thumb img{
+  width:100%;
+  height:100%;
+  object-fit: cover;
+  display:block;
+}
+
+/* skeleton card */
+.card.sk{
+  height:220px;
+  background:linear-gradient(90deg, #eee, #f8f8f8, #eee);
+  background-size:200% 100%;
+  animation: shimmer 1.2s linear infinite;
+  border:none;
+}
 @keyframes shimmer{ from{ background-position: 200% 0; } to{ background-position: -200% 0; } }
 
+/* header */
 .h{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
-.h .left{ display:flex; align-items:center; gap:10px; }
-.h h3{ margin:0; font-size:16px; }
-.stars{ display:inline-flex; gap:2px; align-items:center; }
+.h .left{ display:flex; align-items:center; gap:10px; min-width:0; }
+.h h3{ margin:0; font-size:16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stars{ display:inline-flex; gap:2px; align-items:center; flex-shrink:0; }
 
-.txt{ margin:10px 0 6px; line-height:1.5; }
-.f{ display:flex; gap:8px; font-size:13px; opacity:.85; }
+/* text */
+.txt{ margin:2px 0 4px; line-height:1.5; color:${PRIMARY}; }
+.txt.clamp{
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* footer */
+.f{ display:flex; gap:8px; font-size:13px; opacity:.85; align-items:center; }
 .who{ font-weight:700; }
 .prod{ opacity:.9; }
 
+/* empty + pager */
 .empty{
   display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;
   gap:8px; padding:36px 16px; color:${PRIMARY};
 }
 .empty-icon{ font-size:36px; opacity:.6; }
 
-.pager{ display:flex; gap:10px; align-items:center; justify-content:center; margin-top:12px; }
+.pager{ display:flex; gap:10px; align-items:center; justify-content:center; margin-top:16px; }
 .pager button{
   height:34px; padding:0 10px; border:1px solid ${INK}; border-radius:10px; background:#fff; cursor:pointer;
 }
