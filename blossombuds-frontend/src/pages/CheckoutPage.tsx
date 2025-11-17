@@ -260,6 +260,25 @@ hr.sep{ border:none; height:1px; background:var(--ink); margin:6px 0; }
   box-shadow: 0 0 0 3px rgba(246,195,32,.18);
 }
 
+.checkbox-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 500;
+  margin-top: 6px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--primary);
+}
+
+.checkbox-line input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  margin: 0;
+}
+
 
 /* === Overlays === */
 .modal{
@@ -298,7 +317,10 @@ svg.icon { width: 24px; height: 24px; }
 }
 .na-bd{ padding:12px; overflow:auto; display:grid; gap:10px; }
 .na-row2{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
-@media (max-width: 680px){ .na-row2{ grid-template-columns: 1fr; } }
+@media (max-width: 680px){ .na-row2{ grid-template-columns: 1fr; } .checkbox {
+                                                                       font-size: 13px;
+                                                                       gap: 6px;
+                                                                     } }
 `;
 
 // INR
@@ -752,7 +774,9 @@ export default function CheckoutPage() {
   const [naLine2, setNaLine2] = useState("");
   const [naPincode, setNaPincode] = useState("");
   const [naStateId, setNaStateId] = useState<number | "">("");
-  const [naDistrictId, setNaDistrictId] = useState<number | "">("");
+  const [naDistrictId, setNaDistrictId] = useState<number | null>(
+    editAddr ? editAddr.districtId ?? null : null
+  );
   const [naCountryId, setNaCountryId] = useState<number | "">("");
   const [naMakeDefault, setNaMakeDefault] = useState(true);
   const [naBusy, setNaBusy] = useState(false);
@@ -831,7 +855,10 @@ export default function CheckoutPage() {
         const d = await getDistrictsByState(naStateId);
         if (!live) return;
         setModalDistricts(d || []);
-        setNaDistrictId("");
+        if (!editAddr || editAddr.stateId !== naStateId) {
+          setNaDistrictId("");
+        }
+
       } finally {
         setLoadingDistricts(false);
       }
@@ -1445,11 +1472,12 @@ export default function CheckoutPage() {
                   </select>
                 </div>
               )}
-
-              <label style={{display:"flex", alignItems:"center", gap:8}}>
-                <input type="checkbox" checked={naMakeDefault} onChange={e=>setNaMakeDefault(e.target.checked)} />
-                <span className="small">Make this my default {modalContext === "intl" ? "international" : "shipping"} address</span>
+                {editAddr && (
+              <label className="checkbox-line">
+                <input type="checkbox" checked={naMakeDefault} onChange={e => setNaMakeDefault(e.target.checked)} />
+                <span>Make this my default {modalContext === "intl" ? "international" : "shipping"} address</span>
               </label>
+)}
             </div>
 
             <div className="sheet-ft">

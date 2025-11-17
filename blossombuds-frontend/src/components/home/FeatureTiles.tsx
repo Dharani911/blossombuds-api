@@ -93,10 +93,15 @@ const styles = `
 .ft{
   padding: 18px 0 28px;
   color: var(--ft-ink);
+  -webkit-tap-highlight-color: transparent;
   padding-left: max(0px, env(safe-area-inset-left, 0px));
   padding-right: max(0px, env(safe-area-inset-right, 0px));
 }
-.container{ max-width:1200px; margin:0 auto; padding:0 16px; }
+.container{
+  max-width:1200px; margin:0 auto;
+  padding-left: clamp(12px, 4vw, 16px);
+  padding-right: clamp(12px, 4vw, 16px);
+}
 
 /* Heading rule */
 .hdr{ display:flex; align-items:center; gap:10px; margin: 2px 0 12px; }
@@ -133,7 +138,8 @@ const styles = `
   box-shadow: var(--ft-shadow);
   border: 1px solid var(--ft-ink-soft);
   outline:none;
-  min-height: 72px; /* ensures 44px+ touch target with padding */
+  min-height: 72px;
+  touch-action: manipulation;
   transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease, background .16s ease;
 }
 .tile:active{ transform: scale(.995); }
@@ -152,7 +158,7 @@ const styles = `
   box-shadow: 0 6px 16px rgba(0,0,0,.08), inset 0 0 0 1px var(--ft-ink-soft);
 }
 
-/* Copy: fluid type and tighter leading on mobile */
+/* Copy */
 .copy h3{
   margin:0 0 4px;
   color: var(--bb-primary, #4A4F41);
@@ -175,6 +181,12 @@ const styles = `
 }
 @media (hover:hover){
   .tile:hover .hover-ring{ opacity:1; }
+}
+
+/* XS phones: tighten padding & icon a bit */
+@media (max-width: 380px){
+  .tile{ padding: 12px; gap:10px; }
+  .ic{ width:40px; height:40px; border-radius:10px; }
 }
 
 /* Motion safety */

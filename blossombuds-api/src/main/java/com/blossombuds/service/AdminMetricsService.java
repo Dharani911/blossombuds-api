@@ -3,6 +3,7 @@ package com.blossombuds.service;
 import com.blossombuds.repository.MetricsRepo;
 import com.blossombuds.dto.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.*;
@@ -10,6 +11,7 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import static java.time.temporal.ChronoUnit.DAYS;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AdminMetricsService {
@@ -17,6 +19,9 @@ public class AdminMetricsService {
     private final MetricsRepo metricsRepo;
 
     public MetricsSummary buildSummary() {
+
+        log.info("📊 Building admin metrics summary");
+
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         OffsetDateTime dayAgo = now.minusDays(1);
         OffsetDateTime weekAgo = now.minusDays(7);
@@ -42,6 +47,14 @@ public class AdminMetricsService {
         long prodTotal = metricsRepo.countProducts();
         long custTotal = metricsRepo.countCustomers();
         long custMonthly = metricsRepo.countNewCustomers(monthAgo, null);
+        log.debug("📦 Orders: total={}, daily={}, weekly={}, monthly={}, yearly={}",
+                ordersTotal, ordersDaily, ordersWeekly, ordersMonthly, ordersYearly);
+        log.debug("💰 Revenue: total={}, daily={}, weekly={}, monthly={}, yearly={}",
+                revTotal, revDaily, revWeekly, revMonthly, revYearly);
+        log.debug("🚚 Shipping: monthly={}, yearly={}, max={}", shipMonthly, shipYearly, shipMax);
+        log.debug("🛒 Products: total={}", prodTotal);
+        log.debug("👥 Customers: total={}, newMonthly={}", custTotal, custMonthly);
+
 
         return MetricsSummary.builder()
                 .orders(new MetricsSummary.Section(ordersTotal, ordersDaily, ordersWeekly, ordersMonthly, ordersYearly))
@@ -53,6 +66,7 @@ public class AdminMetricsService {
     }
 
     public List<TrendPoint> trend(String range) {
+        log.info("📈 Fetching trend data for range: {}", range);
         return switch (range.toLowerCase()) {
             case "weekly"  -> metricsRepo.ordersRevenueByWeek(12);
             case "monthly" -> metricsRepo.ordersRevenueByMonth(12);
@@ -62,31 +76,37 @@ public class AdminMetricsService {
     }
 
     public List<LabeledValue> shipping12m() {
+        log.info("📦 Fetching shipping cost trend (12 months)");
         return metricsRepo.shippingCostByMonth(12);
     }
 
     public List<LabeledValue> customers12m() {
+        log.info("👥 Fetching new customer trend (12 months)");
         return metricsRepo.newCustomersByMonth(12);
     }
 
     private OffsetDateTime startOfRange(String bucket) {
         ZoneId zone = ZoneId.systemDefault();
         ZonedDateTime now = ZonedDateTime.now(zone);
-        return switch (bucket == null ? "month" : bucket.toLowerCase()) {
+        OffsetDateTime start= switch (bucket == null ? "month" : bucket.toLowerCase()) {
             case "day" -> now.truncatedTo(DAYS).toOffsetDateTime();
             case "week" -> now.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
                     .truncatedTo(DAYS).toOffsetDateTime();
             case "year" -> now.withDayOfYear(1).truncatedTo(DAYS).toOffsetDateTime();
             default /* month */ -> now.withDayOfMonth(1).truncatedTo(DAYS).toOffsetDateTime();
         };
+        log.debug("🕒 startOfRange for '{}' = {}", bucket, start);
+        return start;
     }
     public List<LabeledValue> topProducts(String range, int limit) {
         OffsetDateTime start = startOfRange(range);
+        log.info("🏆 Fetching top {} products since {} (range={})", limit, start, range);
         return metricsRepo.topProductsSince(start, limit);
     }
 
     public List<LabeledValue> topCategories(String range, int limit) {
         OffsetDateTime start = startOfRange(range);
+        log.info("📚 Fetching top {} categories since {} (range={})", limit, start, range);
         return metricsRepo.topCategoriesSince(start, limit);
     }
 }

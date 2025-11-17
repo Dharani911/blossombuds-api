@@ -116,9 +116,36 @@ export default function ReviewsPage({ productId }: { productId?: number }) {
     const sum = items.reduce((s, it) => s + (it.rating || 0), 0);
     return Math.round((sum / items.length) * 10) / 10;
   }, [items]);
+  function ReviewText({ text }: { text: string }) {
+    const [expanded, setExpanded] = useState(false);
+    const isLong = text.length > 240;
+    const preview = text.slice(0, 240);
+    const renderedText = insertSoftHyphens(expanded || !isLong ? text : preview + "…");
+    return (
+      <div className="txt-wrap" lang="en">
+        <p
+                className={`txt ${expanded ? "" : "clamp"}`}
+                dangerouslySetInnerHTML={{ __html: renderedText }}
+              />
+        {isLong && (
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="readmore-btn"
+            aria-label={expanded ? "Read less" : "Read more"}
+          >
+            {expanded ? "Read less ▲" : "Read more ▼"}
+          </button>
+        )}
+      </div>
+    );
+  }
+function insertSoftHyphens(text: string, interval = 8): string {
+  return text.replace(new RegExp(`(\\w{${interval}})(?=\\w)`, 'g'), '$1\u00AD');
+}
+
 
   return (
-    <div className="rv-wrap">
+    <div className="rv-wrap" lang="en">
       <style>{css}</style>
 
       <header className="hero">
@@ -200,6 +227,7 @@ export default function ReviewsPage({ productId }: { productId?: number }) {
           <div className="grid">
             {items.map((r) => (
               <article className="card" key={r.id}>
+                {/* 1. Image */}
                 {r.img && (
                   <div className="thumb">
                     <img
@@ -212,23 +240,23 @@ export default function ReviewsPage({ productId }: { productId?: number }) {
                   </div>
                 )}
 
-                <header className="h">
-                  <div className="left">
-                    <Stars rating={r.rating} />
-                    <h3>{r.title || `Rated ${r.rating}★`}</h3>
-                  </div>
-                  <div className="right">
-                    <time dateTime={r.when}>{new Date(r.when).toLocaleDateString()}</time>
-                  </div>
-                </header>
+                {/* 2. Stars and Date */}
+                <div className="meta">
+                  <Stars rating={r.rating} />
+                  <time dateTime={r.when}>{new Date(r.when).toLocaleDateString()}</time>
+                </div>
 
-                <p className="txt clamp">{r.text}</p>
+                {/* 3. Title */}
+                <h3 className="title" dangerouslySetInnerHTML={{ __html: insertSoftHyphens(r.title || `Rated ${r.rating}★`) }} />
 
-                <footer className="f">
-                  <span className="who">{r.author}</span>
-                  {r.productName && <span className="prod">• {r.productName}</span>}
-                </footer>
+
+                {/* 4. Body with Read More */}
+                <ReviewText text={r.text} />
+
+                {/* 5. Customer */}
+                <div className="author">{r.author}</div>
               </article>
+
             ))}
           </div>
         )}
@@ -280,10 +308,10 @@ const css = `
 .body{ max-width:1100px; margin:14px auto 40px; padding: 0 16px; }
 
 /* responsive grid for cards */
-.grid{
-  display:grid;
-  gap:16px;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+.grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); /* ✅ Responsive */
   align-items: start;
 }
 
@@ -356,5 +384,291 @@ const css = `
 .pager{ display:flex; gap:10px; align-items:center; justify-content:center; margin-top:16px; }
 .pager button{
   height:34px; padding:0 10px; border:1px solid ${INK}; border-radius:10px; background:#fff; cursor:pointer;
+}
+@media (max-width: 520px) {
+  .hero .inner {
+    padding: 20px 12px 10px;
+  }
+
+  .hero h1 {
+    font-size: 22px;
+  }
+
+  .hero p {
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+
+  .k {
+    padding: 8px 10px;
+  }
+
+  .k .n {
+    font-size: 16px;
+  }
+
+  .k .l {
+    font-size: 11px;
+  }
+
+  .filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search input,
+  .sort select {
+    height: 34px;
+    font-size: 14px;
+  }
+
+  .sort {
+    justify-content: space-between;
+    margin-top: 6px;
+  }
+
+  .body {
+    padding: 0 12px;
+  }
+
+  .card {
+    padding: 10px;
+    gap: 8px;
+    border-radius: 12px;
+  }
+
+  .thumb {
+    aspect-ratio: 5 / 4;
+    border-radius: 8px;
+  }
+
+  .h h3 {
+    font-size: 15px;
+  }
+
+  .stars svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .txt.clamp {
+    -webkit-line-clamp: 4;
+  }
+
+  .f {
+    font-size: 12px;
+    gap: 6px;
+  }
+
+  .pager button {
+    height: 30px;
+    font-size: 13px;
+    padding: 0 8px;
+  }
+}
+@media (max-width: 520px) {
+  .hero .inner {
+    padding: 18px 12px 12px;
+  }
+
+  .hero h1 {
+    font-size: 20px;
+  }
+
+  .hero p {
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+
+  .kpis {
+    gap: 10px;
+    margin: 6px 0 10px;
+  }
+
+  .k {
+    padding: 6px 10px;
+    border-radius: 10px;
+  }
+
+  .k .n {
+    font-size: 15px;
+  }
+
+  .k .l {
+    font-size: 11px;
+  }
+
+  .filters {
+    flex-direction: column;
+    gap: 6px;
+    align-items: stretch;
+  }
+
+  .search input,
+  .sort select {
+    height: 34px;
+    font-size: 14px;
+  }
+
+  .body {
+    padding: 0 12px;
+  }
+
+  .grid {
+      grid-template-columns: repeat(2, 1fr); /* 👈 fallback to 1 per row on very small phones */
+    }
+
+
+  .card {
+    padding: 10px;
+    gap: 6px;
+    border-radius: 10px;
+  }
+
+  .thumb {
+    aspect-ratio: 4 / 3;
+    border-radius: 8px;
+  }
+
+  .h h3 {
+    font-size: 14px;
+  }
+
+  .stars svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .txt.clamp {
+    font-size: 13px;
+    -webkit-line-clamp: 3;
+  }
+
+  .f {
+    font-size: 12px;
+    gap: 4px;
+  }
+
+  .pager button {
+    height: 30px;
+    padding: 0 8px;
+    font-size: 13px;
+  }
+
+  .empty-icon {
+    font-size: 30px;
+  }
+  .title {
+      font-size: 14px;
+      line-height: 1.3;
+    }
+    .txt {
+      font-size: 13px;
+    }
+
+    .readmore-btn {
+      font-size: 12px;
+    }
+}
+/* 1. Image box */
+.thumb {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fafafa;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* 2. Stars and Date row */
+.meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  font-size: 13px;
+  color: #555;
+}
+.stars {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+}
+
+/* 3. Title */
+.title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 6px 0;
+  line-height: 1.4;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;           /* ✅ Soft hyphenation */
+  white-space: normal;
+}
+
+
+
+/* 4. Body text with Read More */
+.txt-wrap {
+  position: relative;
+}
+.txt {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--bb-primary);
+  margin: 0;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;           /* ✅ Soft hyphenation for long words */
+  white-space: normal;
+}
+
+.txt.clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.readmore-btn {
+  margin-top: 4px;
+  background: none;
+  border: none;
+  color: var(--bb-accent, #E94C7A);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+}
+.readmore-btn:hover {
+  text-decoration: underline;
+}
+
+/* 5. Author */
+.author {
+  margin-top: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+/* Card layout */
+.card {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.08);
+  padding: 12px;
+  gap: 6px;
+}
+.title, .txt {
+  font-family: system-ui, sans-serif;
 }
 `;

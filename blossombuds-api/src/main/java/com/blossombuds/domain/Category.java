@@ -47,6 +47,9 @@ public class Category {
     @Column(length = 120, unique = true)
     private String slug;
 
+    @Column(columnDefinition = "text")
+    private String description;
+
     /** Soft-visibility flag to hide/show the category. */
     @Column(nullable = false)
     private Boolean active = Boolean.TRUE;

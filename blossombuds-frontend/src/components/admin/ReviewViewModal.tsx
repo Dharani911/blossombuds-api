@@ -120,8 +120,9 @@ export default function ReviewViewModal({ open, reviewId, onClose }: Props) {
 
     // Remove all other <img> (brand logo etc.) to avoid any accidental cross-origin taint
     const otherImgs = Array.from(node.querySelectorAll<HTMLImageElement>("img")).filter(
-      (el) => el !== heroImg
+      (el) => el !== heroImg && !el.classList.contains("brand-logo")
     );
+
     type ImgRecord = { el: HTMLImageElement; parent: Node; next: ChildNode | null; src: string };
     const removedImgs: ImgRecord[] = [];
     for (const el of otherImgs) {
@@ -195,7 +196,8 @@ export default function ReviewViewModal({ open, reviewId, onClose }: Props) {
           {!loading && !err && data && (
             <div ref={posterRef} className="poster">
               <div className="brand">
-                <img src="/BB_logo.png" alt="logo" className="brand-logo" />
+                <img src="/BB_logo.png" alt="logo" className="brand-logo" crossOrigin="anonymous" />
+
                 <div>
                   <h2>Blossom Buds Floral Artistry</h2>
                   <p className="muted">Customer Review</p>
@@ -247,7 +249,7 @@ export default function ReviewViewModal({ open, reviewId, onClose }: Props) {
 
               <div className="poster-footer">
                 <p>Handcrafted with ❤️ by Blossom Buds</p>
-                <p className="muted">@blossombuds · blossombuds.in</p>
+                <p className="muted">🌸 www.blossom-buds-floral-artistry.com 🌸</p>
               </div>
             </div>
           )}

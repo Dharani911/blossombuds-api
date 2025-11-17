@@ -1,11 +1,11 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 
 type Props = {
   loading: boolean;
   editing: boolean;
   setEditing: (v: boolean) => void;
 
-  fullName: string;                 // ← use this for the name
+  fullName: string;
   setFullName: (s: string) => void;
 
   email: string;
@@ -28,50 +28,90 @@ export default function AccountCard({
   onSave,
   saving,
 }: Props) {
+  const [isMobile, setIsMobile] = useState<boolean>(() =>
+    typeof window !== "undefined" ? window.matchMedia("(max-width:560px)").matches : false
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width:560px)");
+    const onChange = () => setIsMobile(mq.matches);
+    onChange();
+    mq.addEventListener?.("change", onChange);
+    return () => mq.removeEventListener?.("change", onChange);
+  }, []);
+
+  const [open, setOpen] = useState(false);
+  useEffect(() => { setOpen(!isMobile); }, [isMobile]);
+
   return (
-    <div className="card">
+    <div className={`card ${isMobile ? "is-mobile" : ""}`}>
       <style>{styles}</style>
+
       <div className="head">
         <h3>Account</h3>
-        {!editing ? (
-          <button className="icon" onClick={() => setEditing(true)} title="Edit">✎</button>
-        ) : (
-          <div className="actions">
-            <button className="btn ghost" onClick={() => setEditing(false)} disabled={saving}>Cancel</button>
-            <button className="btn" onClick={onSave} disabled={saving}>
-              {saving ? "Saving…" : "Save"}
+
+        <div className="head-right">
+
+        {/* Show actions only when expanded on mobile, always on desktop */}
+                  {(!isMobile || open) && (
+                    !editing ? (
+                      <button className="icon" onClick={() => setEditing(true)} title="Edit" aria-label="Edit">
+                        ✎
+                      </button>
+                    ) : (
+                      <div className="actions">
+                        <button className="btn ghost" onClick={() => setEditing(false)} disabled={saving}>
+                          Cancel
+                        </button>
+                        <button className="btn" onClick={onSave} disabled={saving}>
+                          {saving ? "Saving…" : "Save"}
+                        </button>
+                      </div>
+                    )
+                  )}
+          {/* Mobile expand/collapse */}
+          {isMobile && (
+            <button
+              className="toggle"
+              aria-expanded={open}
+              onClick={() => setOpen((s) => !s)}
+              title={open ? "Collapse" : "Expand"}
+            >
+              <span className="toggle-ic">{open ? "▴" : "▾"}</span>
+              <span className="toggle-label">{open ? "Collapse" : "Expand"}</span>
             </button>
-          </div>
-        )}
+          )}
+
+
+
+
+        </div>
       </div>
 
-      <div className="body">
+      <div className={`body collapse ${open ? "open" : ""}`}>
         {loading ? (
           <div className="skeleton">Loading profile…</div>
         ) : (
           <div className="grid">
-            {/* Name (controlled by fullName prop) */}
             <label className="field">
               <span>Full name</span>
               {editing ? (
                 <input
                   className="input"
-                  value={fullName ?? ""}                 // ← reflects parent state
+                  value={fullName ?? ""}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Your full name"
+                  inputMode="text"
                 />
               ) : (
                 <div className="value">{fullName || "—"}</div>
               )}
             </label>
 
-            {/* Email (read-only) */}
             <label className="field">
               <span>Email</span>
               <div className="value">{email || "—"}</div>
             </label>
 
-            {/* Phone (controlled) */}
             <label className="field">
               <span>Phone</span>
               {editing ? (
@@ -80,6 +120,7 @@ export default function AccountCard({
                   value={phone ?? ""}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="+91 ..."
+                  inputMode="tel"
                 />
               ) : (
                 <div className="value">{phone || "—"}</div>
@@ -97,14 +138,34 @@ const styles = `
   display:flex; align-items:center; justify-content:space-between; gap: 10px;
   padding: 12px 14px; border-bottom: 1px solid rgba(0,0,0,.06);
 }
-.body{ padding: 12px 14px; }
+.head-right{ display:flex; align-items:center; gap:8px; }
 
 .icon{ width:36px; height:36px; border-radius:10px; border:1px solid rgba(0,0,0,.1); background:#fff; cursor:pointer; }
 .actions{ display:flex; gap:8px; }
 .btn{ height: 36px; border-radius: 10px; border:none; padding: 0 14px; font-weight: 900; cursor:pointer; background: var(--bb-accent); color:#fff; box-shadow: 0 12px 30px rgba(240,93,139,.28); }
 .btn.ghost{ background:#fff; color: var(--bb-primary); border:1px solid rgba(0,0,0,.1); box-shadow:none; }
 
-.grid{ display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+/* Toggle (mobile-only) */
+.toggle{
+  display:inline-flex; align-items:center; gap:6px;
+  height:36px; padding:0 10px; border-radius:10px;
+  background:#fff; border:1px solid rgba(0,0,0,.10); cursor:pointer;
+  font-weight:900; color: var(--bb-primary);
+}
+.toggle-ic{ font-size:14px; line-height:1; }
+
+/* Open indicator */
+.open-dot{
+  width:8px; height:8px; border-radius:999px;
+  background: var(--bb-accent);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--bb-accent), transparent 82%);
+}
+
+/* Collapsible body */
+.body{ padding: 0; }
+.collapse{ max-height: 0; overflow: hidden; transition: max-height .22s ease; }
+.collapse.open{ max-height: 1200px; }
+.grid{ padding: 12px 14px; display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 700px){ .grid{ grid-template-columns: 1fr; } }
 
 .field{ display:flex; flex-direction:column; gap:6px; }
@@ -121,4 +182,10 @@ const styles = `
   background-size: 300% 100%; animation: shimmer 1.1s linear infinite;
 }
 @keyframes shimmer { 0%{background-position: 0% 0} 100%{background-position: -300% 0} }
+
+/* Desktop/tablet: always open, show actions, hide toggle */
+@media (min-width: 561px){
+  .collapse{ max-height: none !important; }
+  .toggle{ display:none; }
+}
 `;

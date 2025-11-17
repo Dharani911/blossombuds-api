@@ -2,7 +2,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import ProductQuickView from "../../components/ProductQuickView";
-
 import { listNewArrivals, listProductImages } from "../../api/catalog";
 
 type ProductLite = {
@@ -11,23 +10,18 @@ type ProductLite = {
   price: number;
   imageUrl?: string | null;
   slug?: string | null;
-  active?: boolean | null;     // hide disabled items
-  visible?: boolean | null;    // explicit visibility flag
-  isVisible?: boolean | null;  // alt key from some payloads
+  active?: boolean | null;
+  visible?: boolean | null;
+  isVisible?: boolean | null;
 };
 
 type Props = {
-  /** If you already have the items, pass them in and no fetch will occur */
   products?: ProductLite[];
-  /** Section heading */
   title?: string;
-  /** "View all" link target */
   viewAllTo?: string;
-  /** Limit to fetch when products prop is not supplied */
   limit?: number;
 };
 
-/** Accept only explicit visible=true (supports visible / isVisible) */
 function isVisibleTrue(p: Partial<ProductLite> | any): boolean {
   const v = p?.visible ?? p?.isVisible ?? null;
   return v === true;
@@ -41,17 +35,14 @@ export default function ProductShowcase({
 }: Props) {
   const trackRef = useRef<HTMLDivElement>(null);
 
-  // Filter-out disabled + hidden on initial prop too
   const initial = (products || []).filter((p) => p.active !== false && isVisibleTrue(p));
 
   const [items, setItems] = useState<ProductLite[]>(initial);
   const [loading, setLoading] = useState(!products);
   const [err, setErr] = useState<string | null>(null);
 
-  // Quick View modal
   const [qvId, setQvId] = useState<number | null>(null);
 
-  // fetch initial products
   useEffect(() => {
     let live = true;
     if (products && products.length) {
@@ -64,7 +55,6 @@ export default function ProductShowcase({
         setLoading(true);
         setErr(null);
         const res = await listNewArrivals(limit);
-
         if (!live) return;
 
         const mapped: ProductLite[] = (res || []).map((p: any) => ({
@@ -87,7 +77,6 @@ export default function ProductShowcase({
           isVisible: p.isVisible ?? undefined,
         }));
 
-        // Only keep active + explicitly visible=true
         setItems(mapped.filter((p) => p.active !== false && isVisibleTrue(p)));
       } catch (e: any) {
         if (!live) return;
@@ -101,7 +90,6 @@ export default function ProductShowcase({
     };
   }, [products, limit]);
 
-  // backfill missing thumbnails by hitting /images per product (only those with imageUrl missing)
   useEffect(() => {
     let live = true;
     const withoutImg = items.filter((p) => !p.imageUrl);
@@ -145,12 +133,11 @@ export default function ProductShowcase({
     const el = trackRef.current;
     if (!el) return;
     const card = el.querySelector<HTMLElement>(".ps-card");
-    const gap = 16;
-    const step = card ? card.offsetWidth + gap : 300;
+    const gap = 14;
+    const step = card ? card.offsetWidth + gap : 280;
     el.scrollBy({ left: dir === "left" ? -step : step, behavior: "smooth" });
   };
 
-  // format ₹ nicely
   const fmt = useMemo(
     () =>
       new Intl.NumberFormat("en-IN", {
@@ -161,7 +148,6 @@ export default function ProductShowcase({
     []
   );
 
-  // Click handlers
   const openQuickView = (id: number) => setQvId(id);
   const onAddClick = (id: number) => openQuickView(id);
   const onCardClick = (id: number) => openQuickView(id);
@@ -248,7 +234,6 @@ export default function ProductShowcase({
 
 /* ————————————— STYLES ————————————— */
 const styles = `
-/* (unchanged styles) */
 .ps{
   position: relative;
   left: 50%;
@@ -271,43 +256,59 @@ const styles = `
   display:flex; align-items:center; justify-content:space-between;
   gap: 12px; margin-bottom: 10px;
 }
-.ps-head h2{ margin:0; color: var(--bb-primary); }
+.ps-head h2{
+  margin:0; color: var(--bb-primary);
+  font-size: clamp(16px, 2.1vw, 20px);
+}
 .ps-controls{ display:flex; align-items:center; gap: 8px; }
 .ps-link{ font-weight: 900; color: var(--bb-primary); text-decoration: none; }
 .ps-nav{
-  width: 38px; height: 38px; border-radius: 12px; border: 1px solid rgba(0,0,0,.12);
+  width: 36px; height: 36px; border-radius: 12px; border: 1px solid rgba(0,0,0,.12);
   background:#fff; cursor:pointer; font-size: 18px; line-height: 1; color: var(--bb-primary);
 }
 
+/* lane */
 .ps-lane{ overflow:hidden; }
 .ps-lane::-webkit-scrollbar{ display:none; }
 .ps-lane{ scrollbar-width: none; }
 
 .ps-lane{
   display: flex;
-  gap: 16px;
+  gap: 14px;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 32px, #000 calc(100% - 32px), transparent 100%);
-          mask-image: linear-gradient(90deg, transparent 0, #000 32px, #000 calc(100% - 32px), transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
+          mask-image: linear-gradient(90deg, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
 }
 
+/* card sizing: a tad tighter on phones */
 .ps-card{
   flex: 0 0 auto;
-  width: clamp(220px, 24vw, 300px);
+  width: clamp(200px, 70vw, 280px);
   scroll-snap-align: start;
   background:#fff; border-radius:16px; overflow:hidden; display:flex; flex-direction:column;
   border: 1px solid rgba(0,0,0,.06);
   box-shadow: 0 12px 34px rgba(0,0,0,.10);
-  transition: transform .16s ease, box-shadow .16s ease;
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+  outline: none;
 }
-.ps-card:hover{ transform: translateY(-2px); box-shadow: 0 18px 44px rgba(0,0,0,.12); }
+@media (min-width: 560px){
+  .ps-card{ width: clamp(220px, 28vw, 300px); }
+}
+@media (hover:hover){
+  .ps-card:hover{ transform: translateY(-2px); box-shadow: 0 18px 44px rgba(0,0,0,.12); }
+}
+.ps-card:focus-visible{
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--bb-accent, #F05D8B), transparent 70%), 0 12px 34px rgba(0,0,0,.10);
+  border-color: color-mix(in oklab, var(--bb-accent), transparent 60%);
+}
 .ps-card.skel{ overflow:hidden; }
 
+/* image: keep 3:2 like before for visual rhythm */
 .ps-img{ position:relative; display:block; background:#f3f3f3; cursor:pointer; }
 .ps-img::after{
-  content:""; display:block; width:100%; padding-top: 66.6667%; /* 3:2 ratio placeholder */
+  content:""; display:block; width:100%; padding-top: 66.6667%; /* 3:2 */
 }
 .ps-img img{
   position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
@@ -320,24 +321,32 @@ const styles = `
   border-bottom: 1px solid rgba(0,0,0,.06);
 }
 
-.ps-body{ padding: 12px 14px; display:grid; gap:6px; }
-.ps-title{ font-weight:900; color: var(--bb-primary); }
+/* body */
+.ps-body{ padding: 10px 12px; display:grid; gap:6px; }
+.ps-title{
+  font-weight:900; color: var(--bb-primary);
+  font-size: clamp(13px, 3.2vw, 14px);
+  line-height: 1.3;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+}
 .ps-row2{ display:flex; align-items:center; justify-content:space-between; gap: 10px; }
 .ps-price{ font-weight:900; }
 .ps-actions{ display:flex; gap: 8px; }
 .ps-btn{
-  display:inline-flex; align-items:center; justify-content:center; padding:.55rem .9rem;
+  display:inline-flex; align-items:center; justify-content:center; padding:.5rem .85rem;
   border-radius:999px; border:none; cursor:pointer; background:var(--bb-accent); color:#fff; font-weight:900; text-decoration:none;
+  font-size: 13px;
 }
 .ps-btn:active{ transform: translateY(1px); }
 
+/* empty + skeletons + error */
 .ps-empty{ color: var(--bb-primary); opacity:.75; padding: 12px 0; }
-
- /* skeleton bits */
-.sk{ background: linear-gradient(90deg,#eee,#f8f8f8,#eee); background-size:200% 100%; animation: sk 1.2s linear infinite; border-radius:8px; }
-.sk-title{ height:18px; width:70%; }
-.sk-price{ height:16px; width:80px; }
-.sk-btns{ height:28px; width:120px; border-radius:999px; }
+.sk{
+  background: linear-gradient(90deg,#eee,#f8f8f8,#eee); background-size:200% 100%; animation: sk 1.2s linear infinite; border-radius:8px;
+}
+.sk-title{ height:16px; width:70%; }
+.sk-price{ height:14px; width:80px; }
+.sk-btns{ height:26px; width:120px; border-radius:999px; }
 @keyframes sk { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
 
 .ps-error{

@@ -8,6 +8,7 @@ import com.blossombuds.domain.PaymentStatus;
 import com.blossombuds.repository.OrderRepository;
 import com.blossombuds.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +24,7 @@ import java.util.Optional;
 /**
  * Payment façade for Razorpay: create order, verify signatures, and persist payments.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -37,8 +39,9 @@ public class RazorpayService {
     @Transactional
     @PreAuthorize("hasAnyRole('ROLE_ADMIN','ROLE_CUSTOMER')")
     public Map<String, Object> createRzpOrder(Long orderId) {
+        log.info("➡️ createRzpOrder | orderId={}", orderId);
         Order o = orderRepo.findById(orderId)
-                .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+                .orElseThrow(() -> {log.error("❌ Order not found | orderId={}", orderId); return new IllegalArgumentException("Order not found: " + orderId);});
 
         BigDecimal grand = o.getGrandTotal() == null ? BigDecimal.ZERO : o.getGrandTotal();
         long amountPaise = grand.movePointRight(2).longValueExact(); // INR paise
@@ -63,15 +66,21 @@ public class RazorpayService {
         if (rid instanceof String rzpOrderId && !rzpOrderId.isBlank()) {
             o.setRzpOrderId(rzpOrderId);
             orderRepo.save(o);
+            log.info("✅ Rzp order ID persisted | orderId={} | rzpOrderId={}", orderId, rzpOrderId);
+        } else {
+            log.warn("⚠️ Razorpay order created but ID is blank | orderId={}", orderId);
         }
         return res;
     }
 
     /** Verifies checkout signature (orderId|paymentId) using API secret (for /verify). */
     public boolean verifyCheckoutSignature(String rzpOrderId, String rzpPaymentId, String rzpSignature) {
-        String data = rzpOrderId + "|" + rzpPaymentId;
-        String expected = hmacSha256Hex(props.getKeySecret(), data);
-        return constantTimeEquals(expected, rzpSignature);
+        boolean valid = constantTimeEquals(
+                hmacSha256Hex(props.getKeySecret(), rzpOrderId + "|" + rzpPaymentId),
+                rzpSignature
+        );
+        log.debug("🔒 verifyCheckoutSignature | valid={} | rzpOrderId={} | paymentId={}", valid, rzpOrderId, rzpPaymentId);
+        return valid;
     }
 
     /**
@@ -79,14 +88,21 @@ public class RazorpayService {
      * Prefer the 3-arg overload when you have multiple webhook secrets (test/stage/live).
      */
     public boolean verifyWebhookSignature(String rawBody, String headerSignature) {
-        String expected = hmacSha256Hex(props.getWebhookSecret(), rawBody);
-        return constantTimeEquals(expected, headerSignature);
+        boolean valid = constantTimeEquals(
+                hmacSha256Hex(props.getWebhookSecret(), rawBody),
+                headerSignature
+        );
+        log.debug("🔒 verifyWebhookSignature | valid={}", valid);
+        return valid;
     }
 
-    /** Verifies webhook signature (raw body) with the provided secret (test/stage/live). */
     public boolean verifyWebhookSignature(String rawBody, String headerSignature, String secret) {
-        String expected = hmacSha256Hex(secret, rawBody);
-        return constantTimeEquals(expected, headerSignature);
+        boolean valid = constantTimeEquals(
+                hmacSha256Hex(secret, rawBody),
+                headerSignature
+        );
+        log.debug("🔒 verifyWebhookSignature (custom secret) | valid={}", valid);
+        return valid;
     }
 
     /** Records a successful captured payment for an order (idempotent by rzpPaymentId). */
@@ -97,12 +113,16 @@ public class RazorpayService {
                                          String currency,
                                          BigDecimal amount,
                                          String actor) {
+        log.info("💰 recordCapturedPayment | orderId={} | rzpPaymentId={}", orderId, rzpPaymentId);
         Order order = orderRepo.findById(orderId)
-                .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+                .orElseThrow(() ->{log.error("❌ Order not found while recording payment | orderId={}", orderId);return new IllegalArgumentException("Order not found: " + orderId);});
 
         // Idempotency: if we already stored this paymentId, short-circuit
         Optional<Payment> existing = paymentRepo.findByRzpPaymentId(rzpPaymentId);
-        if (existing.isPresent()) return existing.get();
+        if (existing.isPresent()) {
+            log.info("🌀 Payment already recorded | rzpPaymentId={} | skipping insert", rzpPaymentId);
+            return existing.get();
+        }
 
         Payment p = new Payment();
         p.setOrder(order);
@@ -124,6 +144,7 @@ public class RazorpayService {
         order.setPaidAt(OffsetDateTime.now());
         orderRepo.save(order);
 
+        log.info("✅ Payment recorded successfully | rzpPaymentId={} | orderId={}", rzpPaymentId, orderId);
         return p;
     }
 
@@ -138,6 +159,7 @@ public class RazorpayService {
             for (byte b : raw) sb.append(String.format("%02x", b));
             return sb.toString();
         } catch (Exception e) {
+            log.error("❌ HMAC calculation failed", e);
             throw new IllegalStateException("HMAC calculation failed", e);
         }
     }
@@ -161,6 +183,7 @@ public class RazorpayService {
                                                        Map<String, String> notes,
                                                        boolean capture) {
         String cur = (currency == null || currency.isBlank()) ? "INR" : currency.trim().toUpperCase();
-        return api.createOrder(amountPaise, cur, receipt, notes, capture);
+        log.info("➡️ createRzpOrderForAmount | amountPaise={} | currency={} | receipt={}", amountPaise, currency, receipt);
+        return api.createOrder(amountPaise, currency, receipt, notes, capture);
     }
 }

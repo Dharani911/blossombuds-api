@@ -4,15 +4,16 @@ import com.blossombuds.domain.Admin;
 import com.blossombuds.dto.AdminDto;
 import com.blossombuds.repository.AdminRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
-
 import java.time.OffsetDateTime;
 import java.util.List;
 
 /** Application service for managing back-office admins (creation, updates, lifecycle). */
+@Slf4j
 @Service
 @Validated
 @RequiredArgsConstructor
@@ -25,6 +26,7 @@ public class AdminService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public Admin create(AdminDto dto, String passwordHash, String actor) {
+        log.info("🔐 Creating new admin by '{}'", actor);
         if (dto == null) {
             throw new IllegalArgumentException("AdminDto is required");
         }
@@ -40,13 +42,16 @@ public class AdminService {
         a.setPasswordHash(passwordHash);
         //a.setCreatedBy(actor);
         //a.setCreatedAt(OffsetDateTime.now());
-        return adminRepo.save(a);
+        Admin saved = adminRepo.save(a);
+        log.debug("✅ Admin created: id={}, username={}", saved.getId(), saved.getName());
+        return saved;
     }
 
     /** Updates mutable admin fields (username, email, display name, enabled, active). */
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public Admin update(Long adminId, AdminDto dto, String actor) {
+        log.info("✏️ Updating admin id={} by '{}'", adminId, actor);
         if (adminId == null) {
             throw new IllegalArgumentException("adminId is required");
         }
@@ -61,6 +66,7 @@ public class AdminService {
         if (dto.getActive() != null) a.setActive(dto.getActive());
         //a.setModifiedBy(actor);
         //a.setModifiedAt(OffsetDateTime.now());
+        log.debug("🔄 Admin updated: id={}, updatedBy={}", adminId, actor);
         return a; // JPA dirty checking persists changes on tx commit
     }
 
@@ -68,6 +74,7 @@ public class AdminService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public Admin setPasswordHash(Long adminId, String passwordHash, String actor) {
+        log.info("🔑 Resetting password for admin id={} by '{}'", adminId, actor);
         if (adminId == null) {
             throw new IllegalArgumentException("adminId is required");
         }
@@ -85,6 +92,7 @@ public class AdminService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public Admin setEnabled(Long adminId, boolean enabled, String actor) {
+        log.info("🔐 Setting enabled={} for admin id={} by '{}'", enabled, adminId, actor);
         if (adminId == null) {
             throw new IllegalArgumentException("adminId is required");
         }
@@ -99,6 +107,7 @@ public class AdminService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public Admin setActive(Long adminId, boolean active, String actor) {
+        log.info("🟢 Setting active={} for admin id={} by '{}'", active, adminId, actor);
         if (adminId == null) {
             throw new IllegalArgumentException("adminId is required");
         }
@@ -115,11 +124,15 @@ public class AdminService {
             throw new IllegalArgumentException("adminId is required");
         }
         return adminRepo.findById(adminId)
-                .orElseThrow(() -> new IllegalArgumentException("Admin not found: " + adminId));
+                .orElseThrow(() -> {
+                    log.warn("❌ Admin not found: {}", adminId);
+                    return new IllegalArgumentException("Admin not found: " + adminId);
+                });
     }
 
     /** Lists all admins (active and inactive). */
     public List<Admin> listAll() {
+        log.info("📋 Fetching list of all admins");
         return adminRepo.findAll();
     }
 
@@ -127,9 +140,8 @@ public class AdminService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void delete(Long adminId) {
-        if (adminId == null) {
-            throw new IllegalArgumentException("adminId is required");
-        }
+        log.warn("🗑️ Deleting admin id={}", adminId);
+        if (adminId == null) throw new IllegalArgumentException("adminId is required");
         adminRepo.deleteById(adminId);
     }
 }

@@ -1,8 +1,45 @@
 // src/components/WhatsappFab.tsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useWhatsAppNumber, waHrefFor } from "../lib/whatsapp";
 
 type View = "menu" | "general" | "custom" | "tracking";
+
+/** Prefer opening the WhatsApp app; fallback to web if it fails. */
+function openWhatsAppPreferApp(phone: string, text: string) {
+  const encodedText = encodeURIComponent(text || "");
+  const appUrl = `whatsapp://send?phone=${encodeURIComponent(phone)}&text=${encodedText}`;
+  const webUrl = `https://wa.me/${encodeURIComponent(phone)}?text=${encodedText}`;
+
+  // Heuristic: on desktop, go straight to web (many desktops have no app handler)
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent || "" : "";
+  const isMobile =
+    /Android|iPhone|iPad|iPod|Windows Phone/i.test(ua) ||
+    (typeof navigator !== "undefined" && (navigator as any).maxTouchPoints > 0);
+
+  if (!isMobile) {
+    window.open(webUrl, "_blank", "noopener,noreferrer");
+    return;
+  }
+
+  // On mobile: try the app first
+  let didNavigate = false;
+  const timeout = setTimeout(() => {
+    if (!didNavigate) {
+      // Fallback to web—either in-app browser or default browser
+      window.location.href = webUrl;
+    }
+  }, 700);
+
+  try {
+    // Using location.href to keep it in the same tab (better UX on mobile)
+    window.location.href = appUrl;
+    didNavigate = true;
+  } catch {
+    // If something blocks it, just fallback immediately
+    clearTimeout(timeout);
+    window.location.href = webUrl;
+  }
+}
 
 export default function WhatsappFab() {
   const { number, loading } = useWhatsAppNumber();
@@ -16,9 +53,16 @@ export default function WhatsappFab() {
     return `Hi! I have a question about something I saw here: ${url}`;
   }, []);
 
+  // Lock background scroll when the sheet is open
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
+
   const close = () => {
     setOpen(false);
-    // Delay resetting view after animation for smoother UX
     setTimeout(() => setView("menu"), 250);
   };
 
@@ -53,6 +97,7 @@ export default function WhatsappFab() {
               </button>
             </header>
 
+            {/* Sheet interior: 1) scrollable content  2) fixed footer */}
             <div className="wa-view">
               {view === "menu" && <Menu onPick={setView} />}
               {view === "general" && <GeneralView number={effectiveNumber} />}
@@ -69,125 +114,190 @@ export default function WhatsappFab() {
 /* ---------------- Menu ---------------- */
 function Menu({ onPick }: { onPick: (v: View) => void }) {
   return (
-    <div className="menu fade-in">
-      <button className="menu-item" onClick={() => onPick("general")}>
-        <span className="mi-ic">💬</span>
-        <div className="mi-text">
-          <div className="mi-title">General queries</div>
-          <div className="mi-sub">Browse quick FAQs or ask us directly</div>
-        </div>
-        <ArrowRightIcon />
-      </button>
+    <>
+      <div className="scroll-area">
+        <div className="menu fade-in">
+          <button className="menu-item" onClick={() => onPick("general")}>
+            <span className="mi-ic">💬</span>
+            <div className="mi-text">
+              <div className="mi-title">General queries</div>
+              <div className="mi-sub">Browse quick FAQs or ask us directly</div>
+            </div>
+            <ArrowRightIcon />
+          </button>
 
-      <button className="menu-item" onClick={() => onPick("custom")}>
-        <span className="mi-ic">🎨</span>
-        <div className="mi-text">
-          <div className="mi-title">Customization order</div>
-          <div className="mi-sub">Describe your idea — colors, flowers, dates</div>
-        </div>
-        <ArrowRightIcon />
-      </button>
+          <button className="menu-item" onClick={() => onPick("custom")}>
+            <span className="mi-ic">🎨</span>
+            <div className="mi-text">
+              <div className="mi-title">Customization order</div>
+              <div className="mi-sub">Describe your idea — colors, flowers, dates</div>
+            </div>
+            <ArrowRightIcon />
+          </button>
 
-      <button className="menu-item" onClick={() => onPick("tracking")}>
-        <span className="mi-ic">📦</span>
-        <div className="mi-text">
-          <div className="mi-title">Tracking queries</div>
-          <div className="mi-sub">Find shipping info or chat with us</div>
+          <button className="menu-item" onClick={() => onPick("tracking")}>
+            <span className="mi-ic">📦</span>
+            <div className="mi-text">
+              <div className="mi-title">Tracking queries</div>
+              <div className="mi-sub">Find shipping info or chat with us</div>
+            </div>
+            <ArrowRightIcon />
+          </button>
         </div>
-        <ArrowRightIcon />
-      </button>
-    </div>
+      </div>
+      {/* no footer for menu */}
+    </>
   );
 }
 
 /* ---------------- Views ---------------- */
 function GeneralView({ number }: { number: string }) {
   const [query, setQuery] = useState("");
+
   const faqs = [
     { q: "What materials do you use?", a: "We use lightweight, skin-friendly materials with reinforced floral wiring for durability." },
     { q: "Do you ship across India?", a: "Yes, we ship pan-India with tracking. Express options are available at checkout." },
     { q: "How long does a custom order take?", a: "Most custom pieces take 5–7 working days depending on complexity and queue." },
+    { q: "Can you match outfit colors?", a: "Absolutely. Share references or photos, and we’ll match closely." },
+    { q: "Are the pieces heavy?", a: "We focus on all-day comfort with light builds and reinforced joinery." },
+    { q: "How do I care for them?", a: "Store flat, away from moisture. Wipe gently with a dry cloth after use." },
   ];
-  const href = waHrefFor(number, `General query: ${query || "(no message entered)"}`);
+
+  const message = `General query: ${query || "(no message entered)"}`;
+
+  const send = () => {
+    openWhatsAppPreferApp(number, message);
+    setQuery(""); // clear after sending
+  };
+
+  const onSubmit: React.FormEventHandler = (e) => {
+    e.preventDefault();
+    send();
+  };
 
   return (
-    <div className="panel fade-in">
-      <div className="section">
-        <h3 className="panel-title">FAQs</h3>
-        <div className="faq">
-          {faqs.map((f, i) => <FaqItem key={i} q={f.q} a={f.a} />)}
+    <>
+      {/* SCROLLABLE FAQs (only this area scrolls) */}
+      <div className="scroll-area">
+        <div className="panel fade-in">
+          <div className="section">
+            <h3 className="panel-title">FAQs</h3>
+            <div className="faq">
+              {faqs.map((f, i) => <FaqItem key={i} q={f.q} a={f.a} />)}
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="section">
-        <h4 className="panel-sub">Didn’t find your answer?</h4>
-        <form className="wa-form" onSubmit={(e)=>{ e.preventDefault(); window.open(href, "_blank"); }}>
-          <input
-            className="wa-input"
-            value={query}
-            onChange={e=>setQuery(e.target.value)}
-            placeholder="Type your question…"
-            aria-label="Your general question"
-          />
-          <a className="wa-btn green" href={href} target="_blank" rel="noreferrer">Chat on WhatsApp</a>
-        </form>
+      {/* FIXED FOOTER with input + CTA */}
+      <div className="sticky-footer">
+        <div className="footer-inner">
+          <form className="wa-form" onSubmit={onSubmit}>
+            <input
+              className="wa-input"
+              value={query}
+              onChange={e=>setQuery(e.target.value)}
+              placeholder="Type your question…"
+              aria-label="Your general question"
+            />
+            <button type="button" className="wa-btn green" onClick={send}>
+              Chat on WhatsApp
+            </button>
+          </form>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
 function CustomView({ number }: { number: string }) {
   const [msg, setMsg] = useState("");
-  const href = waHrefFor(number, `Customization order: ${msg || "(no message entered)"}`);
+  const message = `Customization order: ${msg || "(no message entered)"}`;
+
+  const send = () => {
+    openWhatsAppPreferApp(number, message);
+    setMsg("");
+  };
+
+  const onSubmit: React.FormEventHandler = (e) => {
+    e.preventDefault();
+    send();
+  };
 
   return (
-    <div className="panel fade-in">
-      <div className="section">
-        <h3 className="panel-title">Tell us about your custom</h3>
-        <p className="panel-copy">Share the occasion, colors, reference flowers, and need-by date.</p>
-        <form className="wa-form" onSubmit={(e)=>{ e.preventDefault(); window.open(href, "_blank"); }}>
-          <input
-            className="wa-input"
-            value={msg}
-            onChange={e=>setMsg(e.target.value)}
-            placeholder="e.g., Pastel bridal set for Oct 20, blush + ivory"
-            aria-label="Describe your customization"
-          />
-          <a className="wa-btn pink" href={href} target="_blank" rel="noreferrer">Chat on WhatsApp</a>
-        </form>
+    <>
+      <div className="scroll-area">
+        <div className="panel fade-in">
+          <div className="section">
+            <h3 className="panel-title">Tell us about your custom</h3>
+            <p className="panel-copy">Share the occasion, colors, reference flowers, and need-by date.</p>
+          </div>
+        </div>
       </div>
-    </div>
+
+      <div className="sticky-footer">
+        <div className="footer-inner">
+          <form className="wa-form" onSubmit={onSubmit}>
+            <input
+              className="wa-input"
+              value={msg}
+              onChange={e=>setMsg(e.target.value)}
+              placeholder="e.g., Pastel bridal set for Oct 20, blush + ivory"
+              aria-label="Describe your customization"
+            />
+            <button type="button" className="wa-btn pink" onClick={send}>
+              Chat on WhatsApp
+            </button>
+          </form>
+        </div>
+      </div>
+    </>
   );
 }
 
 function TrackingView({ number }: { number: string }) {
   const [q, setQ] = useState("");
-  // Dummy copy now — you’ll replace with your real text later
   const info = `Most ready-to-ship items dispatch the same day if ordered before 2pm IST. Custom orders typically dispatch within 5–7 working days. You’ll receive an email/SMS with your tracking link once the parcel is handed to the courier.`;
+  const message = `Tracking query: ${q || "(no message entered)"}`;
 
-  const href = waHrefFor(number, `Tracking query: ${q || "(no message entered)"}`);
+  const send = () => {
+    openWhatsAppPreferApp(number, message);
+    setQ("");
+  };
+
+  const onSubmit: React.FormEventHandler = (e) => {
+    e.preventDefault();
+    send();
+  };
 
   return (
-    <div className="panel fade-in">
-      <div className="section">
-        <h3 className="panel-title">Tracking & Dispatch</h3>
-        <p className="panel-copy">{info}</p>
+    <>
+      <div className="scroll-area">
+        <div className="panel fade-in">
+          <div className="section">
+            <h3 className="panel-title">Tracking & Dispatch</h3>
+            <p className="panel-copy">{info}</p>
+          </div>
+        </div>
       </div>
 
-      <div className="section">
-        <h4 className="panel-sub">Still need help?</h4>
-        <form className="wa-form" onSubmit={(e)=>{ e.preventDefault(); window.open(href, "_blank"); }}>
-          <input
-            className="wa-input"
-            value={q}
-            onChange={e=>setQ(e.target.value)}
-            placeholder="e.g., Can you expedite my order? Order #BB1234"
-            aria-label="Your tracking question"
-          />
-          <a className="wa-btn green" href={href} target="_blank" rel="noreferrer">Chat on WhatsApp</a>
-        </form>
+      <div className="sticky-footer">
+        <div className="footer-inner">
+          <form className="wa-form" onSubmit={onSubmit}>
+            <input
+              className="wa-input"
+              value={q}
+              onChange={e=>setQ(e.target.value)}
+              placeholder="e.g., Can you expedite my order? Order #BB1234"
+              aria-label="Your tracking question"
+            />
+            <button type="button" className="wa-btn green" onClick={send}>
+              Chat on WhatsApp
+            </button>
+          </form>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -236,6 +346,10 @@ function CloseIcon(){
 
 /* ---------------- Styles ---------------- */
 const styles = `
+:root{
+  --wa-maxw: 440px;
+}
+
 /* Floating button */
 .wa-fab{
   position: fixed;
@@ -253,12 +367,12 @@ const styles = `
   z-index: 89; animation: fade .18s ease;
 }
 
-/* Panel */
+/* Panel (sheet) */
 .wa-sheet{
   position: fixed;
   right: clamp(12px, 2.4vw, 22px);
   bottom: calc(clamp(12px, 2.4vw, 22px) + 64px);
-  width: min(480px, calc(100vw - 24px));
+  width: min(var(--wa-maxw), calc(100vw - 24px));
   max-height: min(68vh, 700px);
   background: #fff; border-radius: 16px; border: 1px solid rgba(0,0,0,.08);
   box-shadow: 0 20px 54px rgba(0,0,0,.20);
@@ -266,6 +380,8 @@ const styles = `
   transform-origin: 100% 100%;
   animation: pop-in .22s cubic-bezier(.2,.8,.2,1);
 }
+@media (min-width: 900px){ :root{ --wa-maxw: 500px; } }
+@media (min-width: 1400px){ :root{ --wa-maxw: 520px; } }
 
 .wa-head{
   display:flex; align-items:center; justify-content:space-between; gap:10px;
@@ -278,9 +394,35 @@ const styles = `
   display:grid; place-items:center;
 }
 
-.wa-view{ padding: 10px 12px; overflow:auto; }
+/* Interior grid: 1fr scrollable + auto footer */
+.wa-view{
+  display: grid;
+  grid-template-rows: 1fr auto;
+  min-height: 0;              /* required for nested scrolling */
+}
 
-/* --- Menu --- */
+/* The only scrollable area (hide scrollbars) */
+.scroll-area{
+  overflow: auto;
+  padding: 10px 12px;
+  min-height: 0;              /* allow it to shrink and scroll */
+  -ms-overflow-style: none;   /* IE/Edge */
+  scrollbar-width: none;      /* Firefox */
+}
+.scroll-area::-webkit-scrollbar{ display: none; } /* Chrome/Safari */
+
+/* Sticky footer (fixed INSIDE the sheet) */
+.sticky-footer{
+  position: sticky; bottom: 0; background: #fff;
+  border-top: 1px solid rgba(0,0,0,.06);
+}
+.footer-inner{
+  padding: 10px 12px;
+  max-width: calc(var(--wa-maxw) - 24px);
+  margin: 0 auto;
+}
+
+/* Content blocks */
 .menu{ display:grid; gap:10px; }
 .menu-item{
   display:flex; align-items:center; gap:12px; padding:12px;
@@ -293,14 +435,12 @@ const styles = `
 .mi-title{ font-weight:900; color: var(--bb-primary); }
 .mi-sub{ opacity:.9; }
 
-/* --- Panels shared --- */
 .panel{ display:grid; gap: 16px; }
 .section{ display:grid; gap:10px; }
 .panel-title{ margin:0; color: var(--bb-primary); font-weight:900; }
 .panel-sub{ margin:0; color: var(--bb-primary); font-weight:900; }
 .panel-copy{ margin:0; opacity:.92; color: var(--bb-primary); }
 
-/* FAQ */
 .faq{ display:grid; gap:8px; }
 .faq-item{ border:1px solid rgba(0,0,0,.10); border-radius:12px; padding:8px 10px; }
 .faq-q{
@@ -310,9 +450,7 @@ const styles = `
 .faq-a{ margin-top:6px; opacity:.9; color: var(--bb-primary); }
 
 /* Form */
-.wa-form{
-  display:flex; gap:8px; align-items:center; flex-wrap:wrap;
-}
+.wa-form{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 .wa-input{
   flex:1 1 auto; height:44px; border-radius:12px; border:1px solid rgba(0,0,0,.14);
   padding: 8px 12px; outline:none; background:#fff; color: var(--bb-primary);
@@ -329,10 +467,13 @@ const styles = `
 @keyframes pop-in { from{opacity:0; transform: scale(.96)} to{opacity:1; transform: scale(1)} }
 .fade-in{ animation: fade .15s ease; }
 
+/* Mobile bottom-sheet behavior */
 @media (max-width:560px){
   .wa-sheet{
     right: 0; left: 0; bottom: 0; width: auto; border-radius: 14px 14px 0 0;
     transform-origin: 50% 100%;
+    max-width: none;
   }
+  .footer-inner{ max-width: none; }
 }
 `;

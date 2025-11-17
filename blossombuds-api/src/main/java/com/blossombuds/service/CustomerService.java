@@ -5,6 +5,7 @@ import com.blossombuds.dto.AddressDto;
 import com.blossombuds.dto.CustomerDto;
 import com.blossombuds.repository.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,6 +15,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /** Application service for managing customers and their addresses. */
+@Slf4j
 @Service
 @Validated
 @RequiredArgsConstructor
@@ -40,7 +42,9 @@ public class CustomerService {
         c.setEmail(dto.getEmail());
         c.setPhone(dto.getPhone());
         c.setActive(dto.getActive() != null ? dto.getActive() : Boolean.TRUE);
-        return customerRepo.save(c);
+        Customer saved = customerRepo.save(c);
+        log.info("[CUSTOMER][CREATE] Customer created: id={}, email={}", saved.getId(), saved.getEmail());
+        return saved;
     }
 
     /** Updates basic customer fields. */
@@ -57,21 +61,26 @@ public class CustomerService {
         if (dto.getEmail() != null)    c.setEmail(dto.getEmail());
         if (dto.getPhone() != null)    c.setPhone(dto.getPhone());
         if (dto.getActive() != null)   c.setActive(dto.getActive());
-        return c; // JPA dirty checking
+        log.info("[CUSTOMER][UPDATE] Customer updated: id={}, email={}", c.getId(), c.getEmail());
+        return c;
     }
 
     /** Returns a customer by id or throws if not found. */
     // @PreAuthorize("hasRole('ADMIN')")
     public Customer getCustomer(Long customerId) {
         if (customerId == null) throw new IllegalArgumentException("customerId is required");
-        return customerRepo.findById(customerId)
+        Customer c = customerRepo.findById(customerId)
                 .orElseThrow(() -> new IllegalArgumentException("Customer not found: " + customerId));
+        log.info("[CUSTOMER][FETCH] Customer fetched: id={}, email={}", c.getId(), c.getEmail());
+        return c;
     }
 
     /** Lists all customers (admin only). */
     @PreAuthorize("hasRole('ADMIN')")
     public List<Customer> listCustomers() {
-        return customerRepo.findAll();
+        List<Customer> list = customerRepo.findAll();
+        log.info("[CUSTOMER][LIST] {} customers found", list.size());
+        return list;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -149,6 +158,7 @@ public class CustomerService {
             unsetOtherDefaults(saved.getCustomer().getId(), saved.getId());
         }
 
+        log.info("[ADDRESS][CREATE] Address created: id={}, customerId={}, isDefault={}", saved.getId(), customerId, saved.getIsDefault());
         return toAddressView(saved,
                 nameOf(country), nameOf(state), nameOf(district));
     }
@@ -192,6 +202,7 @@ public class CustomerService {
             unsetOtherDefaults(saved.getCustomer().getId(), saved.getId());
         }
 
+        log.info("[ADDRESS][UPDATE] Address updated: id={}, customerId={}, isDefault={}", saved.getId(), saved.getCustomer().getId(), saved.getIsDefault());
         return toAddressView(saved,
                 nameOf(saved.getCountry()), nameOf(saved.getState()), nameOf(saved.getDistrict()));
     }
@@ -239,6 +250,7 @@ public class CustomerService {
                         .thenComparing(AddressView::id))
                 .toList();
 
+        log.info("[ADDRESS][LIST] {} addresses listed for customerId={}", views.size(), customerId);
         return views;
     }
 
@@ -257,6 +269,7 @@ public class CustomerService {
         Address saved = addressRepo.save(a);
         unsetOtherDefaults(saved.getCustomer().getId(), saved.getId());
 
+        log.info("[ADDRESS][SET_DEFAULT] Set as default: addressId={}, customerId={}", addressId, saved.getCustomer().getId());
         return toAddressView(saved,
                 nameOf(saved.getCountry()), nameOf(saved.getState()), nameOf(saved.getDistrict()));
     }
@@ -274,7 +287,7 @@ public class CustomerService {
 
         a.setActive(Boolean.FALSE);
         a.setIsDefault(Boolean.FALSE);
-        // flush on commit
+        log.info("[ADDRESS][DELETE] Soft-deleted address: id={}, customerId={}", addressId, a.getCustomer().getId());
     }
 
     // ─────────────────────────────────────────────────────────────

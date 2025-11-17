@@ -97,5 +97,116 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="reset-and-seed-settings-20251115" author="chatgpt">
+        <!-- 1. Delete all settings -->
+        <delete tableName="settings" />
+
+        <!-- 2. Insert new settings -->
+        <insert tableName="settings">
+            <column name="key" value="shipping.free_threshold" />
+            <column name="value" value="2499" />
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+        </insert>
+
+        <insert tableName="settings">
+            <column name="key" value="about.disclaimer" />
+            <column name="value" value=""/>
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+        </insert>
+
+        <insert tableName="settings">
+            <column name="key" value="about.terms_and_conditions" />
+            <column name="value" value=""/>
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+        </insert>
+
+        <insert tableName="settings">
+            <column name="key" value="policy.privacy" />
+            <column name="value" value=""/>
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+        </insert>
+
+        <insert tableName="settings">
+            <column name="key" value="policy.refund_and_return" />
+            <column name="value" value=""/>
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+        </insert>
+
+        <insert tableName="settings">
+            <column name="key" value="policy.shipping" />
+            <column name="value" value=""/>
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+        </insert>
+
+        <insert tableName="settings">
+            <column name="key" value="brand.instagram" />
+            <column name="value" value="https://www.instagram.com/blossom_buds_floral_artistry" />
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+        </insert>
+
+        <insert tableName="settings">
+            <column name="key" value="brand.whatsapp" />
+            <column name="value" value="+91 88073 92855" />
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+        </insert>
+
+        <insert tableName="settings">
+            <column name="key" value="brand.address" />
+            <column name="value" value="Blossom Buds Floral Artistry   No.40, Ossur Amman Kovil Street, 89 veppampattu, Thiruvallur -602024" />
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+        </insert>
+
+        <insert tableName="settings">
+            <column name="key" value="brand.support_email" />
+            <column name="value" value="blossombudscustomercare@gmail.com" />
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+        </insert>
+
+        <insert tableName="settings">
+            <column name="key" value="brand.url" />
+            <column name="value" value="www.blossom-buds-floral-artistry.com" />
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+        </insert>
+
+        <insert tableName="settings">
+            <column name="key" value="brand.name" />
+            <column name="value" value="Blossom Buds Floral Artistry" />
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+        </insert>
+
+        <insert tableName="settings">
+            <column name="key" value="ui.topbanner_coupon" />
+            <column name="value" value="WELCOME20 for 10 % off*" />
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+        </insert>
+
+        <insert tableName="settings">
+            <column name="key" value="ui.featureTiles.images" />
+            <column name="value" value="[]" />
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+        </insert>
+
+        <insert tableName="settings">
+            <column name="key" value="about.about_us" />
+            <column name="value" value=""/>
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+        </insert>
+    </changeSet>
+
 
 </databaseChangeLog>

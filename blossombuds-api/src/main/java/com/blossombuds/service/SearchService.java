@@ -7,6 +7,7 @@ import com.blossombuds.dto.ProductListItemDto;
 import com.blossombuds.repository.CategoryRepository;
 import com.blossombuds.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +16,7 @@ import org.springframework.validation.annotation.Validated;
 import java.math.BigDecimal;
 
 /** Faceted product/category search with basic filtering and pagination. */
+@Slf4j
 @Service
 @Validated
 @RequiredArgsConstructor
@@ -40,9 +42,12 @@ public class SearchService {
         if (min != null && max != null && min.compareTo(max) > 0) {
             BigDecimal tmp = min; min = max; max = tmp;
         }
+        log.info("[SEARCH][PRODUCTS] Searching products q='{}' categoryId={} min={} max={} page={} size={}",
+                term, categoryId, min, max, p, s);
 
         Pageable pageable = PageRequest.of(p, s);
         Page<Product> products = productRepo.searchProducts(term, categoryId, min, max, pageable);
+        log.info("[SEARCH][PRODUCTS] Found {} products", products.getNumberOfElements());
 
         return products.map(pv -> {
             ProductListItemDto dto = new ProductListItemDto();
@@ -59,9 +64,11 @@ public class SearchService {
         String term = q == null ? "" : q.trim();
         int p = Math.max(page, 0);
         int s = Math.min(Math.max(size, 1), 100);
+        log.info("[SEARCH][CATEGORIES] Searching categories q='{}' page={} size={}", term, p, s);
 
         Pageable pageable = PageRequest.of(p, s, Sort.by("name").ascending());
         Page<Category> cats = categoryRepo.findByActiveTrueAndNameContainingIgnoreCase(term, pageable);
+        log.info("[SEARCH][CATEGORIES] Found {} categories", cats.getNumberOfElements());
 
         return cats.map(c -> {
             CategoryDto dto = new CategoryDto();

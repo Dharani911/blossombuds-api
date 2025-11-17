@@ -86,18 +86,21 @@ export default function CmsPage() {
         )}
 
         {!loading && !!body && (
-          looksLikeHtml ? (
-            <div
-              className="cms-body prose"
-              dangerouslySetInnerHTML={{ __html: body }}
-            />
-          ) : (
-            <div className="cms-body prose">
-              {body.split(/\n{2,}/).map((para, i) => (
-                <p key={i}>{para}</p>
-              ))}
-            </div>
-          )
+          <div className="cms-card">
+            {looksLikeHtml ? (
+              <div
+                className="cms-body prose"
+                dangerouslySetInnerHTML={{ __html: body }}
+              />
+            ) : (
+              <div className="cms-body prose">
+                {body.split(/\n{2,}/).map((para, i) => (
+                  <p key={i}>{para}</p>
+                ))}
+              </div>
+            )}
+          </div>
+
         )}
       </div>
     </div>
@@ -126,4 +129,12 @@ h1{ margin: 0 0 12px; font-family: "DM Serif Display", Georgia, serif; }
 .prose ul, .prose ol{ margin: 10px 0 10px 22px; }
 .prose h2{ margin: 16px 0 8px; font-size: 20px; }
 .prose h3{ margin: 14px 0 8px; font-size: 17px; }
+.cms-card {
+  background: #fff;
+  padding: 24px;
+  border-radius: 16px;
+  box-shadow: 0 12px 30px rgba(0,0,0,.06);
+  margin-top: 12px;
+}
+
 `;

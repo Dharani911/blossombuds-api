@@ -98,8 +98,17 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/api/reviews/**").hasAnyRole("CUSTOMER","ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/payments/razorpay/orders/**").hasAnyRole("CUSTOMER","ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/payments/razorpay/verify").hasAnyRole("CUSTOMER","ADMIN")
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                                // inside authorizeHttpRequests(auth -> auth ... )
+                                .requestMatchers(HttpMethod.GET, "/api/feature-images/public/**").permitAll()
+// (optional, if your images are served via these paths)
+                                .requestMatchers(HttpMethod.GET, "/api/files/**").permitAll()
+                                .requestMatchers(HttpMethod.GET, "/files/**").permitAll()
+                                .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
 
-                        // anything else
+
+
+                                // anything else
                         .anyRequest().authenticated()
                 )
 
@@ -113,15 +122,42 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cfg = new CorsConfiguration();
+
+        // Keep localhost for desktop dev
         cfg.setAllowedOrigins(List.of(
                 "http://localhost:3000",
                 "http://localhost:5173",
                 "http://localhost:5174",
                 "http://127.0.0.1:3000",
-                "http://127.0.0.1:5173" // optional, handy in dev
+                "http://127.0.0.1:5173"
         ));
+
+        // NEW: allow Vite when served on your LAN IP / mDNS host
+        cfg.setAllowedOriginPatterns(List.of(
+                "http://192.168.*.*:5173",
+                "http://10.*.*.*:5173",
+                "http://172.16.*.*:5173",
+                "http://172.17.*.*:5173",
+                "http://172.18.*.*:5173",
+                "http://172.19.*.*:5173",
+                "http://172.20.*.*:5173",
+                "http://172.21.*.*:5173",
+                "http://172.22.*.*:5173",
+                "http://172.23.*.*:5173",
+                "http://172.24.*.*:5173",
+                "http://172.25.*.*:5173",
+                "http://172.26.*.*:5173",
+                "http://172.27.*.*:5173",
+                "http://172.28.*.*:5173",
+                "http://172.29.*.*:5173",
+                "http://172.30.*.*:5173",
+                "http://172.31.*.*:5173",
+                "http://*.local:5173",
+                "http://*.lan:5173"
+        ));
+
         cfg.setAllowedMethods(List.of("GET","POST","PUT","DELETE","PATCH","OPTIONS"));
-        cfg.setAllowedHeaders(List.of("Authorization","Content-Type","X-Requested-With"));
+        cfg.setAllowedHeaders(List.of("*")); // simpler for dev; or list explicit headers
         cfg.setExposedHeaders(List.of("Authorization"));
         cfg.setAllowCredentials(true);
         cfg.setMaxAge(3600L);
@@ -130,6 +166,7 @@ public class SecurityConfig {
         src.registerCorsConfiguration("/**", cfg);
         return src;
     }
+
 
     @Bean
     public PasswordEncoder passwordEncoder() {

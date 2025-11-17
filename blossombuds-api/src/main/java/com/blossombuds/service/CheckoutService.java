@@ -13,10 +13,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
@@ -24,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 
 /** Orchestrates checkout: India → create intent+RZP order; International → WhatsApp link. */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CheckoutService {
@@ -38,19 +41,34 @@ public class CheckoutService {
     /** Starts checkout. India → returns RZP order payload; Intl → WhatsApp URL. */
     @Transactional
     public Decision startCheckout(OrderDto orderDraft, List<OrderItemDto> items) {
-        Country country = countryRepo.findById(orderDraft.getShipCountryId())
-                .orElseThrow(() -> new IllegalArgumentException("Country not found: " + orderDraft.getShipCountryId()));
+        final Instant t0 = Instant.now();
+        final Long shipCountryId = orderDraft != null ? orderDraft.getShipCountryId() : null;
+        final Long customerId = orderDraft != null ? orderDraft.getCustomerId() : null;
 
+        log.info("[CHECKOUT][START] shipCountryId={} customerId={} itemsCount={} currency='{}' grandTotal={}",
+                shipCountryId,
+                customerId,
+                (items != null ? items.size() : 0),
+                (orderDraft != null ? orderDraft.getCurrency() : null),
+                (orderDraft != null ? orderDraft.getGrandTotal() : null));
+
+        Country country = countryRepo.findById(orderDraft.getShipCountryId())
+                .orElseThrow(() -> {
+                    log.warn("[CHECKOUT][FAIL] Country not found: {}", shipCountryId);
+                    return new IllegalArgumentException("Country not found: " + shipCountryId);
+                });
         if (!isIndia(country)) {
-            Customer c = (orderDraft.getCustomerId() == null) ? null :
-                    customerRepo.findById(orderDraft.getCustomerId()).orElse(null);
+            log.info("[CHECKOUT][INTL] Building WhatsApp URL for non-India destination");
+            Customer c = (customerId == null) ? null : customerRepo.findById(customerId).orElse(null);
             String url = waBuilder.buildForOrderDraft(orderDraft, items, c);
+            log.info("[CHECKOUT][INTL][OK] whatsappUrlBuilt elapsedMs={}", java.time.Duration.between(t0, Instant.now()).toMillis());
             return Decision.whatsapp(url);
         }
 
         // India-only: create checkout intent
         BigDecimal grand = nvl(orderDraft.getGrandTotal());
         String currency = normCurrency(orderDraft.getCurrency());
+        log.info("[CHECKOUT][INDIA] Creating checkout intent grand={} currency='{}'", grand, currency);
 
         CheckoutIntent ci = new CheckoutIntent();
         ci.setCustomerId(orderDraft.getCustomerId());
@@ -63,6 +81,8 @@ public class CheckoutService {
         //ci.setCreatedAt(OffsetDateTime.now());
         //ci.setCreatedBy("system");
         ciRepo.save(ci);
+        log.info("[CHECKOUT][INDIA][INTENT][OK] checkoutIntentId={}", ci.getId());
+
 
         // Create Razorpay order tied to this intent (use receipt for friendly code)
         long paise = grand.movePointRight(2).longValueExact();
@@ -70,18 +90,25 @@ public class CheckoutService {
         notes.put("checkoutIntentId", String.valueOf(ci.getId()));
         notes.put("customerId", String.valueOf(orderDraft.getCustomerId()));
 
+        log.info("[PAYMENT][RZP][ORDER_CREATE] paise={} currency='{}' receipt='CI{}'", paise, currency, ci.getId());
         Map<String, Object> rzp = rzpService.createRzpOrderForAmount(paise, currency, "CI" + ci.getId(), notes, true);
         String rzpOrderId = (String) rzp.get("id");
         ci.setRzpOrderId(rzpOrderId);
-        //ci.setModifiedAt(OffsetDateTime.now());
-        //ci.setModifiedBy("system");
+        log.info("[PAYMENT][RZP][ORDER_CREATE][OK] rzpOrderId={} checkoutIntentId={} elapsedMs={}",
+                rzpOrderId, ci.getId(), java.time.Duration.between(t0, Instant.now()).toMillis());
 
         return Decision.rzpOrder(rzp, currency);
     }
 
     // ---------- helpers ----------
     private String write(Object o) {
-        try { return om.writeValueAsString(o); } catch (Exception e) { throw new IllegalStateException(e); }
+        try { return om.writeValueAsString(o); }
+        catch (Exception e) {
+            log.error("[CHECKOUT][SERIALIZE][FAIL] type={} err={}",
+                    (o == null ? "null" : o.getClass().getSimpleName()),
+                    e.toString());
+            throw new IllegalStateException(e);
+        }
     }
     private boolean isIndia(Country c) {
         if (c.getName() != null && c.getName().equalsIgnoreCase("India")) return true;

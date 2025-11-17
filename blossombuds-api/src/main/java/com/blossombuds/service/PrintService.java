@@ -8,6 +8,7 @@ import com.blossombuds.repository.OrderRepository;
 import com.lowagie.text.*;
 import com.lowagie.text.pdf.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.hibernate.LazyInitializationException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** PDF generator for invoices & packing slips using OpenPDF (minimal, template-friendly). */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -41,19 +43,24 @@ public class PrintService {
     @Transactional(readOnly = true, propagation = Propagation.NOT_SUPPORTED)
     public byte[] renderInvoicePdf(Long orderId) {
         if (orderId == null) throw new IllegalArgumentException("orderId is required");
+        log.info("[PRINT][INVOICE] Generating invoice for orderId={}", orderId);
 
         // Fetch with geo to avoid lazy issues
         Order order = orderRepository.findByIdWithShipGeo(orderId)
-                .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
-
+                .orElseThrow(() -> {
+                    log.warn("[PRINT][INVOICE] Order not found for orderId={}", orderId);
+                    return new IllegalArgumentException("Order not found: " + orderId);
+                });
         List<OrderItem> items = orderItemRepository.findByOrder_Id(orderId);
+        log.debug("[PRINT][INVOICE] Fetched {} order items for orderId={}", items.size(), orderId);
 
         String brandName    = safe(setting("brand.name", "Blossom & Buds"));
         String fromAddress  = safe(setting("brand.address", "Chennai, TN"));
         String supportEmail = safe(setting("brand.support_email", "support@example.com"));
         String supportPhone = safe(setting("brand.whatsapp", "+91-00000-00000"));
+        log.debug("[PRINT][INVOICE] Settings loaded: brandName='{}', supportEmail='{}'", brandName, supportEmail);
 
-        return buildPdf(doc -> {
+        byte[] pdfBytes= buildPdf(doc -> {
             doc.add(brandHeader(brandName + " — Tax Invoice", /*uppercase*/ false, logoUrl(), logoMaxH()));
 
             doc.add(new Paragraph("Order: " + displayPublicCode(order.getPublicCode())));
@@ -92,18 +99,24 @@ public class PrintService {
             doc.add(new Paragraph("From: " + fromAddress));
             doc.add(new Paragraph("Support: " + supportEmail + " / " + supportPhone));
         });
+        log.info("[PRINT][INVOICE] Invoice PDF generated for orderId={}, size={} bytes", orderId, pdfBytes.length);
+        return pdfBytes;
     }
 
     /** Generates packing slip PDF bytes for a given order id (no pricing). */
     @Transactional(readOnly = true, propagation = Propagation.SUPPORTS, noRollbackFor = Exception.class)
     public byte[] renderPackingSlipPdf(Long orderId) {
         if (orderId == null) throw new IllegalArgumentException("orderId is required");
+        log.info("[PRINT][PACKING_SLIP] Generating packing slip for orderId={}", orderId);
 
         Order order = orderRepository.findByIdWithShipGeo(orderId)
-                .orElseGet(() -> orderRepository.findById(orderId)
-                        .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId)));
-
+                .orElseGet(() -> {
+                    log.debug("[PRINT][PACKING_SLIP] Fallback to lazy fetch for orderId={}", orderId);
+                    return orderRepository.findById(orderId)
+                            .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+                });
         List<OrderItem> items = orderItemRepository.findByOrder_Id(orderId);
+        log.debug("[PRINT][PACKING_SLIP] Retrieved {} items for orderId={}", items.size(), orderId);
 
         // Settings
         String brandName   = safe(setting("brand.name", "Blossom Buds Floral Artistry")).toUpperCase();
@@ -137,7 +150,7 @@ public class PrintService {
                 (customerPhone.isBlank() ? "" : "Phone: " + customerPhone)
         );
 
-        return buildPdfWithWriter((doc, writer) -> {
+        byte[] pdf= buildPdfWithWriter((doc, writer) -> {
             // Page geometry
             Rectangle page = doc.getPageSize();
             float left   = doc.left();
@@ -309,6 +322,8 @@ public class PrintService {
             }
             frCt.go();
         });
+        log.info("[PRINT][PACKING_SLIP] Packing slip PDF generated for orderId={}, size={} bytes", orderId, pdf.length);
+        return pdf;
     }
     /**
      * Generates a single PDF that contains packing slips for all given order IDs.
@@ -319,6 +334,7 @@ public class PrintService {
         if (orderIds == null || orderIds.isEmpty()) {
             throw new IllegalArgumentException("orderIds is required and must be non-empty");
         }
+        log.info("[PRINT][PACKING_SLIP_BULK] Generating bulk packing slips for {} orderIds", orderIds.size());
 
         // Read settings once for all pages
         final String brandName = safe(setting("brand.name", "Blossom Buds Floral Artistry")).toUpperCase();
@@ -340,10 +356,11 @@ public class PrintService {
                 Order order = orderRepository.findByIdWithShipGeo(id)
                         .orElseGet(() -> orderRepository.findById(id).orElse(null));
                 if (order == null) {
-                    // Skip silently; or throw if you prefer fail-fast
+                    log.warn("[PRINT][PACKING_SLIP_BULK] Skipping invalid orderId={}", id);
                     continue;
                 }
                 List<OrderItem> items = orderItemRepository.findByOrder_Id(id);
+                log.debug("[PRINT][PACKING_SLIP_BULK] OrderId={} has {} items", id, items.size());
 
                 if (!first) doc.newPage();
                 first = false;
@@ -355,12 +372,16 @@ public class PrintService {
             }
 
             if (processed.isEmpty()) {
+                log.warn("[PRINT][PACKING_SLIP_BULK] No valid orders processed");
                 throw new IllegalArgumentException("No valid orders to print.");
             }
 
             doc.close();
-            return out.toByteArray();
+            byte[] pdf = out.toByteArray();
+            log.info("[PRINT][PACKING_SLIP_BULK] Bulk packing slip PDF generated with {} orders, size={} bytes", processed.size(), pdf.length);
+            return pdf;
         } catch (Exception e) {
+            log.error("[PRINT][PACKING_SLIP_BULK] Failed to generate packing slips: {}", e.getMessage(), e);
             throw new IllegalStateException("Failed to generate bulk packing slips PDF", e);
         }
     }
@@ -373,6 +394,7 @@ public class PrintService {
             Order order, List<OrderItem> items,
             String brandName, String fromAddress
     ) throws Exception {
+        log.info("[PRINT][PACKING_SLIP_PAGE] Rendering packing slip page for orderId={}", order.getId());
 
         // Data strings (stay stringy to avoid LAZY trips)
         String orderCode     = safe(order.getPublicCode());
@@ -385,6 +407,8 @@ public class PrintService {
         BigDecimal shipping      = nvl(order.getShippingFee());
         BigDecimal grand         = nvl(order.getGrandTotal());
         BigDecimal discount      = nvl(order.getDiscountTotal());
+        log.debug("[PRINT][PACKING_SLIP_PAGE] orderCode={}, itemsCount={}, customer={}",
+                orderCode, items.size(), customerName);
 
         final String toBlock = joinLines(
                 customerName + (order.getCustomerId() != null && !orderCode.isBlank() ? " (BB" + orderCode + ")" :
@@ -400,6 +424,7 @@ public class PrintService {
                 safeCountryName(order),
                 (customerPhone.isBlank() ? "" : "Phone: " + customerPhone)
         );
+        log.debug("[PRINT][PACKING_SLIP_PAGE] toBlockPrepared={}, courier={}", !toBlock.isBlank(), courier);
 
         // Page geometry
         Rectangle page = doc.getPageSize();
@@ -412,6 +437,8 @@ public class PrintService {
         float bottomZoneHeight = 175f;
         float lineGap          = 10f;
         float yCut             = bottom + bottomZoneHeight + lineGap;
+        log.debug("[PRINT][PACKING_SLIP_PAGE] Layout: left={}, right={}, top={}, bottom={}, yCut={}",
+                left, right, top, bottom, yCut);
 
         // Set/replace page event for this page
         writer.setPageEvent(new CutFoldLineEvent(yCut));
@@ -451,6 +478,7 @@ public class PrintService {
         float itemsTopY = topCt.getYLine();
         if (itemsTopY <= 0 || Float.isNaN(itemsTopY)) itemsTopY = top - 90f;
         itemsTopY -= 6f;
+        log.debug("[PRINT][PACKING_SLIP_PAGE] itemsTopY={}", itemsTopY);
 
         float totalsBandHeight = 64f;
         float itemsBottomY     = yCut + totalsBandHeight + 6f;
@@ -458,6 +486,8 @@ public class PrintService {
         // ── TOP FRAME 2: Items in dynamic columns ──
         int n = items.size();
         int cols = (n > 24) ? 3 : (n > 12 ? 2 : 1);
+        log.debug("[PRINT][PACKING_SLIP_PAGE] items={}, cols={}", n, cols);
+
         float colGap = 12f;
         float colWidth = (right - left - (colGap * (cols - 1))) / cols;
 
@@ -561,6 +591,8 @@ public class PrintService {
             }
         }
         frCt.go();
+        log.info("[PRINT][PACKING_SLIP_PAGE] Completed page render for orderId={}", order.getId());
+
     }
 
 
@@ -574,9 +606,11 @@ public class PrintService {
     /** Compact left-aligned logo + brand name with visual centers aligned. */
     private Element brandHeader(String brandName, boolean uppercase, String logoUrlSetting, float maxLogoH) {
         try {
+            log.info("[PRINT][LOGO] Attempting to load logo from setting: {}", logoUrlSetting);
             Image logo = tryLoadLogoImage(logoUrlSetting); // your existing loader; returns null if not found
             if (logo != null) {
                 final float maxH = (maxLogoH > 0 ? maxLogoH : 28f);
+                log.info("[PRINT][LOGO] Logo loaded successfully");
 
                 // Scale logo to target max height, keep aspect ratio
                 logo.scaleToFit(1000f, maxH); // huge width cap, strict height cap
@@ -606,12 +640,13 @@ public class PrintService {
 
                 return p;
             }
-        } catch (Exception ignore) {
-            // fall through
+        } catch (Exception e) {
+            log.warn("[PRINT][LOGO] Exception while loading logo image from setting '{}': {}", logoUrlSetting, e.getMessage());
         }
 
         // Fallback: text-only, left aligned
         String text = uppercase ? safe(brandName).toUpperCase() : safe(brandName);
+        log.info("[PRINT][LOGO] Falling back to text-only brand header: {}", text);
         Paragraph p = new Paragraph(text, new Font(Font.HELVETICA, 16, Font.BOLD));
         p.setAlignment(Element.ALIGN_LEFT);
         p.setSpacingAfter(8f);
@@ -631,9 +666,12 @@ public class PrintService {
         // 1) If settings provided a direct URL/path, try it first
         try {
             if (logoUrlSetting != null && !logoUrlSetting.isBlank()) {
+                log.info("[PRINT][LOGO] Trying direct logo URL/path: {}", logoUrlSetting);
                 return Image.getInstance(logoUrlSetting);
             }
-        } catch (Exception ignore) {}
+        } catch (Exception e) {
+            log.warn("[PRINT][LOGO] Failed to load image from direct path: {}", e.getMessage());
+        }
 
         // 2) Try classpath resource for PNG path (e.g., "static/BB_logo.png")
         //    Works when the file is under src/main/resources/static/...
@@ -641,16 +679,22 @@ public class PrintService {
             if (cp == null || cp.isBlank()) continue;
             try (java.io.InputStream in = getClass().getResourceAsStream(cp)) {
                 if (in != null) {
+                    log.info("[PRINT][LOGO] Loading logo from classpath resource: {}", cp);
                     byte[] bytes = in.readAllBytes();
                     return Image.getInstance(bytes);
                 }
-            } catch (Exception ignore) {}
+            } catch (Exception e) {
+                log.warn("[PRINT][LOGO] Failed to load logo from classpath {}: {}", cp, e.getMessage());
+            }
             try (java.io.InputStream in = Thread.currentThread().getContextClassLoader().getResourceAsStream(cp.startsWith("/") ? cp.substring(1) : cp)) {
                 if (in != null) {
+                    log.info("[PRINT][LOGO] Loading logo from context classpath: {}", cp);
                     byte[] bytes = in.readAllBytes();
                     return Image.getInstance(bytes);
                 }
-            } catch (Exception ignore) {}
+            }  catch (Exception e) {
+                log.warn("[PRINT][LOGO] Failed to load logo from context classpath {}: {}", cp, e.getMessage());
+            }
         }
 
         // 3) Try filesystem path as a fallback
@@ -658,26 +702,34 @@ public class PrintService {
             if (logoPngPath != null && !logoPngPath.isBlank()) {
                 java.io.File f = new java.io.File(logoPngPath);
                 if (f.exists() && f.isFile()) {
+                    log.info("[PRINT][LOGO] Loading logo from filesystem path: {}", f.getAbsolutePath());
                     return Image.getInstance(f.getAbsolutePath());
                 }
             }
-        } catch (Exception ignore) {}
+        } catch (Exception e) {
+            log.warn("[PRINT][LOGO] Failed to load logo from filesystem: {}", e.getMessage());
+        }
 
         // NOTE: SVG not supported natively by OpenPDF; keep PNG as the reliable source.
+        log.info("[PRINT][LOGO] No logo found — returning null");
         return null;
     }
     /** Reads logo URL and max height from settings. */
     private String logoUrl() {
-        // If you prefer to force the @Value path always, return "" here.
-        return safe(setting("brand.logo_url", ""));
+        String logoUrl = safe(setting("brand.logo_url", ""));
+        log.debug("[PRINT][LOGO] Resolved logo URL: {}", logoUrl);
+        return logoUrl;
     }
 
     /** Max logo height in points (PDF units). Optional (defaults to ~10mm). */
     private float logoMaxH() {
         try {
             String v = setting("brand.logo_max_h", "28");
-            return Float.parseFloat(v);
+            float parsed = Float.parseFloat(v);
+            log.debug("[PRINT][LOGO] Parsed logo max height: {}", parsed);
+            return parsed;
         } catch (Exception e) {
+            log.warn("[PRINT][LOGO] Failed to parse logo max height — using default 28");
             return 28f;
         }
     }
@@ -691,28 +743,34 @@ public class PrintService {
 
     /** Builds a PDF with common margins and returns bytes. */
     private byte[] buildPdf(PdfWriterFn fn) {
+        log.info("[PRINT][PDF] Starting to build single-page PDF...");
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Document doc = new Document(PageSize.A4, 36, 36, 36, 36);
             PdfWriter.getInstance(doc, out);
             doc.open();
             fn.accept(doc);
             doc.close();
+            log.info("[PRINT][PDF] PDF generated successfully ({} bytes)", out.size());
             return out.toByteArray();
         } catch (Exception e) {
+            log.error("[PRINT][PDF] Failed to generate PDF: {}", e.getMessage());
             throw new IllegalStateException("Failed to generate PDF", e);
         }
     }
 
     /** Builds a PDF (exposes writer) with common margins and returns bytes. */
     private byte[] buildPdfWithWriter(PdfWriterFn2 fn) {
+        log.info("[PRINT][PDF] Starting to build multi-page PDF with writer...");
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Document doc = new Document(PageSize.A4, 36, 36, 36, 36);
             PdfWriter writer = PdfWriter.getInstance(doc, out);
             doc.open();
             fn.accept(doc, writer);
             doc.close();
+            log.info("[PRINT][PDF] Multi-page PDF generated successfully ({} bytes)", out.size());
             return out.toByteArray();
         } catch (Exception e) {
+            log.error("[PRINT][PDF] Failed to generate multi-page PDF: {}", e.getMessage());
             throw new IllegalStateException("Failed to generate PDF", e);
         }
     }
@@ -720,7 +778,8 @@ public class PrintService {
     /** Page event: dashed CUT / FOLD LINE at a fixed Y position. */
     private static class CutFoldLineEvent extends PdfPageEventHelper {
         private final float yCut;
-        CutFoldLineEvent(float yCut) { this.yCut = yCut; }
+        CutFoldLineEvent(float yCut) { this.yCut = yCut;
+            log.debug("[PRINT][PDF] CutFoldLineEvent initialized at Y = {}", yCut);}
 
         @Override
         public void onEndPage(PdfWriter writer, Document document) {
@@ -746,7 +805,9 @@ public class PrintService {
                 cb.setTextMatrix(x, yCut + 3f);
                 cb.showText(label);
                 cb.endText();
-            } catch (Exception ignore) {}
+            } catch (Exception e) {
+                log.warn("[PRINT][PDF] Failed to render cut/fold line: {}", e.getMessage());
+            }
             cb.restoreState();
         }
     }
@@ -775,6 +836,8 @@ public class PrintService {
 
     /** Renders the order items table with pricing (invoice). */
     private PdfPTable itemsTable(List<OrderItem> items) {
+        log.info("[PRINT][ITEMS] Building items table with {} entries", items != null ? items.size() : 0);
+
         PdfPTable t = new PdfPTable(new float[]{5f, 1.2f, 1.6f, 1.6f});
         t.setWidthPercentage(100);
         t.addCell(th("Item"));
@@ -787,6 +850,8 @@ public class PrintService {
             t.addCell(td(nvl(it.getUnitPrice()).toPlainString()));
             t.addCell(td(nvl(it.getLineTotal()).toPlainString()));
         }
+        log.debug("[PRINT][ITEMS] Added item rows {}", items.size());
+
         return t;
     }
 

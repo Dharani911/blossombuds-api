@@ -35,6 +35,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static com.blossombuds.util.ImageUtil.*;
@@ -92,8 +93,10 @@ public class CatalogService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public Category createCategory(CategoryDto dto) {
+        log.info("Creating new category: {}", dto.getName());
         if (dto == null) throw new IllegalArgumentException("CategoryDto is required");
         if (dto.getName() == null || dto.getName().isBlank()) {
+            log.warn("[CATEGORY][CREATE][FAIL] Missing name");
             throw new IllegalArgumentException("Category name is required");
         }
 
@@ -104,8 +107,10 @@ public class CatalogService {
         // parent
         if (dto.getParentId() != null) {
             Category parent = categoryRepo.findById(dto.getParentId())
-                    .orElseThrow(() -> new IllegalArgumentException("Parent category not found: " + dto.getParentId()));
-            c.setParent(parent);
+                    .orElseThrow(() -> {
+                        log.warn("[CATEGORY][CREATE][FAIL] Parent not found: {}", dto.getParentId());
+                        return new IllegalArgumentException("Parent category not found: " + dto.getParentId());
+                    });
         } else {
             c.setParent(null);
         }
@@ -115,6 +120,7 @@ public class CatalogService {
         if (provided != null && !provided.isBlank()) {
             String normalized = slugify(provided);
             if (categoryRepo.existsBySlug(normalized)) {
+                log.warn("[CATEGORY][CREATE][FAIL] Duplicate slug '{}'", normalized);
                 throw new DuplicateKeyException("Slug already exists: " + normalized);
             }
             c.setSlug(normalized);
@@ -125,8 +131,13 @@ public class CatalogService {
             while (categoryRepo.existsBySlug(candidate)) candidate = base + "-" + i++;
             c.setSlug(candidate);
         }
+        if (dto.getDescription()!=null){
+            c.setDescription(dto.getDescription());
+        }
 
-        return categoryRepo.save(c);
+        Category saved = categoryRepo.save(c);
+        log.info("[CATEGORY][CREATE][OK] id={} slug='{}'", saved.getId(), saved.getSlug());
+        return saved;
     }
 
     /** Naive slugify mirroring your frontend logic. */
@@ -141,20 +152,30 @@ public class CatalogService {
 
     /** Lists all active categories. */
     public List<Category> listCategories() {
-        return categoryRepo.findAll(); // relies on @Where(active = true)
-    }
+        log.info("[CATEGORY][LIST]");
+        List<Category> all = categoryRepo.findAll();
+        log.info("[CATEGORY][LIST][OK] count={}", all.size());
+        return all;
+    } // relies on @Where(active = true)
+
 
     /** Retrieves a category by id or throws if not found. */
     public Category getCategory(Long id) {
+        log.info("[CATEGORY][GET] id={}", id);
         if (id == null) throw new IllegalArgumentException("Category id is required");
-        return categoryRepo.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Category not found: " + id));
+        Optional<Category> opt = categoryRepo.findById(id);
+        if (opt.isEmpty()) {
+            log.warn("[CATEGORY][GET][MISS] id={}", id);
+            throw new IllegalArgumentException("Category not found: " + id);
+        }
+        return opt.get();
     }
 
     /** Updates a category’s mutable fields. */
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public Category updateCategory(Long id, CategoryDto dto) {
+        log.info("[CATEGORY][UPDATE] id={} name='{}'", id, (dto!=null?dto.getName():null));
         if (id == null) throw new IllegalArgumentException("Category id is required");
         if (dto == null) throw new IllegalArgumentException("CategoryDto is required");
 
@@ -162,14 +183,17 @@ public class CatalogService {
 
         if (dto.getName() != null) {
             String name = dto.getName().trim();
-            if (name.isEmpty()) throw new IllegalArgumentException("Category name cannot be blank");
-            c.setName(name);
+            if (name.isEmpty()) {
+                log.warn("[CATEGORY][UPDATE][FAIL] Blank name id={}", id);
+                throw new IllegalArgumentException("Category name cannot be blank");
+            } c.setName(name);
         }
 
         if (dto.getSlug() != null) {
             String normalized = slugify(dto.getSlug());
             if (!normalized.equalsIgnoreCase(c.getSlug())) {
                 if (categoryRepo.existsBySlug(normalized) && !normalized.equalsIgnoreCase(c.getSlug())) {
+                    log.warn("[CATEGORY][UPDATE][FAIL] Duplicate slug '{}' id={}", normalized, id);
                     throw new org.springframework.dao.DuplicateKeyException("Slug already exists: " + normalized);
                 }
                 c.setSlug(normalized);
@@ -183,17 +207,26 @@ public class CatalogService {
             if (parentId <= 0) {
                 c.setParent(null);
             } else if (parentId.equals(id)) {
+                log.warn("[CATEGORY][UPDATE][FAIL] Parent equals self id={}", id);
                 throw new IllegalArgumentException("A category cannot be its own parent");
             } else {
                 Category parent = categoryRepo.findById(parentId)
-                        .orElseThrow(() -> new IllegalArgumentException("Parent category not found: " + parentId));
+                        .orElseThrow(() -> {
+                            log.warn("[CATEGORY][UPDATE][FAIL] Parent not found parentId={} id={}", parentId, id);
+                            return new IllegalArgumentException("Parent category not found: " + parentId);
+                        });
                 if (wouldCreateCycle(c, parent)) {
+                    log.warn("[CATEGORY][UPDATE][FAIL] Cycle detected id={} parentId={}", id, parentId);
                     throw new IllegalArgumentException("Invalid parent: would create a cycle in the category tree");
                 }
                 c.setParent(parent);
             }
         }
+        if (dto.getDescription()!=null){
+            c.setDescription(dto.getDescription());
+        }
 
+        log.info("[CATEGORY][UPDATE][OK] id={}", id);
         return c; // dirty checking
     }
 
@@ -211,8 +244,12 @@ public class CatalogService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void deleteCategory(Long id) {
+        log.info("[CATEGORY][DELETE] id={}", id);
         if (id == null) throw new IllegalArgumentException("Category id is required");
-        categoryRepo.findById(id).ifPresent(categoryRepo::delete);
+        categoryRepo.findById(id).ifPresent(category -> {
+            categoryRepo.delete(category);
+            log.info("[CATEGORY][DELETE][OK] id={}", id);
+        });
     }
 
     // ─────────────────────────────── Products ────────────────────────────────
@@ -221,6 +258,7 @@ public class CatalogService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public Product createProduct(ProductDto dto) {
+        log.info("[PRODUCT][CREATE] name='{}' slug='{}'", (dto!=null?dto.getName():null), (dto!=null?dto.getSlug():null));
         if (dto == null) throw new IllegalArgumentException("ProductDto is required");
         Product p = new Product();
         p.setSlug(dto.getSlug());
@@ -231,25 +269,36 @@ public class CatalogService {
         p.setFeatured(dto.getFeatured() != null ? dto.getFeatured() : Boolean.FALSE);
 
         p.setActive(dto.getActive() != null ? dto.getActive() : Boolean.TRUE);
-        return productRepo.save(p);
+        Product saved = productRepo.save(p);
+        log.info("[PRODUCT][CREATE][OK] id={} visible={} featured={}", saved.getId(), saved.getVisible(), saved.getFeatured());
+        return saved;
     }
 
     /** Pages through active products. */
     public Page<Product> listProducts(int page, int size) {
-        return productRepo.findAll(PageRequest.of(page, size)); // relies on @Where(active = true)
+        log.info("[PRODUCT][LIST] page={} size={}", page, size);
+        Page<Product> pg = productRepo.findAll(PageRequest.of(page, size)); // relies on @Where(active = true)
+        log.info("[PRODUCT][LIST][OK] page={} size={} returned={}", page, size, pg.getNumberOfElements());
+        return pg; // relies on @Where(active = true)
     }
 
     /** Retrieves a product by id or throws if not found. */
     public Product getProduct(Long id) {
+        log.info("[PRODUCT][GET] id={}", id);
         if (id == null) throw new IllegalArgumentException("Product id is required");
-        return productRepo.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Product not found: " + id));
+        Optional<Product> opt = productRepo.findById(id);
+        if (opt.isEmpty()) {
+            log.warn("[PRODUCT][GET][MISS] id={}", id);
+            throw new IllegalArgumentException("Product not found: " + id);
+        }
+        return opt.get();
     }
 
     /** Updates a product’s mutable fields. */
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public Product updateProduct(Long id, ProductDto dto) {
+        log.info("[PRODUCT][UPDATE] id={} name='{}'", id, (dto!=null?dto.getName():null));
         if (id == null) throw new IllegalArgumentException("Product id is required");
         if (dto == null) throw new IllegalArgumentException("ProductDto is required");
         Product p = getProduct(id);
@@ -260,6 +309,7 @@ public class CatalogService {
         if (dto.getVisible() != null)     p.setVisible(dto.getVisible());
         if (dto.getFeatured() != null)    p.setFeatured(dto.getFeatured());
         if (dto.getActive() != null) p.setActive(dto.getActive());
+        log.info("[PRODUCT][UPDATE][OK] id={}", id);
         return p; // dirty checking
     }
 
@@ -267,29 +317,42 @@ public class CatalogService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void deleteProduct(Long id) {
+        log.info("[PRODUCT][DELETE] id={}", id);
         if (id == null) throw new IllegalArgumentException("Product id is required");
-        productRepo.findById(id).ifPresent(productRepo::delete);
+        productRepo.findById(id).ifPresent(prod -> {
+            productRepo.delete(prod);
+            log.info("[PRODUCT][DELETE][OK] id={}", id);
+        });
     }
 
     /** Pages active products belonging to a specific category. */
     public Page<Product> listProductsByCategory(Long categoryId, int page, int size) {
+        log.info("[PRODUCT][LIST_BY_CATEGORY] categoryId={} page={} size={}", categoryId, page, size);
         if (categoryId == null) throw new IllegalArgumentException("categoryId is required");
-        return productRepo.findActiveByCategoryId(categoryId, PageRequest.of(page, size));
+        Page<Product> result = productRepo.findActiveByCategoryId(categoryId, PageRequest.of(page, size));
+        log.info("[PRODUCT][LIST_BY_CATEGORY][OK] categoryId={} returned={}", categoryId, result.getNumberOfElements());
+        return result;
     }
 
     /** Lists active categories linked to a product. */
     public List<Category> listCategoriesForProduct(Long productId) {
+        log.info("[CATEGORY][LIST_FOR_PRODUCT] productId={}", productId);
         if (productId == null) throw new IllegalArgumentException("productId is required");
-        return categoryRepo.findActiveByProductId(productId);
+        List<Category> list = categoryRepo.findActiveByProductId(productId);
+        log.info("[CATEGORY][LIST_FOR_PRODUCT][OK] productId={} count={}", productId, list.size());
+        return list;
     }
 
     /** NEW: New Arrivals — newest products first (active=true via @Where). */
     public List<Product> listNewArrivals(int limit) {
         int lim = Math.max(1, Math.min(100, limit)); // sanity cap
+        log.info("[PRODUCT][NEW_ARRIVALS] limit={}", lim);
         Page<Product> page = productRepo.findAll(
                 PageRequest.of(0, lim, Sort.by(Sort.Direction.DESC, "createdAt"))
         );
-        return page.getContent();
+        List<Product> out = page.getContent();
+        log.info("[PRODUCT][NEW_ARRIVALS][OK] returned={}", out.size());
+        return out;
     }
 
     // ─────────────────────── Product ↔ Category links ────────────────────────
@@ -298,6 +361,7 @@ public class CatalogService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void linkProductToCategory(Long productId, Long categoryId) {
+        log.info("[LINK][PRODUCT_CATEGORY][CREATE] productId={} categoryId={}", productId, categoryId);
         if (productId == null || categoryId == null) {
             throw new IllegalArgumentException("productId and categoryId are required");
         }
@@ -308,6 +372,9 @@ public class CatalogService {
             ProductCategory link = existing.get();
             if (Boolean.FALSE.equals(link.getActive())) {
                 link.setActive(true);
+                log.info("[LINK][PRODUCT_CATEGORY][REACTIVATE] productId={} categoryId={}", productId, categoryId);
+            } else {
+                log.info("[LINK][PRODUCT_CATEGORY][NOOP] already active productId={} categoryId={}", productId, categoryId);
             }
             return;
         }
@@ -318,16 +385,21 @@ public class CatalogService {
         link.setCategory(categoryRepo.getReferenceById(categoryId));
         link.setActive(Boolean.TRUE);
         linkRepo.save(link);
+        log.info("[LINK][PRODUCT_CATEGORY][OK] productId={} categoryId={}", productId, categoryId);
     }
 
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void unlinkProductFromCategory(Long productId, Long categoryId) {
+        log.info("[LINK][PRODUCT_CATEGORY][DELETE] productId={} categoryId={}", productId, categoryId);
         if (productId == null || categoryId == null) {
             throw new IllegalArgumentException("productId and categoryId are required");
         }
         linkRepo.findAnyLink(productId, categoryId)
-                .ifPresent(link -> link.setActive(false));
+                .ifPresent(link -> {
+                    link.setActive(false);
+                    log.info("[LINK][PRODUCT_CATEGORY][DEACTIVATED] productId={} categoryId={}", productId, categoryId);
+                });
     }
 
     // ───────────────────────────────── Images ────────────────────────────────
@@ -349,13 +421,15 @@ public class CatalogService {
     public ProductImage addProductImage(Long productId, MultipartFile file, String altText, Integer sortOrder)
             throws IOException, InterruptedException {
 
-        log.info("addProductImage(productId={}, fileName='{}', contentType='{}', size={})",
+        Instant t0 = Instant.now();
+        log.info("[IMAGE][ADD] productId={} file='{}' type='{}' size={}",
                 productId,
                 (file != null ? file.getOriginalFilename() : "<null>"),
                 (file != null ? file.getContentType() : "<null>"),
                 (file != null ? file.getSize() : -1));
 
         if (file == null || file.isEmpty()) {
+            log.warn("[IMAGE][ADD][FAIL] Empty file productId={}", productId);
             throw new IllegalArgumentException("File cannot be null or empty");
         }
 
@@ -368,27 +442,35 @@ public class CatalogService {
             boolean extOk = fn.endsWith(".heic") || fn.endsWith(".heif") || fn.endsWith(".jpg") || fn.endsWith(".jpeg")
                     || fn.endsWith(".png") || fn.endsWith(".webp") || fn.endsWith(".tif") || fn.endsWith(".tiff")
                     || fn.endsWith(".bmp") || fn.endsWith(".gif");
-            if (!"application/octet-stream".equalsIgnoreCase(ct) || !extOk) throw iae;
-            log.info("Proceeding with octet-stream file due to image-like extension.");
+            if (!"application/octet-stream".equalsIgnoreCase(ct) || !extOk) {
+                log.warn("[IMAGE][ADD][FAIL] Invalid content-type/ext ct='{}' name='{}'", ct, fn);
+                throw iae;
+            }
+            log.info("[IMAGE][ADD] Proceeding with octet-stream due to image-like extension.");
         }
 
         // 1) Normalize to JPEG (HEIC-safe)
         byte[] normalizedJpeg;
         try {
             normalizedJpeg = ImageMagickUtil.ensureJpeg(file.getBytes(), file.getOriginalFilename(), file.getContentType());
-            log.info("Normalized via ensureJpeg -> {} bytes", normalizedJpeg.length);
+            log.info("[IMAGE][ADD] ensureJpeg -> {} bytes", normalizedJpeg.length);
         } catch (Exception e) {
             if (MagickBridge.looksLikeHeic(file.getContentType(), file.getOriginalFilename())) {
                 normalizedJpeg = MagickBridge.heicToJpeg(file.getBytes(), magickCmd);
-                log.info("Normalized via heicToJpeg -> {} bytes", normalizedJpeg.length);
+                log.info("[IMAGE][ADD] heicToJpeg -> {} bytes", normalizedJpeg.length);
             } else {
+                log.error("[IMAGE][ADD][FAIL] Conversion error: {}", e.toString());
                 throw new IOException("Image conversion failed: " + e.getMessage(), e);
             }
         }
 
         // 2) Decode → resize → watermark
         BufferedImage decoded = ImageMagickUtil.readImage(normalizedJpeg);
-        if (decoded == null) throw new IllegalArgumentException("Uploaded file is not a supported image");
+        if (decoded == null)
+        {
+            log.warn("[IMAGE][ADD][FAIL] Unsupported image after decode");
+        throw new IllegalArgumentException("Uploaded file is not a supported image");
+        }
         BufferedImage base = ImageUtil.fitWithin(decoded, ImageUtil.MAX_DIM);
 
         BufferedImage stamped = watermarkLogoOrText(base, WATERMARK_IMG, "BLOSSOM BUDS");
@@ -401,7 +483,7 @@ public class CatalogService {
                 finalBytes = toJpegBytes(stamped, 0.82f);
             }
         } catch (Exception ce) {
-            log.warn("Compression failed ({}). Using Java JPEG encoder fallback.", ce.toString());
+            log.warn("[IMAGE][ADD] Compression fallback: {}", ce.toString());
             finalBytes = toJpegBytes(stamped, 0.82f);
         }
 
@@ -414,6 +496,7 @@ public class CatalogService {
             r2Client.putObject(new PutObjectRequest(bucketName, key, in, meta));
         }
         String fileUrl = r2Endpoint + "/" + bucketName + "/" + key;
+        log.info("[IMAGE][ADD][UPLOAD][OK] key='{}' bytes={}", key, finalBytes.length);
 
         // 5) Persist
         ProductImage imgRow = new ProductImage();
@@ -425,7 +508,10 @@ public class CatalogService {
         imgRow.setSortOrder(sortOrder != null ? sortOrder : 0);
         imgRow.setActive(true);
 
-        return imageRepo.save(imgRow);
+        ProductImage saved = imageRepo.save(imgRow);
+        log.info("[IMAGE][ADD][OK] id={} productId={} elapsedMs={}",
+                saved.getId(), productId, Duration.between(t0, Instant.now()).toMillis());
+        return saved;
     }
 
     // ──────────────── updateProductImage (REPLACE) ────────────────
@@ -433,16 +519,21 @@ public class CatalogService {
     @PreAuthorize("hasRole('ADMIN')")
     public ProductImage updateProductImage(ProductImageDto dto, MultipartFile newFile)
             throws IOException, InterruptedException {
+        Instant t0 = Instant.now();
+        log.info("[IMAGE][UPDATE] id={} productId={} replaceFile={}", (dto!=null?dto.getId():null), (dto!=null?dto.getProductId():null), (newFile!=null && !newFile.isEmpty()));
 
         if (dto == null || dto.getId() == null || dto.getProductId() == null)
             throw new IllegalArgumentException("Image id and productId are required");
 
         ProductImage imgRow = imageRepo.findById(dto.getId())
-                .orElseThrow(() -> new IllegalArgumentException("Image not found: " + dto.getId()));
-
+                .orElseThrow(() -> {
+                    log.warn("[IMAGE][UPDATE][MISS] id={}", dto.getId());
+                    return new IllegalArgumentException("Image not found: " + dto.getId());
+                });
         if (!imgRow.getProduct().getId().equals(dto.getProductId()))
+        {  log.warn("[IMAGE][UPDATE][FAIL] Image not under product imageId={} productId={}", dto.getId(), dto.getProductId());
             throw new IllegalArgumentException("Image does not belong to product " + dto.getProductId());
-
+        }
         if (newFile != null && !newFile.isEmpty()) {
             validateFile(newFile); // ← use the defined validator
 
@@ -453,8 +544,9 @@ public class CatalogService {
             );
 
             BufferedImage decoded = ImageMagickUtil.readImage(normalizedJpeg);
-            if (decoded == null) throw new IllegalArgumentException("Uploaded file is not a supported image");
-
+            if (decoded == null){log.warn("[IMAGE][UPDATE][FAIL] Unsupported image after decode");
+                throw new IllegalArgumentException("Uploaded file is not a supported image");
+            }
             BufferedImage base = ImageUtil.fitWithin(decoded, ImageUtil.MAX_DIM);
             BufferedImage stamped = watermarkLogoOrText(base, WATERMARK_IMG, "BLOSSOM BUDS");
 
@@ -462,6 +554,7 @@ public class CatalogService {
             try {
                 finalBytes = ImageMagickUtil.targetSizeJpeg(stamped);
             } catch (Exception e) {
+                log.warn("[IMAGE][UPDATE] Compression fallback: {}", e.toString());
                 finalBytes = toJpegBytes(stamped, 0.82f);
             }
 
@@ -476,14 +569,16 @@ public class CatalogService {
             String url = r2Endpoint + "/" + bucketName + "/" + key;
             imgRow.setPublicId(key);
             imgRow.setUrl(url);
-            imgRow.setWatermarkVariantUrl(url);
+            log.info("[IMAGE][UPDATE][UPLOAD][OK] key='{}' bytes={}", key, finalBytes.length);
         }
 
         if (dto.getAltText() != null) imgRow.setAltText(dto.getAltText());
         if (dto.getSortOrder() != null) imgRow.setSortOrder(dto.getSortOrder());
         if (dto.getActive() != null) imgRow.setActive(dto.getActive());
 
-        return imageRepo.save(imgRow);
+        ProductImage saved = imageRepo.save(imgRow);
+        log.info("[IMAGE][UPDATE][OK] id={} elapsedMs={}", saved.getId(), Duration.between(t0, Instant.now()).toMillis());
+        return saved;
     }
 
     /**
@@ -620,15 +715,18 @@ public class CatalogService {
                 try {
                     return MagickBridge.heicToJpeg(raw, magickCmd);
                 } catch (Exception magickFail) {
+                    log.error("[IMAGE][CONVERT][FAIL] HEIC conversion error: {}", magickFail.toString());
                     throw new IOException("Image conversion failed (HEIC). " + primaryFail.getMessage(), magickFail);
                 }
             }
+            log.error("[IMAGE][CONVERT][FAIL] {}", primaryFail.toString());
             throw new IOException("Image conversion failed. " + primaryFail.getMessage(), primaryFail);
         }
     }
 
     // --- 1) Presign a browser PUT to R2 (10 min)
     public PresignResponse presignPut(String filename, String contentType) {
+        log.info("[IMAGE][PRESIGN_PUT] name='{}' type='{}'", filename, contentType);
         String safeName = (filename == null ? "file" : filename.replaceAll("[^A-Za-z0-9._-]", "_"));
         String key = "uploads/tmp/" + UUID.randomUUID() + "/" + safeName;
         Date exp = Date.from(Instant.now().plus(Duration.ofMinutes(10)));
@@ -642,6 +740,7 @@ public class CatalogService {
         }
 
         URL url = r2Client.generatePresignedUrl(req);
+        log.info("[IMAGE][PRESIGN_PUT][OK] key='{}'", key);
         return new PresignResponse(key, url.toString(), (contentType == null || contentType.isBlank())
                 ? "application/octet-stream" : contentType);
     }
@@ -651,6 +750,7 @@ public class CatalogService {
     @PreAuthorize("hasRole('ADMIN')")
     public ProductImageDto createImageFromTempKey(Long productId, String tempKey, String altText, Integer sortOrder)
             throws IOException, InterruptedException {
+        log.info("[IMAGE][CREATE_FROM_TEMP] productId={} key='{}'", productId, tempKey);
         if (productId == null || tempKey == null || tempKey.isBlank())
             throw new IllegalArgumentException("productId and key are required");
 
@@ -659,8 +759,9 @@ public class CatalogService {
         try (InputStream in = obj.getObjectContent()) {
             original = javax.imageio.ImageIO.read(in);
         }
-        if (original == null) throw new IllegalArgumentException("Uploaded file is not a supported image");
-
+        if (original == null) {log.warn("[IMAGE][CREATE_FROM_TEMP][FAIL] Unsupported image key='{}'", tempKey);
+            throw new IllegalArgumentException("Uploaded file is not a supported image");
+        }
         BufferedImage resized  = ImageUtil.fitWithin(original, ImageUtil.MAX_DIM);
         BufferedImage stamped  = applyTiledTextWatermark(resized, "BLOSSOM BUDS", 0.18f, -25.0, 0.045, 0.22);
         byte[] jpegBytes       = ImageUtil.toJpegUnderCap(stamped);
@@ -673,8 +774,9 @@ public class CatalogService {
             r2Client.putObject(new PutObjectRequest(bucketName, finalKey, up, meta));
         }
 
-        try { r2Client.deleteObject(new DeleteObjectRequest(bucketName, tempKey)); } catch (Exception ignored) {}
-
+        try { r2Client.deleteObject(new DeleteObjectRequest(bucketName, tempKey)); } catch (Exception ignored) {
+            log.warn("[IMAGE][CREATE_FROM_TEMP] Could not delete temp key='{}' (ignored)", tempKey);
+        }
         ProductImage img = new ProductImage();
         img.setProduct(productRepo.getReferenceById(productId));
         img.setPublicId(finalKey);
@@ -780,10 +882,12 @@ public class CatalogService {
 
     public List<ProductImageDto> listProductImageResponses(Long productId) {
         if (productId == null) throw new IllegalArgumentException("productId is required");
-        return imageRepo.findByProduct_IdOrderBySortOrderAscIdAsc(productId)
+        List<ProductImageDto> out = imageRepo.findByProduct_IdOrderBySortOrderAscIdAsc(productId)
                 .stream()
                 .map(this::toResponse)
                 .toList();
+        log.info("[IMAGE][LIST_RESP][OK] productId={} count={}", productId, out.size());
+        return out;
     }
 
     public ProductImageDto toResponse(ProductImage img) {
@@ -806,6 +910,7 @@ public class CatalogService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void deleteProductImage(Long productId, Long imageId) {
+        log.info("[IMAGE][DELETE] productId={} imageId={}", productId, imageId);
         if (productId == null || imageId == null)
             throw new IllegalArgumentException("productId and imageId are required");
 
@@ -814,9 +919,15 @@ public class CatalogService {
                 throw new IllegalArgumentException("Image does not belong to product " + productId);
 
             if (img.getPublicId() != null) {
-                r2Client.deleteObject(new DeleteObjectRequest(bucketName, img.getPublicId()));
+                try {
+                    r2Client.deleteObject(new DeleteObjectRequest(bucketName, img.getPublicId()));
+                    log.info("[IMAGE][DELETE][R2][OK] key='{}'", img.getPublicId());
+                } catch (Exception e) {
+                    log.warn("[IMAGE][DELETE][R2][WARN] key='{}' err={}", img.getPublicId(), e.toString());
+                }
             }
             imageRepo.delete(img);
+            log.info("[IMAGE][DELETE][OK] imageId={}", imageId);
         });
     }
 
@@ -824,6 +935,7 @@ public class CatalogService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void setPrimaryImage(Long productId, Long imageId) {
+        log.info("[IMAGE][SET_PRIMARY] productId={} imageId={}", productId, imageId);
         if (productId == null || imageId == null) {
             throw new IllegalArgumentException("productId and imageId are required");
         }
@@ -836,6 +948,7 @@ public class CatalogService {
                 img.setSortOrder(next++);
             }
         }
+        log.info("[IMAGE][SET_PRIMARY][OK] productId={} imageId={}", productId, imageId);
     }
 
     // ─────────────────────────────── Options ────────────────────────────────
@@ -844,6 +957,7 @@ public class CatalogService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public ProductOption createProductOption(ProductOptionDto dto) {
+        log.info("[OPTION][CREATE] productId={} name='{}'", (dto!=null?dto.getProductId():null), (dto!=null?dto.getName():null));
         if (dto == null || dto.getProductId() == null) {
             throw new IllegalArgumentException("ProductOptionDto with productId is required");
         }
@@ -856,26 +970,37 @@ public class CatalogService {
         opt.setSortOrder(dto.getSortOrder() != null ? dto.getSortOrder() : 0);
         opt.setVisible(dto.getVisible() != null ? dto.getVisible() : Boolean.TRUE);
         opt.setActive(dto.getActive() != null ? dto.getActive() : Boolean.TRUE);
-        return optionRepo.save(opt);
+        ProductOption saved = optionRepo.save(opt);
+        log.info("[OPTION][CREATE][OK] id={} productId={}", saved.getId(), dto.getProductId());
+        return saved;
     }
 
     /** Lists options for a product ordered by sort order then id. */
     public List<ProductOption> listProductOptions(Long productId) {
+        log.info("[OPTION][LIST] productId={}", productId);
         if (productId == null) throw new IllegalArgumentException("productId is required");
-        return optionRepo.findByProduct_IdOrderBySortOrderAscIdAsc(productId);
+        List<ProductOption> list = optionRepo.findByProduct_IdOrderBySortOrderAscIdAsc(productId);
+        log.info("[OPTION][LIST][OK] productId={} count={}", productId, list.size());
+        return list;
     }
 
     /** Retrieves an option by id or throws if not found. */
     public ProductOption getProductOption(Long optionId) {
+        log.info("[OPTION][GET] id={}", optionId);
         if (optionId == null) throw new IllegalArgumentException("optionId is required");
-        return optionRepo.findById(optionId)
-                .orElseThrow(() -> new IllegalArgumentException("Option not found: " + optionId));
+        Optional<ProductOption> opt = optionRepo.findById(optionId);
+        if (opt.isEmpty()) {
+            log.warn("[OPTION][GET][MISS] id={}", optionId);
+            throw new IllegalArgumentException("Option not found: " + optionId);
+        }
+        return opt.get();
     }
 
     /** Updates an option’s mutable fields. */
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public ProductOption updateProductOption(ProductOptionDto dto) {
+        log.info("[OPTION][UPDATE] id={} name='{}'", (dto!=null?dto.getId():null), (dto!=null?dto.getName():null));
         if (dto == null || dto.getId() == null) {
             throw new IllegalArgumentException("ProductOptionDto with id is required");
         }
@@ -887,6 +1012,7 @@ public class CatalogService {
         if (dto.getSortOrder() != null) opt.setSortOrder(dto.getSortOrder());
         if (dto.getVisible() != null) opt.setVisible(dto.getVisible());
         if (dto.getActive() != null) opt.setActive(dto.getActive());
+        log.info("[OPTION][UPDATE][OK] id={}", dto.getId());
         return opt;
     }
 
@@ -894,8 +1020,12 @@ public class CatalogService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void deleteProductOption(Long optionId) {
+        log.info("[OPTION][DELETE] id={}", optionId);
         if (optionId == null) throw new IllegalArgumentException("optionId is required");
-        optionRepo.findById(optionId).ifPresent(optionRepo::delete);
+        optionRepo.findById(optionId).ifPresent(o -> {
+            optionRepo.delete(o);
+            log.info("[OPTION][DELETE][OK] id={}", optionId);
+        });
     }
 
     // ───────────────────────────── Option Values ─────────────────────────────
@@ -904,6 +1034,7 @@ public class CatalogService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public ProductOptionValue createProductOptionValue(ProductOptionValueDto dto) {
+        log.info("[VALUE][CREATE] optionId={} code='{}' label='{}'", (dto!=null?dto.getOptionId():null), (dto!=null?dto.getValueCode():null), (dto!=null?dto.getValueLabel():null));
         if (dto == null || dto.getOptionId() == null) {
             throw new IllegalArgumentException("ProductOptionValueDto with optionId is required");
         }
@@ -915,23 +1046,33 @@ public class CatalogService {
         val.setSortOrder(dto.getSortOrder() != null ? dto.getSortOrder() : 0);
         val.setVisible(dto.getVisible() != null ? dto.getVisible() : Boolean.TRUE);
         val.setActive(dto.getActive() != null ? dto.getActive() : Boolean.TRUE);
-        return valueRepo.save(val);
+        ProductOptionValue saved = valueRepo.save(val);
+        log.info("[VALUE][CREATE][OK] id={} optionId={}", saved.getId(), dto.getOptionId());
+        return saved;
     }
 
     /** Lists values for an option ordered by sort order then id. */
     public List<ProductOptionValue> listOptionValues(Long optionId) {
+        log.info("[VALUE][LIST] optionId={}", optionId);
         if (optionId == null) throw new IllegalArgumentException("optionId is required");
-        return valueRepo.findByOption_IdOrderBySortOrderAscIdAsc(optionId);
+        List<ProductOptionValue> list = valueRepo.findByOption_IdOrderBySortOrderAscIdAsc(optionId);
+        log.info("[VALUE][LIST][OK] optionId={} count={}", optionId, list.size());
+        return list;
     }
 
     /** Retrieves an option value by id scoped to its option or throws. */
     public ProductOptionValue getProductOptionValue(Long optionId, Long valueId) {
+        log.info("[VALUE][GET] optionId={} valueId={}", optionId, valueId);
         if (optionId == null || valueId == null) {
             throw new IllegalArgumentException("optionId and valueId are required");
         }
         ProductOptionValue v = valueRepo.findById(valueId)
-                .orElseThrow(() -> new IllegalArgumentException("Option value not found: " + valueId));
+                .orElseThrow(() -> {
+                    log.warn("[VALUE][GET][MISS] valueId={}", valueId);
+                    return new IllegalArgumentException("Option value not found: " + valueId);
+                });
         if (!v.getOption().getId().equals(optionId)) {
+            log.warn("[VALUE][GET][FAIL] Mismatch optionId={} actualOptionId={}", optionId, v.getOption().getId());
             throw new IllegalArgumentException("Value does not belong to option " + optionId);
         }
         return v;
@@ -941,6 +1082,7 @@ public class CatalogService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public ProductOptionValue updateProductOptionValue(ProductOptionValueDto dto) {
+        log.info("[VALUE][UPDATE] id={} optionId={}", (dto!=null?dto.getId():null), (dto!=null?dto.getOptionId():null));
         if (dto == null || dto.getId() == null || dto.getOptionId() == null) {
             throw new IllegalArgumentException("ProductOptionValueDto with id and optionId is required");
         }
@@ -951,6 +1093,7 @@ public class CatalogService {
         if (dto.getSortOrder() != null) v.setSortOrder(dto.getSortOrder());
         if (dto.getVisible() != null) v.setVisible(dto.getVisible());
         if (dto.getActive() != null) v.setActive(dto.getActive());
+        log.info("[VALUE][UPDATE][OK] id={} optionId={}", dto.getId(), dto.getOptionId());
         return v;
     }
 
@@ -958,19 +1101,23 @@ public class CatalogService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void deleteProductOptionValue(Long optionId, Long valueId) {
+        log.info("[VALUE][DELETE] optionId={} valueId={}", optionId, valueId);
         if (optionId == null || valueId == null) {
             throw new IllegalArgumentException("optionId and valueId are required");
         }
         ProductOptionValue v = getProductOptionValue(optionId, valueId);
         valueRepo.delete(v);
+        log.info("[VALUE][DELETE][OK] optionId={} valueId={}", optionId, valueId);
     }
 
     // at the bottom of CatalogService, replace your current validateFile(...) with this:
     public void validateFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
+            log.warn("[FILE][VALIDATE][FAIL] Empty");
             throw new IllegalArgumentException("File cannot be empty");
         }
         if (file.getSize() > MAX_BYTES) {
+            log.warn("[FILE][VALIDATE][FAIL] Too large size={} max={}", file.getSize(), MAX_BYTES);
             throw new IllegalArgumentException("Max 10 MB per image");
         }
 
@@ -987,38 +1134,47 @@ public class CatalogService {
         boolean typeOk = ct.startsWith("image/") || extOk;
 
         if (!typeOk) {
+            log.warn("[FILE][VALIDATE][FAIL] Not an image ct='{}' name='{}'", ct, name);
             throw new IllegalArgumentException("Only image files are supported (JPG, PNG, WebP, HEIC…)");
         }
+        log.debug("[FILE][VALIDATE][OK] name='{}' ct='{}' size={}", name, ct, file.getSize());
     }
     // ───────────────────── Featured Products ─────────────────────
 
     /** Page only featured (active=true via @Where). */
     public Page<Product> listFeaturedProducts(int page, int size) {
-        return productRepo.findByFeaturedTrue(
+        log.info("[PRODUCT][FEATURED][LIST] page={} size={}", page, size);
+        Page<Product> out = productRepo.findByFeaturedTrue(
                 PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
         );
+        log.info("[PRODUCT][FEATURED][LIST][OK] returned={}", out.getNumberOfElements());
+        return out;
 
-        // If you want to ALSO require visible=true at DB level, use this
-        // return productRepo.findByFeaturedTrueAndVisibleTrue(
+
         //        PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
     }
 
     /** Top-N featured (newest first). */
     public List<Product> listFeaturedTop(int limit) {
         int lim = Math.max(1, Math.min(100, limit));
-        return productRepo.findByFeaturedTrue(
+        log.info("[PRODUCT][FEATURED][TOP] limit={}", lim);
+        List<Product> out = productRepo.findByFeaturedTrue(
                 PageRequest.of(0, lim, Sort.by(Sort.Direction.DESC, "createdAt"))
         ).getContent();
+        log.info("[PRODUCT][FEATURED][TOP][OK] returned={}", out.size());
 
         // Visible-gated variant:
         // return productRepo.findByFeaturedTrueAndVisibleTrue(
         //        PageRequest.of(0, lim, Sort.by(Sort.Direction.DESC, "createdAt"))
         // ).getContent();
+        return out;
     }
     @Transactional
     public Product setProductFeatured(Long id, boolean featured) {
+        log.info("[PRODUCT][FEATURED][SET] id={} featured={}", id, featured);
         Product p = getProduct(id);
         p.setFeatured(featured);
+        log.info("[PRODUCT][FEATURED][SET][OK] id={} featured={}", id, featured);
         return p; // dirty checking persists
     }
 

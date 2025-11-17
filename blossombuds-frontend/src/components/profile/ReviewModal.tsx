@@ -173,6 +173,41 @@ export default function ReviewModal({
     setUpBusy(false);
   }, [open]);
 
+  // ⬇ NEW: robust page scroll lock to stop iOS "floating" / rubber-band
+  useEffect(() => {
+    if (!open) return;
+    const { scrollY } = window;
+    const html = document.documentElement;
+    const body = document.body;
+
+    const prevHtmlOverflow = html.style.overflow;
+    const prevHtmlTouch = (html.style as any).touchAction;
+    const prevBody = {
+      position: body.style.position,
+      top: body.style.top,
+      width: body.style.width,
+      overflow: body.style.overflow,
+    };
+
+    html.style.overflow = "hidden";
+    (html.style as any).touchAction = "none";
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.width = "100%";
+    body.style.overflow = "hidden";
+
+    return () => {
+      html.style.overflow = prevHtmlOverflow;
+      (html.style as any).touchAction = prevHtmlTouch || "";
+      body.style.position = prevBody.position;
+      body.style.top = prevBody.top;
+      body.style.width = prevBody.width;
+      body.style.overflow = prevBody.overflow;
+      const y = Math.abs(parseInt(prevBody.top || "0", 10)) || scrollY;
+      window.scrollTo(0, y);
+    };
+  }, [open]);
+
   // CHANGED: allow submit even if uploads are in progress; we will attach only ready tempKeys.
   const canSubmit = useMemo(() => rating >= 1 && rating <= 5 && !busy, [rating, busy]);
   const remainingChars = 1000 - (text?.length || 0);
@@ -226,71 +261,148 @@ export default function ReviewModal({
   }
 
   /* ------------------------------ Upload flow ------------------------------ */
-  async function onPickFiles(files: FileList | null, inputEl?: HTMLInputElement | null) {
-    if (!files || !files.length) return;
-    if (!token) { setErr("You need to be logged in to upload images."); return; }
+ async function onPickFiles(files: FileList | null, inputEl?: HTMLInputElement | null) {
+   if (!files || !files.length) return;
+   if (!token) {
+     setErr("You need to be logged in to upload images.");
+     return;
+   }
 
-    const MAX = 3;
-    const remainingSlots = Math.max(0, MAX - queue.length);
-    if (remainingSlots <= 0) {
-      setErr("You already attached 3 images.");
-      if (inputEl) inputEl.value = "";
-      return;
-    }
+   const MAX = 3;
+   const remainingSlots = Math.max(0, MAX - queue.length);
+   if (remainingSlots <= 0) {
+     setErr("You already attached 3 images.");
+     if (inputEl) inputEl.value = "";
+     return;
+   }
 
-    const MAX_BYTES = 10 * 1024 * 1024;
-    const EXT_OK = [".jpg",".jpeg",".png",".webp",".tif",".tiff",".heic",".heif",".bmp",".gif"];
-    const picked = Array.from(files).slice(0, remainingSlots);
+   const MAX_BYTES = 10 * 1024 * 1024;
+   const EXT_OK = [
+     ".jpg", ".jpeg", ".png", ".webp",
+     ".tif", ".tiff",
+     ".heic", ".heif",
+     ".bmp", ".gif"
+   ];
 
-    const valid: File[] = [];
-    for (const f of picked) {
-      const n = (f.name || "file").toLowerCase();
-      const okType = (f.type && f.type.startsWith("image/")) || EXT_OK.some((ext) => n.endsWith(ext));
-      if (!okType) { setErr(`“${f.name}” is not an image.`); continue; }
-      if (f.size > MAX_BYTES) { setErr(`“${f.name}” exceeds 10 MB.`); continue; }
-      valid.push(f);
-    }
-    if (!valid.length) { if (inputEl) inputEl.value = ""; return; }
+   // ---- PICK FILES WITH iOS STABILITY ----
+   const picked = Array.from(files).slice(0, remainingSlots);
 
-    const optimistic: QueueItem[] = valid.map((f) => ({
-      id: crypto.randomUUID(),
-      name: f.name,
-      previewUrl: placeholderPreview(),
-      isHeic: isHeic(f),
-      pct: 1,
-    }));
-    setQueue((q) => [...q, ...optimistic]);
-    setUpBusy(true);
+   // DEBUG (optional)
+   console.log("Picked files:", picked.map(f => ({
+     name: f.name,
+     type: f.type,
+     size: f.size,
+     ext: f.name.split(".").pop(),
+   })));
 
-    try {
-      for (let i = 0; i < valid.length; i++) {
-        const f = valid[i];
-        const tempId = optimistic[i].id;
-        try {
-          const previewUrl = isHeic(f) ? drawGenericPreview() : await fileToDataUrl(f);
-          setQueue((q) => q.map((x) => (x.id === tempId ? { ...x, previewUrl } : x)));
-        } catch {}
 
-        try {
-          const p = await presignReviewUpload(f.name, f.type || "application/octet-stream", token);
-          setQueue((q) => q.map((x) => (x.id === tempId ? { ...x, tempKey: p.key } : x)));
+   const valid: File[] = [];
+   const errors: string[] = [];
 
-          await putToPresignedUrl(p.url, f, (pct) => {
-            setQueue((q) => q.map((x) => (x.id === tempId ? { ...x, pct } : x)));
-          });
+   // ---- VALIDATION FIXED FOR iPHONE ----
+   for (const f of picked) {
+     const name = f.name || "file";
+     const lower = name.toLowerCase();
 
-          setQueue((q) => q.map((x) => (x.id === tempId ? { ...x, pct: 100 } : x)));
-        } catch (e: any) {
-          setQueue((q) =>
-            q.map((x) => (x.id === tempId ? { ...x, err: e?.message || "Upload failed" } : x))
-          );
-        }
-      }
-    } finally {
-      setUpBusy(false);
-      if (inputEl) inputEl.value = "";
-    }
-  }
+     const typeOk = f.type?.startsWith("image/") || false;
+     const extOk = EXT_OK.some(ext => lower.endsWith(ext));
+
+     if (!(typeOk || extOk)) {
+       errors.push(`“${name}” is not a supported image format.`);
+       continue;
+     }
+
+     if (f.size > MAX_BYTES) {
+       errors.push(`“${name}” exceeds 10 MB.`);
+       continue;
+     }
+
+     valid.push(f);
+   }
+
+   if (errors.length > 0) setErr(errors.join("\n"));
+
+   if (!valid.length) {
+     if (inputEl) inputEl.value = "";
+     return;
+   }
+
+   // ---- OPTIMISTIC UI PREVIEW ----
+   const optimistic: QueueItem[] = valid.map((f) => ({
+     id: crypto.randomUUID(),
+     name: f.name,
+     previewUrl: placeholderPreview(),
+     isHeic: isHeic(f),
+     pct: 1
+   }));
+
+   setQueue((q) => [...q, ...optimistic]);
+   setUpBusy(true);
+
+   try {
+     for (let i = 0; i < valid.length; i++) {
+       const f = valid[i];
+       const tempId = optimistic[i].id;
+
+       // ---- GENERATE PREVIEW ----
+       try {
+         let previewUrl = "";
+         if (!isHeic(f)) {
+           try {
+             previewUrl = await fileToDataUrl(f);
+           } catch (e) {
+             console.warn("Preview failed", e);
+             previewUrl = "";
+           }
+         }
+
+
+         setQueue((q) =>
+           q.map((x) => (x.id === tempId ? { ...x, previewUrl } : x))
+         );
+       } catch (e) {
+         console.warn("Preview failed:", e);
+       }
+
+       // ---- UPLOAD TO PRESIGNED URL ----
+       try {
+         const p = await presignReviewUpload(
+           f.name,
+           f.type || "application/octet-stream",
+           token
+         );
+
+         setQueue((q) =>
+           q.map((x) => (x.id === tempId ? { ...x, tempKey: p.key } : x))
+         );
+
+         await putToPresignedUrl(p.url, f, (pct) => {
+           setQueue((q) =>
+             q.map((x) => (x.id === tempId ? { ...x, pct } : x))
+           );
+         });
+
+         setQueue((q) =>
+           q.map((x) =>
+             x.id === tempId ? { ...x, pct: 100 } : x
+           )
+         );
+       } catch (e: any) {
+         setQueue((q) =>
+           q.map((x) =>
+             x.id === tempId
+               ? { ...x, err: e?.message || "Upload failed" }
+               : x
+           )
+         );
+       }
+     }
+   } finally {
+     setUpBusy(false);
+     if (inputEl) inputEl.value = "";
+   }
+ }
+
 
   /* ------------------------------ Submit flow ------------------------------ */
   async function submit() {
@@ -350,6 +462,8 @@ export default function ReviewModal({
             <span className="dot" />
             <strong>Leave a review</strong>
           </div>
+          {/* ⬇ NEW: Close button in header */}
+          <button className="rv-x" type="button" aria-label="Close" onClick={() => onClose(false)}>✕</button>
         </div>
 
         <div className="rv-body">
@@ -406,8 +520,14 @@ export default function ReviewModal({
           <div className="row">
             <div className="label">Can we feature your review in our website?</div>
             <div className="value">
-              <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                <input type="checkbox" checked={concern} onChange={(e) => setConcern(e.target.checked)} />
+              {/* ⬇ compact checkbox row */}
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={concern}
+                  onChange={(e) => setConcern(e.target.checked)}
+                />
+                <span>Yes, you can feature it</span>
               </label>
             </div>
           </div>
@@ -416,20 +536,29 @@ export default function ReviewModal({
             <div className="label">Images (up to 3)</div>
             <div className="value">
               <div className="img-uploader">
-                <label className={"up-btn" + (upBusy ? " disabled" : "")}>
-                  <input
-                    type="file"
-                    accept="image/*,.heic,.heif"
-                    multiple
-                    disabled={upBusy}
-                    onChange={(e) => onPickFiles(e.target.files, e.currentTarget)}
-                  />
-                  Upload from device
-                </label>
-                <div className="minihelp">
-                  HEIC/HEIF supported — converted on server. {/* CHANGED: clarified */}
-                </div>
+                <button
+                  className="upload-trigger"
+                  type="button"
+                  onClick={() => document.getElementById("rv-upload-input")?.click()}
+                >
+                  Upload
+                </button>
+                <input
+                  id="rv-upload-input"
+                  type="file"
+                  accept="image/*,.heic,.heif"
+                  multiple
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    onPickFiles(e.target.files, e.target);
+                    console.log("onPickFiles called with files:", files?.length);
+
+                  }}
+
+                />
+
               </div>
+
 
               <div className="imgs">
                 {queue.map((q) => (
@@ -441,9 +570,13 @@ export default function ReviewModal({
                           {q.isHeic && <span className="badge">HEIC</span>}
                         </>
                       ) : (
-                        <span>Preparing…</span>
+                        <div style={{ fontSize: "12px", textAlign: "center", padding: "6px" }}>
+                          <strong>{q.name}</strong>
+                          <div style={{ opacity: 0.6, marginTop: "4px" }}>Preview not available</div>
+                        </div>
                       )}
                     </div>
+
                     <div className="meta">
                       <div className="name">{q.name}</div>
                       <div className="progress">
@@ -460,9 +593,7 @@ export default function ReviewModal({
                 ))}
               </div>
 
-              <div className="help">
-                We’ll attach any finished uploads to your review right after you click submit. {/* CHANGED */}
-              </div>
+
             </div>
           </div>
 
@@ -470,7 +601,7 @@ export default function ReviewModal({
         </div>
 
         <div className="rv-ft">
-          <button className="ghost" onClick={() => onClose(false)} disabled={busy}>
+          <button className="btn ghost" onClick={() => onClose(false)} disabled={busy}>
             Cancel
           </button>
           <button className="btn" onClick={submit} disabled={!canSubmit}>
@@ -508,12 +639,24 @@ function Star({
 }
 
 const css = `
-.rv-veil{ position:fixed; inset:0; z-index:10000; background: rgba(0,0,0,.45); display:grid; place-items:center; padding:16px; backdrop-filter: blur(2px); }
+.rv-veil{
+  position:fixed; inset:0; z-index:10000;
+  background: rgba(0,0,0,.45);
+  display:grid; place-items:center;
+  padding:16px; backdrop-filter: blur(2px);
+  overscroll-behavior: contain;
+  touch-action: none;
+}
 .rv-modal{
+  position: fixed;
+  left: 50%; top: 50%; transform: translate(-50%, -50%);
   width: 720px; max-width: calc(100vw - 24px);
   border:1px solid rgba(0,0,0,.12); border-radius:16px; background:#fff;
   box-shadow:0 24px 80px rgba(0,0,0,.28);
   display:flex; flex-direction:column; max-height: calc(100vh - 32px); overflow:hidden;
+}
+@supports (height: 100dvh){
+  .rv-modal{ max-height: calc(100dvh - 32px); }
 }
 .rv-hd{
   display:flex; align-items:center; justify-content:space-between; padding:12px 14px;
@@ -523,19 +666,36 @@ const css = `
 .rv-title{ display:flex; align-items:center; gap:10px; }
 .rv-title .dot{ width:8px; height:8px; border-radius:999px; background:#F05D8B; box-shadow:0 0 0 4px rgba(240,93,139,.18); }
 
-.rv-body{ padding:12px 14px; overflow:auto; display:grid; gap:12px; }
+/* ⬇ header close button */
+.rv-x{
+  height:36px; min-width:36px; padding:0 10px;
+  border-radius:10px; border:1px solid rgba(0,0,0,.12);
+  background:#fff; cursor:pointer; font-weight:900; color:#333;
+}
+
+.rv-body{
+  padding:12px 14px; overflow:auto; display:grid; gap:12px;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
 .row{ display:grid; grid-template-columns: 160px 1fr; gap:12px; align-items:flex-start; }
 .label{ font-weight:800; opacity:.85; padding-top:6px; }
 .value{ display:grid; gap:6px; }
 
+/* compact checkbox + label */
+.checkbox-row{ display:inline-flex; align-items:center; gap:8px; font-size:14px; }
+.value input[type="checkbox"]{ width:18px; height:18px; }
+
 .in, .ta{
   width:100%; border:1px solid rgba(0,0,0,.1); border-radius:10px; padding:8px 10px; outline:none; background:#fff;
   transition: box-shadow .12s ease, border-color .12s ease;
+  font-size:16px; /* prevent iOS zoom while typing */
 }
 .in:focus-visible, .ta:focus-visible{ box-shadow:0 0 0 3px rgba(240,93,139,.18); border-color: rgba(240,93,139,.45); }
 .char{ font-size:12px; opacity:.65; text-align:right; }
 
-.stars{ display:flex; align-items:center; gap:6px; }
+.stars{ display:flex; align-items:center; gap:6px; flex-wrap: wrap; }
 .star{ cursor:pointer; fill:#ddd; transition: transform .06s ease, fill .12s ease; }
 .star:hover{ transform: translateY(-1px) scale(1.04); }
 .star.filled{ fill:#F6C320; }
@@ -565,20 +725,70 @@ const css = `
 
 .alert{ padding:10px 12px; border:1px solid rgba(240,93,139,.25); border-radius:12px; background:#fff3f5; color:#b0003a; }
 
-.rv-ft{ padding:12px 14px; border-top:1px solid rgba(0,0,0,.1); display:flex; justify-content:flex-end; gap:10px; background:#fff; }
+.rv-ft{
+  padding:12px 14px; border-top:1px solid rgba(0,0,0,.1); display:flex; justify-content:flex-end; gap:10px; background:#fff;
+}
 .ghost{
-  height:36px; padding:0 12px; border-radius:12px; border:1px solid rgba(0,0,0,.12);
+  height:44px; padding:0 16px; border-radius:12px; border:1px solid rgba(0,0,0,.12);
   background:#fff; cursor:pointer;
 }
 .ghost.sm{ height:28px; padding:0 10px; border-radius:8px; font-size:12.5px; }
 .btn{
-  border:none; background:#F05D8B; color:#fff; height:36px; padding:0 16px; border-radius:12px; cursor:pointer;
+  border:none; background:#F05D8B; color:#fff; height:44px; padding:0 16px; border-radius:12px; cursor:pointer;
   box-shadow: 0 12px 28px rgba(240,93,139,.3);
 }
 .btn:disabled{ opacity:.7; cursor:not-allowed; }
 
 @media (max-width: 640px){
-  .row{ grid-template-columns: 1fr; }
+  .rv-veil{ padding: 0; }
+  .rv-modal{
+    left: 0; top: 0; transform: none;
+    width: 100vw; max-width: 100vw;
+    height: 100vh; max-height: 100vh;
+    border-radius: 0;
+  }
+  @supports (height: 100dvh){
+    .rv-modal{ height: 100dvh; max-height: 100dvh; }
+  }
+
+  .rv-body{ padding: 12px 14px 10px; }
+  .row{ grid-template-columns: 1fr; gap: 8px; }
   .label{ padding-top:0; }
+
+  .star{ width:26px; height:26px; }
+  .img-row{ grid-template-columns: 96px 1fr; gap: 8px; }
+  .thumb{ width:96px; height:64px; border-radius:8px; }
+
+  .rv-ft{
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    gap: 10px;
+  }
+  .rv-veil {
+    z-index: 2147483000;
+  }
+
 }
+
+@supports (padding: max(0px)){
+  .rv-ft{
+    padding-bottom: max(10px, calc(10px + env(safe-area-inset-bottom)));
+  }
+}
+.upload-trigger {
+  height: 36px;
+  padding: 0 16px;
+  background: #f05d8b;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(240, 93, 139, 0.3);
+  font-size: 15px;
+}
+input[type="file"] {
+  z-index: 99999;
+  position: relative;
+}
+
 `;

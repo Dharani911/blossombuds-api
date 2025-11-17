@@ -47,14 +47,41 @@ export default function LoginModal() {
     else nav("/", { replace: true });
   };
 
+  // ESC to close
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Focus first field
   useEffect(() => {
     sheetRef.current?.querySelector<HTMLInputElement>("input")?.focus();
+  }, []);
+
+  // Background scroll lock (iOS-safe)
+  useEffect(() => {
+    const scrollY = window.scrollY;
+    const prev = {
+      htmlOverflow: document.documentElement.style.overflow,
+      bodyOverflow: document.body.style.overflow,
+      bodyPos: document.body.style.position,
+      bodyTop: document.body.style.top,
+      bodyWidth: document.body.style.width,
+    };
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = "100%";
+    return () => {
+      document.documentElement.style.overflow = prev.htmlOverflow;
+      document.body.style.overflow = prev.bodyOverflow;
+      document.body.style.position = prev.bodyPos;
+      document.body.style.top = prev.bodyTop;
+      document.body.style.width = prev.bodyWidth;
+      window.scrollTo(0, scrollY);
+    };
   }, []);
 
   async function requestReset(e: React.FormEvent) {
@@ -80,8 +107,8 @@ export default function LoginModal() {
     <>
       <style>{styles}</style>
       <div className="auth-scrim" onClick={close} />
-      <div className="auth-modal" role="dialog" aria-modal="true" aria-label="Login form">
-        <div ref={sheetRef} className="sheet sheet-in">
+      <div className="auth-modal" role="dialog" aria-modal="true" aria-label="Login form" onClick={close}>
+        <div ref={sheetRef} className="sheet sheet-in" onClick={(e)=>e.stopPropagation()}>
           <header className="am-head">
             <div className="brand">
               <img src="/src/assets/BB_logo.svg" alt="" />
@@ -93,6 +120,7 @@ export default function LoginModal() {
             <button className="x" aria-label="Close" onClick={close}>✕</button>
           </header>
 
+          {/* Only this area scrolls */}
           <div className="sheet-scroll">
             <div className="hero">
               <h3>Welcome back</h3>
@@ -111,6 +139,8 @@ export default function LoginModal() {
                     value={email}
                     onChange={(e)=>setEmail(e.target.value)}
                     required
+                    autoComplete="email"
+                    inputMode="email"
                   />
                 </div>
               </label>
@@ -126,6 +156,7 @@ export default function LoginModal() {
                     value={password}
                     onChange={(e)=>setPassword(e.target.value)}
                     required
+                    autoComplete="current-password"
                   />
                   <button
                     type="button"
@@ -182,6 +213,8 @@ export default function LoginModal() {
           )}
         </div>
       </div>
+      {/* iOS text-size stability */}
+      <style>{iosFontFix}</style>
     </>
   );
 
@@ -203,7 +236,7 @@ function EyeIcon({ open }: { open: boolean }) {
     </svg>
   ) : (
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
-      <path d="M2 12s4-7 10-7c2.4 0 4.4.8 6 2" fill="none" stroke="rgba(0,0,0,.6)" strokeWidth="1.6"/>
+      <path d="M2 12s4-7 10-7c2.4 0 4.4-.8 6-2" fill="none" stroke="rgba(0,0,0,.6)" strokeWidth="1.6"/>
       <path d="M22 12s-4 7-10 7c-2.4 0-4.4-.8-6-2" fill="none" stroke="rgba(0,0,0,.6)" strokeWidth="1.6"/>
       <path d="M3 3l18 18" stroke="rgba(0,0,0,.6)" strokeWidth="1.6"/>
     </svg>
@@ -226,57 +259,63 @@ const styles = `
   --ink: rgba(0,0,0,.08);
 }
 
+/* Backdrop */
 .auth-scrim{
   position: fixed; inset: 0; z-index: 9998;
   background: rgba(0,0,0,.42);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
 }
+
+/* Host – centered, block page scroll peeking */
 .auth-modal{
   position: fixed; inset: 0; z-index: 9999;
-  display: grid; place-items: end; /* bottom-sheet on mobile */
-  padding: 0;
+  display: grid; place-items: center;
+  padding: 16px;
+  overscroll-behavior: contain;
+  overflow: hidden;
 }
 
-/* Sheet */
+/* Dialog as a flex column so inner body can scroll */
 .sheet{
-  width: 100%;
-  max-width: 520px;
+  width: min(92vw, 520px);
+  /* REMOVE the fixed height line:
+     height: min(86vh, 720px); */
+  max-height: min(86vh, 720px);    /* cap height, but allow shrink-wrap */
   background:
     linear-gradient(180deg, rgba(255,255,255,.92), rgba(255,255,255,.98)),
     radial-gradient(120% 100% at 0% 0%, rgba(240,93,139,.08), transparent 40%) no-repeat,
     radial-gradient(120% 100% at 100% 0%, rgba(246,195,32,.10), transparent 42%) no-repeat;
   border: 1px solid var(--ink);
-  border-bottom: none;
-  border-radius: var(--radius) var(--radius) 0 0;
+  border-radius: var(--radius);
   box-shadow: 0 40px 120px rgba(0,0,0,.30);
-  overflow: hidden;
-  transform-origin: 50% 100%;
-  animation: popUp .24s cubic-bezier(.2,.8,.2,1) both;
-  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;                 /* scroll only inside sheet-scroll if needed */
+  transform-origin: 50% 50%;
+  animation: popUp .22s cubic-bezier(.2,.8,.2,1) both;
 }
-@keyframes popUp{ from{opacity:0; transform: translateY(18px)} to{opacity:1; transform:none} }
+@keyframes popUp{ from{opacity:0; transform: scale(.98)} to{opacity:1; transform:none} }
 
 /* Header */
 .am-head{
+  flex: 0 0 auto;
   display:flex; align-items:center; justify-content:space-between; gap:10px;
   padding: 12px 14px;
   background: linear-gradient(135deg, rgba(246,195,32,.18), rgba(240,93,139,.10));
   border-bottom: 1px solid var(--ink);
 }
-.brand{ display:flex; align-items:center; gap:10px; }
+.brand{ display:flex; align-items:center; gap:10px; min-width:0; }
 .brand img{
   width:32px; height:32px; border-radius:8px; box-shadow: 0 6px 16px rgba(0,0,0,.08);
 }
-.brand-name{
-  display:flex; flex-direction:column; justify-content:center; /* centers with logo */
-}
+.brand-name{ display:flex; flex-direction:column; justify-content:center; min-width:0; }
 .brand-name .big{
   display:block; font-family: "DM Serif Display", Georgia, serif;
-  font-size: 18px; color: var(--bb-primary); line-height:1.1;
+  font-size: 18px; color: var(--bb-primary); line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
 .brand-name .small{
-  display:block; font-size: 11px; color: var(--bb-primary); opacity:.9; line-height:1.1;
+  display:block; font-size: 11px; color: var(--bb-primary); opacity:.9; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
 
 .x{
@@ -284,12 +323,15 @@ const styles = `
   border:1px solid rgba(0,0,0,.1); background:#fff; cursor:pointer;
 }
 
-/* Scrollable content region (mobile safe) */
+/* Scrollable content region */
 .sheet-scroll{
-  max-height: min(78vh, 640px);
-  overflow:auto;
-  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  /* CHANGE flex from 1 to 0 so it doesn't force the sheet taller than content */
+  flex: 0 1 auto;
+  /* Allow scrolling only when content exceeds remaining space */
+  overflow: auto;
+  overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  padding: 12px 16px;
 }
 
 /* Hero */
@@ -304,6 +346,7 @@ const styles = `
 .label{ display:flex; flex-direction:column; gap:6px; width:100%; }
 .label > span{ font-weight:800; color: var(--bb-primary); font-size: 13px; }
 
+/* Inputs ≥16px to prevent iOS zoom */
 .field{
   display:flex; align-items:center; gap:8px;
   border:1px solid rgba(0,0,0,.12);
@@ -315,7 +358,7 @@ const styles = `
 .field:focus-within{ border-color: rgba(246,195,32,.9); box-shadow: 0 0 0 6px rgba(246,195,32,.16); }
 .input{
   height: 48px; min-height:48px; border:none; outline:none; flex:1;
-  color: var(--bb-primary); background: transparent; font-weight: 600; font-size:14px;
+  color: var(--bb-primary); background: transparent; font-weight: 600; font-size:16px;
 }
 
 /* Links row */
@@ -362,22 +405,39 @@ const styles = `
 .mini-card h4{ margin: 0; color: var(--bb-primary); font-weight: 900; }
 .mini-card p{ margin: 6px 0 10px; color: var(--bb-primary); opacity:.92; }
 .mini-form{ display:grid; grid-template-columns: 1fr auto; gap: 8px; }
-.mini-form input{ height: 44px; border-radius: 12px; border:1px solid rgba(0,0,0,.14); padding: 0 10px; }
+.mini-form input{ height: 44px; border-radius: 12px; border:1px solid rgba(0,0,0,.14); padding: 0 10px; font-size:16px; }
 .mini-form button{ height: 44px; border-radius: 12px; background: var(--bb-primary); color:#fff; font-weight:900; border:none; padding: 0 12px; }
 .mini-msg{ margin-top: 8px; font-size: 13px; color: var(--bb-primary); }
 .mini-close{ margin-top: 8px; background: transparent; border: none; text-decoration: underline; color: var(--bb-primary); font-weight: 800; cursor: pointer; }
 
-/* Desktop centers the modal like a dialog */
-@media (min-width: 700px){
-  .auth-modal{ place-items: center; padding: 16px; }
-  .sheet{ border-radius: var(--radius); max-width: 520px; }
-  .sheet-scroll{ max-height: 72vh; }
-}
+/* Small screens: ensure dialog is centered & readable */
 
-/* Respect bottom safe-area (iOS) */
-@supports (padding: max(0px)){
+@media (max-width: 560px){
+  .auth-modal{ padding: 12px; }
+  .sheet{
+    width: min(94vw, 520px);
+    /* REMOVE fixed height here too */
+    /* height: min(86vh, 640px); */
+    max-height: min(86vh, 640px);
+    border-radius: 16px;
+  }
   .sheet-scroll{
-    padding-bottom: max(12px, calc(12px + env(safe-area-inset-bottom, 0px)));
+    /* optional: keep as is; it will scroll when needed */
   }
 }
+
+/* Respect safe areas */
+@supports (padding: max(0px)){
+  .auth-modal{
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+    padding-top: max(12px, env(safe-area-inset-top));
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+}
+`;
+
+/* Prevent iOS text auto-zoom */
+const iosFontFix = `
+html { -webkit-text-size-adjust: 100%; }
 `;

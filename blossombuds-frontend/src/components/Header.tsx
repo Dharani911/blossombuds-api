@@ -1,3 +1,4 @@
+// src/components/Header.tsx
 import { NavLink, Link, useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../app/AuthProvider";
@@ -66,7 +67,6 @@ export default function Header(){
     const activeKey =
       links.find(l => (l.exact ? pathnameOnly === l.to : pathnameOnly.startsWith(l.to)))?.to || null;
     moveBarTo(activeKey);
-    // reflow on resize / orientation change
     const onResize = () => moveBarTo(activeKey);
     window.addEventListener("resize", onResize);
     window.addEventListener("orientationchange", onResize);
@@ -79,6 +79,7 @@ export default function Header(){
 
   // Mobile state
   const [open, setOpen] = useState(false);
+
   const goProfile = () => {
     if (user?.id) navigate("/profile");
     else navigate("/login", { state: { from, background: location } });
@@ -99,43 +100,77 @@ export default function Header(){
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Close on route change (navigating to a link)
+  useEffect(() => { if (open) setOpen(false); }, [pathnameOnly]);
+
+  // Close if switching to desktop width
+  useEffect(() => {
+    const fn = () => { if (window.innerWidth >= 921 && open) setOpen(false); };
+    window.addEventListener("resize", fn);
+    window.addEventListener("orientationchange", fn);
+    return () => {
+      window.removeEventListener("resize", fn);
+      window.removeEventListener("orientationchange", fn);
+    };
+  }, [open]);
+
   return (
     <header className="hx">
       <style>{`
+        /* ─────────────────────────────────────────────────────────
+           Header (sticky)
+           ───────────────────────────────────────────────────────── */
         .hx{
           position:sticky; top:0; z-index:70;
           background: linear-gradient(180deg, rgba(250,247,231,0.92), rgba(255,255,255,0.96));
-          border-bottom: 1px solid rgba(0,0,0,.06);
-          backdrop-filter: saturate(180%) blur(12px);
-          box-shadow: 0 10px 28px rgba(0,0,0,.06);
+          border-bottom:1px solid rgba(0,0,0,.06);
+          backdrop-filter:saturate(180%) blur(12px);
+          box-shadow:0 10px 28px rgba(0,0,0,.06);
         }
-        .hx-shell{max-width:1200px; margin:0 auto; padding:0 12px; padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px));}
+        .hx-shell{
+          max-width:1200px; margin:0 auto; padding:0 12px;
+          padding-left:max(12px, env(safe-area-inset-left, 0px));
+          padding-right:max(12px, env(safe-area-inset-right, 0px));
+        }
 
+        /* Grid: brand | nav | actions */
         .hx-row{
           display:grid; grid-template-columns: 1fr auto 1fr; align-items:center;
           height:72px; gap:12px;
         }
-        .hx-brand{ justify-self: start; }
-        .hx-actions{ justify-self: end; }
+        @media (max-width: 920px){
+          .hx-row{ grid-template-columns:auto auto 1fr; height:68px; }
+        }
 
         /* Brand */
-        .hx-brand{display:flex; align-items:center; gap:10px; min-width:0;}
+        .hx-brand{display:flex; align-items:center; gap:10px; min-width:0; justify-self:start;}
+        .hx-brand img{ width:44px; height:44px; border-radius:12px; box-shadow:0 4px 16px rgba(0,0,0,.10); }
         .hx-title{
           display:inline-block;
           font-family: Georgia, "Times New Roman", serif;
           color: var(--bb-primary);
           font-weight: 800; letter-spacing:.2px; line-height:1.1;
           white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-          max-width: 58vw;
+          max-width:58vw;
         }
-        .hx-brand img{ width:44px; height:44px; border-radius:12px; box-shadow:0 4px 16px rgba(0,0,0,.10); }
+        @media (max-width: 920px){
+          .hx-title{ max-width:46vw; }
+        }
 
-        /* Center menu */
+        /* Center menu (desktop) with ink bar */
         .hx-mid{ display:flex; justify-content:center; }
         .hx-nav{
           position:relative; display:flex; gap:6px; align-items:center;
-          padding: 2px 2px 10px;
+          padding: 2px 2px 10px; /* space for ink bar */
         }
+        .hx-a{
+          position:relative; padding:12px 16px; border-radius:12px;
+          font-weight:700; color: var(--bb-primary);
+          transition: color .18s ease, letter-spacing .18s ease, transform .18s ease, background .18s ease;
+        }
+        .hx-a:hover{ letter-spacing:.3px; transform: translateY(-1px); background: rgba(246,195,32,.16); }
+        .hx-a.active{ background: rgba(246,195,32,.26); }
+
         .hx-ink{
           position:absolute; bottom:0; height:3px; border-radius:3px;
           background: linear-gradient(90deg, var(--bb-accent-2), #ffe38a);
@@ -149,16 +184,9 @@ export default function Header(){
             opacity .2s ease;
           will-change: transform, width, opacity;
         }
-        .hx-a{
-          position:relative; padding: 12px 16px; border-radius:12px;
-          font-weight:700; color: var(--bb-primary);
-          transition: color .18s ease, letter-spacing .18s ease, transform .18s ease, background .18s ease;
-        }
-        .hx-a:hover{ letter-spacing:.3px; transform: translateY(-1px); background: rgba(246,195,32,.16); }
-        .hx-a.active{ background: rgba(246,195,32,.26); }
 
-        /* Actions */
-        .hx-actions{ display:flex; align-items:center; gap:10px; }
+        /* Actions (right) */
+        .hx-actions{ display:flex; align-items:center; gap:10px; justify-self:end; }
         .hx-ico{
           display:inline-flex; align-items:center; justify-content:center;
           width:44px; height:44px; border-radius:12px; border:none; cursor:pointer;
@@ -173,25 +201,36 @@ export default function Header(){
           box-shadow: 0 2px 12px rgba(240,93,139,.5);
         }
 
-        /* Burger + mobile panel */
-        @media (max-width: 920px){
-          .hx-row{ grid-template-columns:auto auto 1fr; height:68px; }
-          .hx-nav{ display:none; }
-          .hx-burger{ display:inline-flex; }
-          .hx-title{ max-width: 46vw; }
-        }
+        /* Burger visibility & desktop nav */
+        @media (max-width: 920px){ .hx-burger{ display:inline-flex; } .hx-nav{ display:none; } }
         @media (min-width: 921px){ .hx-burger{ display:none; } }
 
+        /* ─────────────────────────────────────────────────────────
+           Mobile overlay + top-sheet panel
+           ───────────────────────────────────────────────────────── */
+        .hx-overlay{
+          position: fixed; inset: 0;
+          z-index: 1000; /* panel is 1001 */
+          background: rgba(0,0,0,.28);
+          backdrop-filter: blur(2px);
+        }
         .hx-panel{
-          position:fixed; left:0; right:0; top:var(--hxTop, 72px); z-index:69; background:#fff;
+          position:fixed; left:0; right:0;
+          top: var(--hxTop, 68px);
+          z-index: 1001;
+          background:#fff;
           border-bottom:1px solid rgba(0,0,0,.06);
           box-shadow: 0 18px 40px rgba(0,0,0,.12);
-          padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+          padding: 12px max(16px, env(safe-area-inset-left, 0px))
+                   calc(16px + env(safe-area-inset-bottom, 0px))
+                   max(16px, env(safe-area-inset-right, 0px));
           display:grid; gap:8px;
           animation: drop .24s cubic-bezier(.2,.8,.2,1) both;
+          max-height: calc(100dvh - var(--hxTop, 68px));
+          overflow:auto;
         }
-        .hx-scrim{
-          position: fixed; inset: 0; z-index: 68; background: rgba(0,0,0,.28); backdrop-filter: blur(2px);
+        @media (min-width: 921px){
+          .hx-panel{ top: var(--hxTop, 72px); max-height: calc(100dvh - var(--hxTop, 72px)); }
         }
         .hx-mgrid{ display:grid; gap:8px; }
         .hx-mitem{
@@ -200,12 +239,11 @@ export default function Header(){
           opacity:.95; transform: translateY(2px);
           transition: transform .16s ease, background .16s ease, opacity .16s ease;
         }
-        .hx-mitem:active{ transform: scale(.98); }
         .hx-mitem:hover{ background: rgba(246,195,32,.22); transform: translateY(0); opacity:1; }
+        .hx-mitem:active{ transform: scale(.98); }
 
         @keyframes drop{ from{opacity:0; transform: translateY(-6px);} to{opacity:1; transform:none;} }
 
-        /* Respect reduced motion */
         @media (prefers-reduced-motion: reduce){
           .hx-ink{ transition: none; }
           .hx-ico:hover{ transform:none; box-shadow: 0 10px 26px rgba(0,0,0,.10); }
@@ -302,49 +340,57 @@ export default function Header(){
         </div>
       </div>
 
-      {/* MOBILE PANEL + SCRIM */}
-      {open && <div className="hx-scrim" onClick={() => setOpen(false)} aria-hidden />}
+      {/* MOBILE OVERLAY (captures outside clicks) */}
       {open && (
         <div
-          id="mobile-nav-panel"
-          className="hx-panel"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Mobile navigation"
-          style={{ ["--hxTop" as any]: "68px" }}
+          className="hx-overlay"
+          role="presentation"
+          onClick={() => setOpen(false)}          /* click anywhere outside panel closes */
         >
-          <div className="hx-mgrid">
-            {links.map((l,i)=>(
-              <NavLink
-                key={l.to}
-                to={l.to}
-                end={!!l.exact}
-                className="hx-mitem"
-                onClick={()=>setOpen(false)}
-                style={{ transitionDelay: `${i*30}ms` }}
+          <div
+            id="mobile-nav-panel"
+            className="hx-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Mobile navigation"
+            style={{ ["--hxTop" as any]: window.innerWidth >= 921 ? "72px" : "68px" }}
+            onClick={(e) => e.stopPropagation()}   /* clicks inside panel won't bubble */
+          >
+            <div className="hx-mgrid">
+              {links.map((l, i) => (
+                <NavLink
+                  key={l.to}
+                  to={l.to}
+                  end={!!l.exact}
+                  className="hx-mitem"
+                  onClick={() => setOpen(false)}
+                  style={{ transitionDelay: `${i * 30}ms` }}
+                >
+                  {l.label}
+                </NavLink>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+              <button
+                className="hx-ico"
+                aria-label="Cart"
+                title="Cart"
+                onClick={() => { navigate("/cart"); setOpen(false); }}
+                style={{ position: "relative" }}
               >
-                {l.label}
-              </NavLink>
-            ))}
-          </div>
-          <div style={{display:"flex", gap:10, marginTop:10}}>
-            <button
-              className="hx-ico"
-              aria-label="Cart"
-              title="Cart"
-              onClick={() => { navigate("/cart"); setOpen(false); }}
-              style={{position:"relative"}}
-            >
-              <CartSVG/>{count>0 && <span className="hx-badge">{count}</span>}
-            </button>
-            <button
-              className="hx-ico"
-              aria-label={user ? "My profile" : "Login / Profile"}
-              title={user ? "My profile" : "Login / Profile"}
-              onClick={() => { goProfile(); }}
-            >
-              <ProfileSVG/>
-            </button>
+                <CartSVG />{count > 0 && <span className="hx-badge">{count}</span>}
+              </button>
+
+              <button
+                className="hx-ico"
+                aria-label={user ? "My profile" : "Login / Profile"}
+                title={user ? "My profile" : "Login / Profile"}
+                onClick={() => { goProfile(); }}
+              >
+                <ProfileSVG />
+              </button>
+            </div>
           </div>
         </div>
       )}

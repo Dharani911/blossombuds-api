@@ -7,6 +7,7 @@ export type Customer = {
   id?: string | number;
   name?: string;
   email?: string;
+  phone?:string |number;
 };
 
 type AuthCtx = {

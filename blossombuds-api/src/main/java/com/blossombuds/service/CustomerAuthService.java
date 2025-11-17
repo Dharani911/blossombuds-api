@@ -8,6 +8,7 @@ import com.blossombuds.repository.CustomerRepository;
 import com.blossombuds.repository.EmailVerificationTokenRepository;
 import com.blossombuds.security.JwtUtil;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -21,6 +22,7 @@ import java.util.Base64;
 import java.util.Map;
 
 /** Auth service for customers: register, email-verify, and login (issues CUSTOMER JWT). */
+@Slf4j
 @Service
 @Validated
 @RequiredArgsConstructor
@@ -68,6 +70,8 @@ public class CustomerAuthService {
         //c.setCreatedAt(OffsetDateTime.now());
         customers.save(c);
 
+        log.info("[CUSTOMER][REGISTER] New customer registered: email={}, id={}", email, c.getId());
+
         // Invalidate any previous active tokens for this customer (defense-in-depth)
         evtRepo.deactivateActiveTokensForCustomer(c.getId());
 
@@ -88,6 +92,7 @@ public class CustomerAuthService {
         }
         String verifyUrl = frontendBase + "/verify-email?token=" + token;
         emailService.sendVerificationEmail(c.getEmail(), verifyUrl);
+        log.info("[CUSTOMER][VERIFY_EMAIL] Verification email sent to: {}", email);
 
         // Return a CUSTOMER JWT so the UI can consider the user logged in (even before verify)
         return jwt.createToken("cust:" + c.getId(), Map.of("role", "CUSTOMER", "cid", c.getId()));
@@ -120,6 +125,8 @@ public class CustomerAuthService {
 
         // Optional: deactivate any other active tokens for this customer
         evtRepo.deactivateActiveTokensForCustomer(customer.getId());
+        log.info("[CUSTOMER][VERIFY] Email verified for customerId={}", customer.getId());
+
     }
 
     /** Validates customer credentials and returns a CUSTOMER JWT. */
@@ -142,6 +149,7 @@ public class CustomerAuthService {
         if (!encoder.matches(rawPassword, c.getPasswordHash())) {
             throw new IllegalArgumentException("Invalid email or password");
         }
+        log.info("[CUSTOMER][LOGIN] Login successful for customerId={}", c.getId());
 
         return jwt.createToken("cust:" + c.getId(), Map.of("role", "CUSTOMER", "cid", c.getId()));
     }

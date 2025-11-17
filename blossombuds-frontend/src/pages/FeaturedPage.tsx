@@ -27,11 +27,9 @@ type Product = {
   coverUrl?: string | null;
   images?: ProductImage[];
   visible?: boolean;
-  /** Some payloads may use isVisible instead */
   isVisible?: boolean;
   featured?: boolean;
   active?: boolean;
-  /** client-only */
   _coverResolved?: string | null;
 };
 
@@ -64,7 +62,7 @@ function coverUrlOf(p: Product): string | null {
 /** Normalize visibility (handles `visible` and `isVisible`) */
 function isVisibleTrue(p: any): boolean {
   const v = p?.visible ?? p?.isVisible ?? null;
-  return v === true; // require explicit true
+  return v === true;
 }
 
 /** Compact product card */
@@ -93,11 +91,7 @@ function ProductTile({ p, onOpen }: { p: Product; onOpen: (id: number) => void }
       aria-label={`${p.name}${priceText ? `, ${priceText}` : ""}`}
     >
       <div className="media">
-        {img ? (
-          <img src={img} alt={p.name} loading="lazy" />
-        ) : (
-          <div className="ph" aria-hidden />
-        )}
+        {img ? <img src={img} alt={p.name} loading="lazy" /> : <div className="ph" aria-hidden />}
 
         <button
           className="quick"
@@ -121,7 +115,7 @@ function ProductTile({ p, onOpen }: { p: Product; onOpen: (id: number) => void }
         type="button"
         onClick={(e) => {
           e.stopPropagation();
-          onOpen(p.id); // open ProductQuickView (from there they can add to cart)
+          onOpen(p.id);
         }}
         aria-label={`Add ${p.name} to cart`}
       >
@@ -166,14 +160,10 @@ export default function FeaturedPage() {
             : [];
         }
 
-        // ✅ Show only items that are explicitly visible=true (or isVisible=true) and not inactive
-        const featuredVisible = rows.filter(
-          (p: any) => (p?.active !== false) && isVisibleTrue(p)
-        );
+        const featuredVisible = rows.filter((p: any) => (p?.active !== false) && isVisibleTrue(p));
 
         if (!alive) return;
 
-        // First paint (may lack images)
         setItems(
           featuredVisible.map((p) => ({
             ...p,
@@ -181,7 +171,6 @@ export default function FeaturedPage() {
           }))
         );
 
-        // Backfill missing covers by fetching images
         const need = featuredVisible.filter((p) => !coverUrlOf(p));
         if (need.length) {
           const updates = await Promise.allSettled(
@@ -238,7 +227,6 @@ export default function FeaturedPage() {
           <p>Hand-curated designs, season’s bests, and new favorites crafted for you.</p>
           <div className="cta-row">
             <Link to="/categories" className="btn pri">Browse All Categories</Link>
-            {/* <Link to="/products" className="btn ghost">See All Products</Link> */}
           </div>
         </div>
       </header>
@@ -276,7 +264,12 @@ const css = `
   --card-shadow: 0 8px 22px rgba(0,0,0,.10);
   --card-shadow-h: 0 12px 34px rgba(0,0,0,.16);
 }
-.feat-wrap{ background: var(--bb-bg); color: var(--bb-primary); min-height:60vh; }
+.feat-wrap{
+  background: var(--bb-bg);
+  color: var(--bb-primary);
+  min-height:60vh;
+  overflow-x:hidden;           /* ✅ prevent any horizontal overflow */
+}
 
 /* HERO */
 .hero{
@@ -304,83 +297,85 @@ const css = `
 .bar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
 .bar h2{ margin:0; font-size:22px; font-family: "DM Serif Display", Georgia, serif; }
 
-/* GRID (4 per row; responsive) */
+/* GRID — compact, always 2-up on phones */
 .grid4{
   display:grid;
   grid-template-columns: repeat(4, minmax(0,1fr));
   gap:14px;
 }
-@media (max-width: 1024px){
+@media (max-width: 1100px){
   .grid4{ grid-template-columns: repeat(3, minmax(0,1fr)); }
 }
-@media (max-width: 768px){
+@media (max-width: 820px){
   .grid4{ grid-template-columns: repeat(2, minmax(0,1fr)); }
 }
+/* ✅ keep two cards even on very small phones */
 @media (max-width: 480px){
-  .grid4{ grid-template-columns: 1fr; }
+  .grid4{ grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px; }
+}
+@media (max-width: 360px){
+  .grid4{ grid-template-columns: repeat(2, minmax(0,1fr)); gap:8px; }
 }
 
-/* CARD (compact) */
+/* CARD (extra-compact) */
 .ft-card{
   display:flex; flex-direction:column;
-  border-radius:14px; overflow:hidden; text-decoration:none; background:#fff;
+  border-radius:12px; overflow:hidden; text-decoration:none; background:#fff;
   border:1px solid rgba(0,0,0,.06); box-shadow: var(--card-shadow);
   transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
   outline: none;
-  min-height: 0; /* keep compact */
+  min-height: 0;
 }
 .ft-card:hover{ transform: translateY(-2px); box-shadow: var(--card-shadow-h); border-color: rgba(246,195,32,.35); }
 .ft-card:focus-visible{ box-shadow: 0 0 0 3px rgba(246,195,32,.45), var(--card-shadow-h); }
 
-/* MEDIA (more compact height: square ratio) */
-.media{
-  position:relative;
-  background:#f7f7f7;
-}
+/* MEDIA — square, tiny gutters on mobile */
+.media{ position:relative; background:#f7f7f7; }
 .media::after{
-  content:"";
-  position:absolute; inset:0;
+  content:""; position:absolute; inset:0;
   background: linear-gradient(180deg, rgba(0,0,0,0) 55%, rgba(0,0,0,.08));
-  opacity:0; transition: opacity .18s ease;
-  pointer-events:none;
+  opacity:0; transition: opacity .18s ease; pointer-events:none;
 }
 .ft-card:hover .media::after{ opacity:1; }
 .media img{ width:100%; aspect-ratio: 1 / 1; object-fit:cover; display:block; }
 
-/* quick-view hover button */
+/* quick-view hover button (hide on tiny screens to save space) */
 .quick{
   position:absolute; right:10px; bottom:10px;
-  height:28px; padding:0 10px; border-radius:10px; border:1px solid rgba(255,255,255,.7);
-  background: rgba(255,255,255,.9); color:#111; font-weight:800; cursor:pointer;
+  height:26px; padding:0 10px; border-radius:10px; border:1px solid rgba(255,255,255,.7);
+  background: rgba(255,255,255,.92); color:#111; font-weight:800; cursor:pointer;
   opacity:0; transform: translateY(6px);
   transition: opacity .18s ease, transform .18s ease, background .18s ease;
   font-size:12px;
 }
 .ft-card:hover .quick{ opacity:1; transform: translateY(0); }
-.quick:hover{ background:#fff; }
-
-/* META */
-.meta{
-  padding:10px 12px 0; display:grid; gap:4px; min-height:56px;
+@media (max-width: 480px){
+  .quick{ display:none; } /* ✅ cleaner, less overlap on phones */
 }
+
+/* META — denser */
+.meta{ padding:8px 10px 0; display:grid; gap:2px; min-height:52px; }
 .name{
   font-weight:900; line-height:1.25; color: var(--bb-primary);
   display:-webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow:hidden;
-  font-size:14px;
+  font-size:13px;
 }
-.price{ font-weight:900; color: var(--bb-accent); font-size:14px; }
+.price{ font-weight:900; color: var(--bb-accent); font-size:13px; }
 
-/* CTA */
+/* CTA — smaller on phones */
 .btn.add{
-  height:34px; margin:8px 12px 12px;
+  height:32px; margin:8px 10px 10px;
   border-radius:10px; border:none; font-weight:900; cursor:pointer;
   background: var(--bb-accent); color:#fff;
   box-shadow: 0 10px 24px rgba(240,93,139,.24);
   transition: transform .06s ease, box-shadow .18s ease;
-  font-size:13px;
+  font-size:12.5px;
 }
 .btn.add:hover{ transform: translateY(-1px); box-shadow: 0 14px 32px rgba(240,93,139,.30); }
 .btn.add:active{ transform: translateY(0); }
+@media (max-width: 480px){
+  .btn.add{ height:30px; font-size:12px; margin:6px 8px 8px; }
+}
 
 /* FALLBACK placeholder */
 .ph{
@@ -392,11 +387,11 @@ const css = `
 .alert.bad{ margin: 8px 0; padding: 10px 12px; border-radius:12px; background:#fff3f5; color:#b0003a; border:1px solid rgba(240,93,139,.25); }
 .empty{ padding: 12px; opacity:.85; }
 
-/* SKELETON (match compact card) */
+/* SKELETON — match compact card size */
 .sk{
   background: linear-gradient(90deg, #eee, #f8f8f8, #eee); background-size:200% 100%;
   animation: shimmer 1.15s linear infinite;
-  border-radius:14px; height: 250px;
+  border-radius:12px; height: 220px;
 }
 @keyframes shimmer{ from{ background-position: 200% 0; } to { background-position: -200% 0; } }
 `;

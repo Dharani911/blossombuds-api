@@ -205,18 +205,25 @@ export default function ReviewsPage() {
                 {r.status !== "APPROVED" && r.concern !== false && (
                   <button className="ghost sm ok" onClick={()=>doModerate(r,"APPROVED")}>Approve</button>
                 )}
+
                 {r.status !== "APPROVED" && r.concern === false && (
                   <>
-                    <button className="ghost sm ok" disabled title="Customer consent is required">Approve</button>
+
                     <button
                       className="ghost sm warn"
-                      onClick={()=>doModerate(r,"APPROVED", true)}
+                      onClick={() => {
+                        if (confirm("Approve without customer consent? This will override policy.")) {
+                          doModerate(r, "APPROVED", true);
+                        }
+                      }}
+
                       title="Approve (override)"
                     >
                       Approve (override)
                     </button>
                   </>
                 )}
+
 
                 {r.status !== "REJECTED" && (
                   <button className="ghost sm warn" onClick={()=>doModerate(r,"REJECTED")}>Reject</button>
@@ -358,4 +365,29 @@ select{ height:32px; border:1px solid ${INK}; border-radius:10px; padding:0 10px
   .thead, .trow{ grid-template-columns: 1.2fr 80px 1.8fr 1fr 1fr 140px 220px; }
   .search input{ min-width: 200px; }
 }
+.cell-prod .pname,
+.cell-text .ttl,
+.cell-cust {
+  font-weight: 800;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  hyphens: auto;
+  white-space: normal;
+  line-height: 1.4;
+}
+.thead, .trow {
+  display: grid;
+  grid-template-columns:
+    minmax(100px, 1.2fr) /* Product */
+    80px                 /* Rating */
+    minmax(150px, 2fr)   /* Title */
+    minmax(100px, 1.2fr) /* Customer */
+    120px                /* When */
+    150px                /* Status */
+    240px;               /* Actions */
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+}
+
 `;

@@ -362,18 +362,84 @@ export default function ProfilePage() {
     );
   }
 
-/* page-level styles (kept) */
+/* page-level styles (responsive width + small padding on mobile) */
 const pageStyles = `
 .pro2-wrap { background: var(--bb-bg); color: var(--bb-primary); }
-.pro2-main{ max-width: 1200px; margin: 20px auto 30px; padding: 0 16px; }
-.alert{ margin: 0 0 14px; padding: 10px 12px; border:1px solid rgba(240,93,139,.25); border-radius: 12px; background:#fff3f5; color:#b0003a; }
-.grid{ display:grid; grid-template-columns: 1.15fr .85fr; gap: 18px; align-items: start; }
-@media (max-width: 980px){ .grid{ grid-template-columns: 1fr; } }
+
+/* Desktop / wide */
+.pro2-main{
+  max-width: 1200px;
+  margin: 20px auto 30px;
+  padding: 0 16px; /* base gutter */
+}
+
+.alert{
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border:1px solid rgba(240,93,139,.25);
+  border-radius: 12px;
+  background:#fff3f5;
+  color:#b0003a;
+}
+
+/* 2-col layout on wide screens */
+.grid{
+  display:grid;
+  grid-template-columns: 1.15fr .85fr;
+  gap: 18px;
+  align-items: start;
+}
 .col{ display:grid; gap: 18px; }
-.card{ position:relative; border-radius:18px; overflow:hidden; background:#fff; border:1px solid rgba(0,0,0,.06); box-shadow: 0 18px 60px rgba(0,0,0,.10); }
-.card.promo{ background: linear-gradient(135deg, rgba(246,195,32,.12), rgba(240,93,139,.10)); border: 1px solid rgba(0,0,0,.06); }
+
+.card{
+  position:relative;
+  border-radius:18px;
+  overflow:hidden;
+  background:#fff;
+  border:1px solid rgba(0,0,0,.06);
+  box-shadow: 0 18px 60px rgba(0,0,0,.10);
+}
+
+/* Promo card */
+.card.promo{
+  background: linear-gradient(135deg, rgba(246,195,32,.12), rgba(240,93,139,.10));
+  border: 1px solid rgba(0,0,0,.06);
+}
 .promo .promo-inner{ padding: 16px; }
 .promo h4{ margin: 0 0 6px; font-family: "DM Serif Display", Georgia, serif; }
 .promo p{ margin: 0 0 12px; opacity:.95; }
-.cta{ display:inline-flex; align-items:center; justify-content:center; height: 40px; padding: 0 14px; border-radius: 12px; background: var(--bb-accent); color:#fff; font-weight: 900; box-shadow: 0 12px 32px rgba(240,93,139,.34); }
+.cta{
+  display:inline-flex; align-items:center; justify-content:center;
+  height: 40px; padding: 0 14px; border-radius: 12px;
+  background: var(--bb-accent); color:#fff; font-weight: 900;
+  box-shadow: 0 12px 32px rgba(240,93,139,.34);
+}
+
+/* ---------- Mobile: full-width cards with small gutters ---------- */
+@media (max-width: 860px){
+  .pro2-main{
+    max-width: none;            /* stretch */
+    margin: 10px 0 20px;        /* remove fixed centering margins */
+    padding: 0 5px;            /* small side padding */
+  }
+
+  .grid{
+    grid-template-columns: 1fr; /* single column */
+    gap: 14px;
+  }
+  .col{ gap: 14px; }
+
+  .card{
+    border-radius: 16px;
+    width: 100%;
+  }
+
+  .promo .promo-inner{ padding: 14px; }
+}
+
+/* Extra-small phones: a touch tighter */
+@media (max-width: 420px){
+  .pro2-main{ padding: 0 10px; }
+  .card{ border-radius: 14px; }
+}
 `;

@@ -668,12 +668,12 @@ const css = `
 
 /* Buttons */
 .btn{
-  height:38px; padding:0 14px; border:none; border-radius:12px; cursor:pointer;
+  height:38px;width: wrap; padding:0 14px; border:none; border-radius:12px; cursor:pointer;
   background:${ACCENT}; color:#fff; font-weight:900;
   box-shadow: 0 10px 28px rgba(240,93,139,.35);
 }
 .ghost{
-  height:32px; padding:0 10px; border-radius:10px; border:1px solid ${INK};
+  height:32px;width:wrap; padding:0 10px; border-radius:10px; border:1px solid ${INK};
   background:#fff; color:${PRIMARY}; cursor:pointer;
 }
 .ghost.bad{ border-color: rgba(240,93,139,.5); color:#b0003a; }

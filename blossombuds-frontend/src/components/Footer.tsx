@@ -1,3 +1,4 @@
+// src/components/Footer.tsx
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Logo from "../assets/BB_Logo.svg";
@@ -44,9 +45,7 @@ export default function Footer() {
       if (!alive) return;
       setIg(normalizeUrl(v || envIg || ""));
     })();
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, []);
 
   const year = new Date().getFullYear();
@@ -56,62 +55,73 @@ export default function Footer() {
       <style>{styles}</style>
 
       <div className="bbf-wrap">
-        {/* Brand / Social */}
-        <div className="bbf-col brand">
+        {/* Brand / Social (spans full width on mobile) */}
+        <section className="bbf-col brand" aria-labelledby="bbf-brand-head">
+          <h2 id="bbf-brand-head" className="sr-only">About Blossom Buds</h2>
+
           <div className="bbf-brandRow">
-            <img src={Logo} alt="Blossom & Buds logo" className="bbf-logo" />
+            <img src={Logo} alt="Blossom Buds logo" className="bbf-logo" />
             <div className="bbf-brandText">
-              <div className="bbf-name">Blossom Buds</div>
-              <div className="bbf-sub">Floral Artistry</div>
+              {/* single-line, single-style brand name */}
+              <div className="bbf-name">Blossom Buds Floral Artistry</div>
             </div>
           </div>
+
           <p className="bbf-tag">
             Handcrafted floral accessories for weddings, festivals, and everyday elegance.
           </p>
-          <div className="bbf-social">
-            {ig && (
+
+          {ig && (
+            <div className="bbf-socialRow">
               <a
                 className="bbf-socBtn"
                 href={ig}
                 target="_blank"
                 rel="noreferrer"
-                aria-label="Instagram"
-                title="Follow us on Instagram"
+                aria-label="Open Instagram"
+                title="Open Instagram"
               >
                 <InstagramIcon />
               </a>
-            )}
-          </div>
-        </div>
+              {/* separate text link; not inside the icon */}
+              <a
+                className="bbf-socLink"
+                href={ig}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Follow us on Instagram for more updates
+              </a>
+            </div>
+          )}
+        </section>
 
-        {/* Explore */}
-        <div className="bbf-col">
-          <div className="bbf-head">Explore</div>
-          <nav className="bbf-links">
+        {/* Explore (left on mobile) */}
+        <nav className="bbf-col explore" aria-labelledby="bbf-explore-head">
+          <div id="bbf-explore-head" className="bbf-head">Explore</div>
+          <div className="bbf-links">
             <FooterLink to="/">Home</FooterLink>
             <FooterLink to="/featured">Featured</FooterLink>
             <FooterLink to="/categories">Categories</FooterLink>
             <FooterLink to="/reviews">Reviews</FooterLink>
-          </nav>
-        </div>
+          </div>
+        </nav>
 
-        {/* Company */}
-        <div className="bbf-col">
-          <div className="bbf-head">Company</div>
-          <nav className="bbf-links">
+        {/* Company (right on mobile) */}
+        <nav className="bbf-col company" aria-labelledby="bbf-company-head">
+          <div id="bbf-company-head" className="bbf-head">Company</div>
+          <div className="bbf-links">
             <FooterLink to="/pages/about">About Us</FooterLink>
             <FooterLink to="/policies">Policies</FooterLink>
             <FooterLink to="/pages/terms">Terms &amp; Conditions</FooterLink>
             <FooterLink to="/pages/disclaimer">Disclaimer</FooterLink>
-          </nav>
-        </div>
+          </div>
+        </nav>
       </div>
 
       <div className="bbf-bottom">
         <div className="bbf-bottomWrap">
-          <div className="bbf-copy">
-            © {year} Blossom Buds Floral Artistry
-          </div>
+          <div className="bbf-copy">© {year} Blossom Buds Floral Artistry</div>
           <div className="bbf-bottomLinks">
             <FooterLink to="/pages/privacy">Privacy</FooterLink>
             <FooterLink to="/pages/terms">Terms</FooterLink>
@@ -153,27 +163,49 @@ const styles = `
   --bb-text:#4A4F41;
 }
 
-.bbf-link{ color: var(--bb-text); text-decoration: none; opacity:.95; }
+/* Visually-hidden utility for accessible headings */
+.sr-only{
+  position:absolute !important;
+  width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
+}
+
+/* Links */
+.bbf-link{
+  color: var(--bb-text);
+  text-decoration: none;
+  opacity:.95;
+  outline: none;
+}
 .bbf-link:hover{ text-decoration: underline; }
+.bbf-link:focus-visible{
+  outline: 2px solid color-mix(in oklab, var(--bb-gold), #000 20%);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
 
 /* --- Classic footer skeleton --- */
 .bb-footer-classic{
   color: var(--bb-text);
-  background: #F7F2E2;               /* soft parchment */
+  background: #F7F2E2;                   /* soft parchment */
   border-top: 1px solid var(--bb-ink);
-  font-size: 14px;
+  font-size: clamp(13px, 3.2vw, 14px);
+  width: 100%;
+  overflow: clip;                         /* prevent bleed on small screens */
 }
 
 /* Top grid */
 .bbf-wrap{
   max-width: 1200px;
   margin: 0 auto;
-  padding: 18px 16px;                 /* compact */
+  padding: 18px max(16px, env(safe-area-inset-left, 0px))
+           18px max(16px, env(safe-area-inset-right, 0px));
   display: grid;
   gap: 12px 24px;
-  grid-template-columns: 1.6fr 1fr 1fr; /* Brand / Explore / Company */
+  grid-template-columns: 1.6fr 1fr 1fr;  /* Desktop: Brand / Explore / Company */
 }
 
+/* Section heads */
 .bbf-col .bbf-head{
   font-weight: 900;
   font-size: 13px;
@@ -182,61 +214,112 @@ const styles = `
   color: #2c2c2c;
 }
 
-/* Brand */
+/* Brand block */
 .bbf-brandRow{
-  display:flex; align-items:center; gap:10px;
+  display:flex; align-items:center; gap:10px; min-width:0;
 }
-.bbf-logo{ width:36px; height:36px; object-fit:contain; }
-.bbf-brandText{ line-height:1.05; }
-.bbf-name{ font-weight:900; font-size:16px; }
-.bbf-sub{ font-size:11px; opacity:.85; }
+.bbf-logo{ width:36px; height:36px; object-fit:contain; flex:0 0 auto; }
+.bbf-brandText{ line-height:1.05; min-width:0; }
+.bbf-name{
+  font-weight:900; font-size:16px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; /* single line */
+}
 
 .bbf-tag{
   margin: 8px 0 10px;
   opacity: .92;
-  max-width: 44ch;
+  max-width: 52ch;
+  line-height: 1.45;
 }
 
-/* Social */
-.bbf-social{ display:flex; gap:8px; }
+/* Social row: icon + separate text link (both visible on all sizes) */
+.bbf-socialRow{
+  display:flex; align-items:center; gap:10px; flex-wrap: wrap;
+}
 .bbf-socBtn{
-  width:34px; height:34px; border-radius:10px;
+  width:44px; height:44px; border-radius:12px;
   display:grid; place-items:center;
   color:#fff; text-decoration:none;
   background: radial-gradient(120% 140% at 30% 0%, var(--bb-pink), var(--bb-gold));
   box-shadow: 0 6px 16px rgba(240,93,139,.18);
+  outline: none;
 }
 .bbf-socBtn:hover{ transform: translateY(-1px); box-shadow: 0 8px 20px rgba(240,93,139,.24); }
-
-/* Links */
-.bbf-links{
-  display:grid; gap:6px;
+.bbf-socBtn:focus-visible{
+  outline: 2px solid color-mix(in oklab, var(--bb-pink), #000 25%);
+  outline-offset: 2px;
 }
+.bbf-socLink{
+  font-weight:900;
+  letter-spacing:.2px;
+  color: var(--bb-text);
+  text-decoration: none;
+}
+.bbf-socLink:hover{ text-decoration: underline; }
+
+/* Links list */
+.bbf-links{ display:grid; gap:8px; }
 
 /* Bottom bar */
 .bbf-bottom{
   border-top: 1px solid var(--bb-ink);
-  background: #F3ECD4;                /* a shade darker for separation */
+  background: #F3ECD4;
 }
 .bbf-bottomWrap{
   max-width: 1200px;
   margin: 0 auto;
-  padding: 10px 16px;                 /* compact */
+  padding: 10px max(16px, env(safe-area-inset-left, 0px))
+           max(10px, calc(10px + env(safe-area-inset-bottom, 0px)))
+           max(16px, env(safe-area-inset-right, 0px));
   display:flex; align-items:center; justify-content:space-between; gap:10px;
   font-size: 13px;
 }
-.bbf-bottomLinks{ display:flex; gap:12px; }
+.bbf-bottomLinks{ display:flex; gap:12px; flex-wrap: wrap; }
 .bbf-copy{ opacity:.95; }
 
-/* Responsive */
+/* Tablet */
 @media (max-width: 960px){
-  .bbf-wrap{
-    grid-template-columns: 1fr 1fr;
-  }
+  .bbf-wrap{ grid-template-columns: 1fr 1fr; }
   .bbf-col.brand{ grid-column: 1 / -1; }
 }
+
+/* Mobile: Brand (full width) above Explore + Company side-by-side */
 @media (max-width: 560px){
-  .bbf-wrap{ grid-template-columns: 1fr; }
-  .bbf-bottomWrap{ flex-direction: column; align-items: flex-start; gap:6px; }
+  .bbf-wrap{
+    grid-template-columns: 1fr 1fr;   /* two columns on mobile */
+    gap: 16px 16px;
+  }
+  .bbf-col.brand{
+    grid-column: 1 / -1;              /* brand spans both columns */
+    text-align: center;
+  }
+  .bbf-brandRow{
+    justify-content: center;
+    gap: 12px;
+  }
+  .bbf-logo{
+    width:48px; height:48px;
+  }
+  .bbf-name{ font-size:18px; }
+
+  /* keep Explore (left) & Company (right) */
+  .bbf-col.explore{ grid-column: 1 / 2; }
+  .bbf-col.company{ grid-column: 2 / 3; }
+
+  /* center their headings + links for balance */
+  .bbf-col:not(.brand) .bbf-head{ text-align:center; }
+  .bbf-links{ justify-items:center; }
+
+  .bbf-bottomWrap{
+    flex-direction: column;
+    align-items: center;
+    gap:8px;
+    text-align: center;
+  }
+}
+
+/* Motion preferences */
+@media (prefers-reduced-motion: reduce){
+  .bbf-socBtn:hover{ transform:none; }
 }
 `;

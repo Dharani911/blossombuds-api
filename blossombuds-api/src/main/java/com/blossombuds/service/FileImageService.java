@@ -34,6 +34,7 @@ public class FileImageService {
 
     public SavedImage saveFeatureTile(MultipartFile file) throws IOException {
         if (file == null || file.isEmpty()) {
+            log.warn("[IMAGE][SAVE] Upload failed: file is empty or null");
             throw new IllegalArgumentException("File is empty");
         }
 
@@ -68,6 +69,7 @@ public class FileImageService {
             if (!converted) {
                 Files.deleteIfExists(tmpIn);
                 Files.deleteIfExists(tmpJpg);
+                log.error("[IMAGE][CONVERT] Failed to convert HEIC to JPG for {}", origName);
                 throw new IOException("HEIC/HEIF not supported on server. Please upload JPEG/PNG.");
             }
             try (InputStream is = Files.newInputStream(tmpJpg)) {
@@ -79,6 +81,7 @@ public class FileImageService {
                 Files.deleteIfExists(tmpJpg);
             }
         } else {
+            log.info("[IMAGE][SAVE] Processing upload: {}", origName);
             try (InputStream is = file.getInputStream()) {
                 BufferedImage src = ImageIO.read(is);
                 if (src == null) throw new IOException("Unsupported image format");
@@ -95,14 +98,23 @@ public class FileImageService {
 
         String key = "feature-tiles/" + out.getFileName();
         String url = "/media/" + key;
+        log.info("[IMAGE][SAVE] Image saved: key={}, url={}", key, url);
         return new SavedImage(key, url);
     }
 
     public void deleteFeatureTile(String key) throws IOException {
-        if (key == null || key.isBlank()) return;
+        if (key == null || key.isBlank())
+        {log.warn("[IMAGE][DELETE] Attempted to delete with blank key");
+        return;
+        };
         Path baseDir = Paths.get(featureImagesDir).toAbsolutePath().normalize();
         Path target = baseDir.resolve(Paths.get(key).getFileName().toString());
-        Files.deleteIfExists(target);
+        boolean deleted = Files.deleteIfExists(target);
+        if (deleted) {
+            log.info("[IMAGE][DELETE] Deleted image: {}", key);
+        } else {
+            log.warn("[IMAGE][DELETE] Image not found: {}", key);
+        }
     }
 
     private static BufferedImage cropResize(BufferedImage src, int targetW, int targetH) throws IOException {
@@ -155,13 +167,17 @@ public class FileImageService {
 
     private static boolean convertHeicToJpg(Path in, Path outJpg) {
         try {
-            // Requires ImageMagick (convert) installed with HEIC support
             Process p = new ProcessBuilder("convert", in.toString(), outJpg.toString())
                     .redirectErrorStream(true)
                     .start();
             int code = p.waitFor();
-            return code == 0 && Files.exists(outJpg);
+            boolean success = code == 0 && Files.exists(outJpg);
+            if (!success) {
+                log.warn("[IMAGE][CONVERT] ImageMagick failed for HEIC: exitCode={}", code);
+            }
+            return success;
         } catch (Exception e) {
+            log.error("[IMAGE][CONVERT] Error running ImageMagick", e);
             return false;
         }
     }

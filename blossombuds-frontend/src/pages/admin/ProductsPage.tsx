@@ -58,6 +58,10 @@ function Toggle({
     </button>
   );
 }
+function fmtRange(from:number, to:number, total:number){
+  if (total===0) return "0 results";
+  return `${from}–${to} of ${new Intl.NumberFormat("en-IN").format(total)}`;
+}
 
 function StarButton({
   on,
@@ -186,6 +190,9 @@ export default function ProductsPage(){
       setBusyFeature(m => ({ ...m, [p.id]: false }));
     }
   }
+    const total = data?.totalElements ?? 0;
+    const from = total === 0 ? 0 : page*size + 1;
+    const to   = Math.min((page+1)*size, total);
 
   return (
     <div className="prod-wrap">
@@ -271,16 +278,21 @@ export default function ProductsPage(){
       </div>
 
       {/* Pagination */}
-      <div className="pager">
-        <div className="left">Page {page+1} of {Math.max(totalPages,1)}</div>
-        <div className="right">
-          <button className="ghost" disabled={page<=0} onClick={()=>setPage(p=>Math.max(p-1,0))}>Prev</button>
-          <button className="ghost" disabled={page+1>=totalPages} onClick={()=>setPage(p=>p+1)}>Next</button>
-          <select value={size} onChange={e=>{ setSize(Number(e.target.value)); setPage(0); }}>
-            {[12,24,36,50].map(s=><option key={s} value={s}>{s}/page</option>)}
-          </select>
+      {/* Pagination */}
+      <div className="card">
+        <div className="pager">
+          <div className="muted">{fmtRange(from, to, total)}</div>
+          <div className="pgbtns">
+            <button className="ghost" disabled={page === 0} onClick={() => setPage(p => p - 1)}>Prev</button>
+            <button className="ghost" disabled={data ? (page + 1) >= data.totalPages : true} onClick={() => setPage(p => p + 1)}>Next</button>
+            <select value={size} onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }}>
+              {[10, 20, 50, 100].map(s => <option key={s} value={s}>{s}/page</option>)}
+            </select>
+          </div>
         </div>
       </div>
+
+
 
       {/* Modal with tabs (Details + Images + Options) */}
       {modal && (
@@ -1296,4 +1308,57 @@ const css = `
 @keyframes slide{ 0%{ transform: translateY(20px); opacity:0; } 10%{ transform: translateY(0); opacity:1; } 80%{ transform: translateY(0); opacity:1; } 100%{ transform: translateY(10px); opacity:0; }
 
 .toast.in-modal{ position: absolute; right: 12px; bottom: 12px; z-index: 101; }
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08); /* INK */
+}
+
+.pgbtns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ghost {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.08); /* INK */
+  background: #fff;
+  color: #4A4F41; /* PRIMARY */
+  cursor: pointer;
+}
+
+.ghost.sm {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+
+select {
+  height: 32px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  padding: 0 10px;
+  background: #fff;
+}
+.card .pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.card .pgbtns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 `;

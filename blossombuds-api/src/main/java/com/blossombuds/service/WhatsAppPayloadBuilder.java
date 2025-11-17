@@ -5,6 +5,7 @@ import com.blossombuds.dto.OrderDto;
 import com.blossombuds.dto.OrderItemDto;
 import com.blossombuds.domain.Setting;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -13,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /** Builds a pre-filled WhatsApp message + link for international orders. */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class WhatsAppPayloadBuilder {
@@ -25,20 +27,31 @@ public class WhatsAppPayloadBuilder {
         String text = buildMessageText(order, items, customer);
         String encoded = URLEncoder.encode(text, StandardCharsets.UTF_8);
         // Works on mobile and desktop web WhatsApp
-        return "https://wa.me/" + target + "?text=" + encoded;
+        String waUrl = "https://wa.me/" + target + "?text=" + encoded;
+
+        log.info("[WHATSAPP][URL] Generated wa.me URL for orderId={} → {}", order != null ? order.getId() : null, waUrl);
+        return waUrl;
     }
 
     private String getWhatsAppTarget() {
         try {
             Setting s = settings.get("support.whatsapp_number");
             String v = s.getValue();
-            if (v != null && !v.isBlank()) return v.replaceAll("[^0-9]", "");
-        } catch (Exception ignore) { }
-        // Fallback: please set support.whatsapp_number in settings
+            if (v != null && !v.isBlank()) {
+                String cleaned = v.replaceAll("[^0-9]", "");
+                log.info("[WHATSAPP][NUMBER] Using WhatsApp number from settings: {}", cleaned);
+                return cleaned;
+            }
+        } catch (Exception e) {
+            log.warn("[WHATSAPP][SETTINGS_FAIL] Failed to get WhatsApp number from settings: {}", e.getMessage());
+        }
+        log.info("[WHATSAPP][FALLBACK] Using fallback WhatsApp number.");
         return "919000000000";
     }
 
     private String buildMessageText(OrderDto order, List<OrderItemDto> items, Customer c) {
+        log.info("[WHATSAPP][MSG_BUILD] Building WhatsApp message for orderId={}", order != null ? order.getId() : null);
+
         StringBuilder sb = new StringBuilder();
         sb.append("Hello! I'd like to place an international order.\n\n");
 

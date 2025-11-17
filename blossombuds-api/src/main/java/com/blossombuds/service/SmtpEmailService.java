@@ -2,6 +2,7 @@ package com.blossombuds.service;
 
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.ClassPathResource;
@@ -20,6 +21,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /** SMTP implementation using Spring Mail (HTML + plain text with inline brand logo + masked links). */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class SmtpEmailService implements EmailService {
@@ -85,6 +87,7 @@ public class SmtpEmailService implements EmailService {
     /** Sends an email verification link to a customer. */
     @Override
     public void sendVerificationEmail(String toEmail, String verifyUrl) {
+        log.info("[EMAIL][VERIFICATION] to='{}'", toEmail);
         String subject = "Verify your email";
         String body = """
             Hi there,
@@ -106,6 +109,7 @@ public class SmtpEmailService implements EmailService {
     /** Sends a password reset link to a customer/admin. */
     @Override
     public void sendPasswordResetEmail(String toEmail, String resetUrl) {
+        log.info("[EMAIL][RESET] to='{}'", toEmail);
         String subject = "Reset your password";
         String body = """
             Hi there,
@@ -128,6 +132,7 @@ public class SmtpEmailService implements EmailService {
     @Override
     public void sendOrderConfirmation(String toEmail, String toName,
                                       String publicCodeYYNNNN, String currency, BigDecimal grandTotal) {
+        log.info("[EMAIL][ORDER_CONFIRMED] to='{}' code='{}'", toEmail, publicCodeYYNNNN);
         String subject = "Your order " + publicCodeYYNNNN + " is confirmed";
         String total = formatMoney(grandTotal, currency);
         String body = """
@@ -154,6 +159,7 @@ public class SmtpEmailService implements EmailService {
     public void sendOrderStatusChanged(String toEmail, String toName,
                                        String publicCodeYYNNNN, String newStatus, String note, String trackingUrl) {
         // Backward-compatible entry point; delegates to the overload that can add a review link.
+        log.info("[EMAIL][ORDER_STATUS] to='{}' code='{}' status='{}'", toEmail, publicCodeYYNNNN, newStatus);
         sendOrderStatusChanged(toEmail, toName, publicCodeYYNNNN, newStatus, note, trackingUrl, null, null, null);
     }
 
@@ -200,6 +206,7 @@ public class SmtpEmailService implements EmailService {
     @Override
     public void sendReviewRequest(String toEmail, String toName,
                                   String publicCodeYYNNNN, String reviewUrl) {
+        log.info("[EMAIL][REVIEW_REQ] to='{}' code='{}'", toEmail, publicCodeYYNNNN);
         String subject = "Review your order " + publicCodeYYNNNN;
         String body = """
             Hi %s,
@@ -242,8 +249,10 @@ public class SmtpEmailService implements EmailService {
             }
 
             mailSender.send(mime);
+            log.info("[EMAIL][SEND] HTML sent to='{}' subject='{}'", toEmail, subject);
         } catch (Exception ex) {
             // Fallback to plain text only (still without exposing raw URLs)
+            log.warn("[EMAIL][SEND] Fallback to plain text for='{}' subject='{}' due to error={}", toEmail, subject, ex.getMessage());
             SimpleMailMessage msg = new SimpleMailMessage();
             msg.setFrom(from);
             msg.setTo(toEmail);
@@ -320,8 +329,12 @@ public class SmtpEmailService implements EmailService {
         byte[] bytes = readClassPathBytes(logoPngPath);
         String ct = "image/png";
         if (bytes == null) {
+            log.warn("[EMAIL][LOGO] PNG not found at '{}', trying SVG", logoPngPath);
             bytes = readClassPathBytes(logoSvgPath);
             ct = (bytes != null) ? "image/svg+xml" : null;
+        }
+        if (bytes == null) {
+            log.warn("[EMAIL][LOGO] Both PNG and SVG logos missing");
         }
         return (bytes != null && ct != null) ? new InlineLogo(LOGO_CID, bytes, ct) : null;
     }

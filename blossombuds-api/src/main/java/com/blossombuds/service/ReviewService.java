@@ -65,6 +65,9 @@ public class ReviewService {
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
     public ProductReview submit(com.blossombuds.dto.@Valid ProductReviewDto dto, String actor) {
+        log.info("[REVIEW][SUBMIT] Submitting review for productId={} customerId={} actor={}",
+                dto.getProductId(), dto.getCustomerId(), actor);
+
         if (dto == null) throw new IllegalArgumentException("ProductReviewDto is required");
         if (dto.getProductId() == null) throw new IllegalArgumentException("productId is required");
         if (dto.getCustomerId() == null) throw new IllegalArgumentException("customerId is required");
@@ -109,6 +112,7 @@ public class ReviewService {
         }
         if (!batch.isEmpty()) imageRepo.saveAll(batch);
 
+        log.info("[REVIEW][SUBMIT] Submitted review id={} with {} image(s)", r.getId(), batch.size());
         return r;
     }
 
@@ -116,6 +120,9 @@ public class ReviewService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public ProductReview moderate(Long reviewId, String status, String actor, boolean overrideConsent) {
+        log.info("[REVIEW][MODERATE] Moderating reviewId={} status={} actor={} override={}",
+                reviewId, status, actor, overrideConsent);
+
         if (reviewId == null) throw new IllegalArgumentException("reviewId is required");
         String s = safeTrim(status);
         if (!"APPROVED".equals(s) && !"REJECTED".equals(s))
@@ -127,11 +134,14 @@ public class ReviewService {
             throw new IllegalStateException("Cannot approve without customer concern=true");
         }
         r.setStatus(s);
+        log.info("[REVIEW][MODERATE] Review id={} updated to status={}", reviewId, s);
         return r;
     }
 
     /** Public site: only APPROVED and concern=true. */
     public List<ProductReviewDetailView> listApprovedForProduct(Long productId) {
+        log.debug("[REVIEW][LIST] Listing approved reviews for productId={}", productId);
+
         if (productId == null) throw new IllegalArgumentException("productId is required");
         // Ensure repo method filters active=true OR filter here after fetching
         List<ProductReview> rows =
@@ -142,12 +152,14 @@ public class ReviewService {
             if (!Boolean.TRUE.equals(r.getConcern())) continue;           // already present logic
             out.add(toDetail(r));
         }
+        log.info("[REVIEW][LIST] Found {} approved reviews for productId={}", out.size(), productId);
         return out;
     }
 
     /** Admin/owner read detail with images (signed URLs). */
     @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
     public ProductReviewDetailView getDetail(Long reviewId, String actor) {
+        log.info("[REVIEW][DETAIL] Fetching detail for reviewId={} actor={}", reviewId, actor);
         ProductReview r = reviewRepo.findById(reviewId)
                 .orElseThrow(() -> new IllegalArgumentException("Review not found: " + reviewId));
         if (actor.startsWith("cust:")) ensureActorIsAdminOrCustomerSelf(actor, r.getCustomerId());
@@ -158,10 +170,12 @@ public class ReviewService {
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
     public void delete(Long reviewId, String actor) {
+        log.info("[REVIEW][DELETE] Soft-deleting reviewId={} by actor={}", reviewId, actor);
         ProductReview r = reviewRepo.findById(reviewId)
                 .orElseThrow(() -> new IllegalArgumentException("Review not found: " + reviewId));
         ensureActorIsAdminOrCustomerSelf(actor, r.getCustomerId());
         r.setActive(Boolean.FALSE);
+        log.info("[REVIEW][DELETE] Marked reviewId={} as inactive", reviewId);
     }
 
     // ───────────── Image upload (Multipart) — HEIC OK, no watermark ─────────────
@@ -170,6 +184,8 @@ public class ReviewService {
     @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
     public ProductReviewImage uploadImage(Long reviewId, MultipartFile file, String actor)
             throws IOException, InterruptedException {
+        log.info("[REVIEW][UPLOAD] Uploading image for reviewId={} actor={} filename={}",
+                reviewId, actor, file != null ? file.getOriginalFilename() : "null");
 
         if (reviewId == null) throw new IllegalArgumentException("reviewId is required");
         if (file == null || file.isEmpty()) throw new IllegalArgumentException("File cannot be empty");
@@ -212,6 +228,7 @@ public class ReviewService {
         row.setSortOrder(existing.size());
         row.setActive(Boolean.TRUE);
 
+        log.info("[REVIEW][UPLOAD] Image uploaded to key={} size={}B", key, normalizedJpeg.length);
         return imageRepo.save(row);
     }
 
@@ -229,6 +246,7 @@ public class ReviewService {
             req.addRequestParameter("Content-Type", contentType);
         }
         URL url = r2Client.generatePresignedUrl(req);
+        log.debug("[REVIEW][PRESIGN] Presigned URL for key={} expires={}", key, exp);
         return new PresignResponse(key, url.toString(),
                 (contentType == null || contentType.isBlank()) ? "application/octet-stream" : contentType);
     }
@@ -236,6 +254,7 @@ public class ReviewService {
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
     public ProductReviewImageDto attachImageFromTempKey(Long reviewId, String tempKey, String actor) throws IOException {
+        log.info("[REVIEW][ATTACH] Attaching image from tempKey={} to reviewId={} by actor={}", tempKey, reviewId, actor);
         if (reviewId == null || !StringUtils.hasText(tempKey))
             throw new IllegalArgumentException("reviewId and key are required");
 
@@ -297,11 +316,13 @@ public class ReviewService {
         dto.setPublicId(saved.getPublicId());
         dto.setUrl(saved.getUrl());
         dto.setSortOrder(saved.getSortOrder());
+        log.info("[REVIEW][ATTACH] Image attached at {} and saved with ID {}", destKey, saved.getId());
         return dto;
     }
     @Async("reviewExecutor")
     @Transactional
     public void transcodeHeicToJpegAsync(Long imageRowId, String heicKey) {
+        log.info("[REVIEW][HEIC] Transcoding HEIC to JPEG for imageId={} key={}", imageRowId, heicKey);
         try (S3Object obj = r2Client.getObject(bucketName, heicKey);
              InputStream in = obj.getObjectContent();
              ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
@@ -331,8 +352,9 @@ public class ReviewService {
             row.setPublicId(jpgKey);
             row.setUrl(r2Endpoint + "/" + bucketName + "/" + jpgKey);
             imageRepo.save(row);
+            log.info("[REVIEW][HEIC] Transcoded and saved JPEG at {}", jpgKey);
         } catch (Exception e) {
-            log.warn("HEIC async transcode failed imageId={} key={} err={}", imageRowId, heicKey, e.toString());
+            log.warn("[REVIEW][HEIC] Async transcode failed imageId={} key={} err={}", imageRowId, heicKey, e.toString());
         }
     }
 
@@ -357,6 +379,8 @@ public class ReviewService {
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
     public void reorderImages(Long reviewId, List<Long> imageIds, String actor) {
+        log.info("[REVIEW][ORDER] Reordering images for reviewId={} actor={}", reviewId, actor);
+
         if (reviewId == null) throw new IllegalArgumentException("reviewId is required");
         ProductReview r = reviewRepo.findById(reviewId)
                 .orElseThrow(() -> new IllegalArgumentException("Review not found: " + reviewId));
@@ -378,11 +402,15 @@ public class ReviewService {
 
         for (int i = 0; i < ordered.size(); i++) ordered.get(i).setSortOrder(i);
         imageRepo.saveAll(ordered);
+        log.info("[REVIEW][ORDER] New image order saved for reviewId={} with {} image(s)", reviewId, ordered.size());
+
     }
 
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
     public void deleteImage(Long reviewId, Long imageId, String actor) {
+        log.info("[REVIEW][DELETE_IMAGE] Deleting imageId={} from reviewId={} by actor={}", imageId, reviewId, actor);
+
         if (reviewId == null || imageId == null) throw new IllegalArgumentException("ids required");
         ProductReview r = reviewRepo.findById(reviewId)
                 .orElseThrow(() -> new IllegalArgumentException("Review not found: " + reviewId));
@@ -403,8 +431,11 @@ public class ReviewService {
         List<ProductReviewImage> remain = imageRepo.findByReviewIdAndActiveTrueOrderBySortOrderAsc(reviewId);
         for (int i = 0; i < remain.size(); i++) remain.get(i).setSortOrder(i);
         imageRepo.saveAll(remain);
+        log.info("[REVIEW][DELETE_IMAGE] Image marked inactive and removed from R2 if present");
     }
     public Page<ProductReviewPublicView> searchPublicApproved(String q, Pageable pageable) {
+        log.debug("[REVIEW][SEARCH_PUBLIC] Querying public approved reviews: query='{}'", q);
+
         // Reuse your existing search: APPROVED + concern=true + active=true
         Page<ProductReview> page = search("APPROVED", Boolean.TRUE, q, pageable);
 
@@ -451,6 +482,7 @@ public class ReviewService {
             rows.add(v);
         }
 
+        log.info("[REVIEW][SEARCH_PUBLIC] Found {} results for query='{}'", rows.size(), q);
         return new PageImpl<>(rows, page.getPageable(), page.getTotalElements());
     }
 
@@ -458,6 +490,7 @@ public class ReviewService {
 
     //@PreAuthorize("hasRole('ADMIN',CUSTOMER)")
     public Page<ProductReview> search(String status, Boolean concern, String q, Pageable pageable) {
+        log.debug("[REVIEW][SEARCH_ADMIN] search() called with status='{}' concern={} query='{}'", status, concern, q);
         Specification<ProductReview> spec = alwaysTrue();
 
         // active = true by default
@@ -510,6 +543,7 @@ public class ReviewService {
     // in ReviewService
     @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
     public void deleteTempObject(String key) {
+        log.info("[REVIEW][TEMP_DELETE] Attempting to delete temp object: {}", key);
         if (key == null || key.isBlank())
             throw new IllegalArgumentException("key required");
         // Safety: only allow deleting objects in the temp folder
@@ -520,6 +554,7 @@ public class ReviewService {
         } catch (Exception e) {
             log.warn("Temp delete failed for {}: {}", key, e.toString());
         }
+        log.info("[REVIEW][TEMP_DELETE] Temp object deleted successfully: {}", key);
     }
 
 
@@ -530,25 +565,34 @@ public class ReviewService {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("File cannot be empty");
         }
+
         if (file.getSize() > MAX_BYTES) {
             throw new IllegalArgumentException("Max 10 MB per image");
         }
 
-        String name = (file.getOriginalFilename() == null ? "" : file.getOriginalFilename().toLowerCase());
-        String ct   = (file.getContentType() == null ? "" : file.getContentType().toLowerCase());
+        String name = Optional.ofNullable(file.getOriginalFilename())
+                .orElse("")
+                .toLowerCase(Locale.ROOT);
 
-        boolean extOk =
-                name.endsWith(".jpg")  || name.endsWith(".jpeg") ||
-                        name.endsWith(".png")  || name.endsWith(".webp") ||
-                        name.endsWith(".gif")  || name.endsWith(".bmp")  ||
-                        name.endsWith(".tif")  || name.endsWith(".tiff") ||
-                        name.endsWith(".heic") || name.endsWith(".heif");
+        String ct = Optional.ofNullable(file.getContentType())
+                .orElse("")
+                .toLowerCase(Locale.ROOT);
 
-        boolean typeOk = ct.startsWith("image/") || extOk;
-        if (!typeOk) {
-            throw new IllegalArgumentException("Only image files are supported (JPG, PNG, WebP, HEIC…)");
+        // ✅ Check for allowed extensions
+        boolean extOk = name.endsWith(".jpg") || name.endsWith(".jpeg") ||
+                name.endsWith(".png") || name.endsWith(".webp") ||
+                name.endsWith(".gif") || name.endsWith(".bmp") ||
+                name.endsWith(".tif") || name.endsWith(".tiff") ||
+                name.endsWith(".heic") || name.endsWith(".heif");
+
+        // ✅ Check MIME type is image/*
+        boolean mimeOk = ct.startsWith("image/");
+
+        if (!(extOk && mimeOk)) {
+            throw new IllegalArgumentException("Only image files are supported (JPG, PNG, WebP, HEIC). You uploaded: " + name);
         }
     }
+
 
     private byte[] convertAnyToJpegBytes(byte[] raw, String filename, String contentType) throws IOException {
         String ct = (contentType == null || contentType.isBlank())
@@ -595,6 +639,7 @@ public class ReviewService {
     /** Returns the image bytes and content-type for a given review image (owner/admin). */
     @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
     public ImagePayload streamReviewImage(Long reviewId, Long imageId, String actor) throws IOException {
+        log.info("[REVIEW][STREAM] Streaming imageId={} for reviewId={} by actor={}", imageId, reviewId, actor);
         if (reviewId == null || imageId == null) throw new IllegalArgumentException("ids required");
 
         ProductReview r = reviewRepo.findById(reviewId)
@@ -623,6 +668,7 @@ public class ReviewService {
                     .map(ObjectMetadata::getContentType)
                     .orElse(MediaType.IMAGE_JPEG_VALUE);
 
+            log.info("[REVIEW][STREAM] Stream ready for imageId={} with ct={}", imageId, ct);
             return new ImagePayload(bytes, ct);
         }
     }

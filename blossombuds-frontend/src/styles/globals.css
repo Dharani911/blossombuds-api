@@ -1,61 +1,239 @@
-:root{
-  --bb-primary:#4A4F41;          /* headings, text accents */
-  --bb-accent:#F05D8B;           /* primary buttons/highlights */
-  --bb-accent-2:#F6C320;         /* secondary CTAs/icons */
-  --bb-bg:#FAF7E7;               /* site background */
+:root {
+  --bb-primary: #4A4F41;
+  --bb-accent: #F05D8B;
+  --bb-accent-2: #F6C320;
+  --bb-bg: #FAF7E7;
 
-  --bb-radius:16px;
-  --bb-shadow:0 10px 24px rgba(0,0,0,.08);
+  --bb-radius: 16px;
+  --bb-shadow: 0 10px 24px rgba(0, 0, 0, .08);
+
+  --bb-safe-top: env(safe-area-inset-top);
+  --bb-safe-bottom: env(safe-area-inset-bottom);
 }
 
-*{box-sizing:border-box}
-html,body,#root{height:100%}
-body{
-  margin:0;
-  color:#2b2b2b;
-  background:var(--bb-bg);
+/* ---------- Base Reset ---------- */
+* {
+  box-sizing: border-box;
+}
+html, body, #root {
+  height: 100%;
+}
+html {
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  margin: 0;
+  color: #2b2b2b;
+  background: var(--bb-bg);
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, "Montserrat", "Lato", sans-serif;
+  min-height: 100dvh;
+}
+a {
+  color: inherit;
+  text-decoration: none;
 }
 
-h1,h2,h3,h4,h5{
-  font-family: "Cinzel","DM Serif Display", serif;
-  color:var(--bb-primary);
-  letter-spacing:.3px;
+/* ---------- Typography ---------- */
+h1, h2, h3, h4, h5 {
+  font-family: "Cinzel", "DM Serif Display", Georgia, serif;
+  color: var(--bb-primary);
+  letter-spacing: .3px;
   margin: 0 0 .5rem;
 }
 
-a{color:inherit;text-decoration:none}
-.container{max-width:1200px;margin:0 auto;padding:0 16px}
-
-.btn{
-  display:inline-flex;align-items:center;justify-content:center;
-  padding:.75rem 1.25rem;border-radius:999px;border:none;cursor:pointer;
-  background:var(--bb-accent);color:#fff;font-weight:700;letter-spacing:.3px;
-  transition:transform .15s ease, box-shadow .15s ease;
-  box-shadow:var(--bb-shadow)
+/* ---------- Containers ---------- */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 16px;
 }
-.btn:hover{transform:translateY(-1px)}
-.btn.secondary{background:var(--bb-accent-2);color:#2b2b2b}
-
-.card{
-  background:#fff;border-radius:var(--bb-radius);box-shadow:var(--bb-shadow);
+@media (max-width: 600px) {
+  .container { padding: 0 14px; }
 }
 
-.header-blur{
-  /* keep it simple to avoid transformer issues */
-  background: rgba(255,255,255,.8);
-  border-bottom:1px solid rgba(0,0,0,.06)
+/* ---------- Buttons ---------- */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: .75rem 1.25rem;
+  border-radius: 999px;
+  border: none;
+  background: var(--bb-accent);
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: .3px;
+  transition: transform .15s ease, box-shadow .15s ease;
+  box-shadow: var(--bb-shadow);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-primary:hover {
+  transform: translateY(-1px);
 }
 
-/* Simple fade/slide transitions */
-.fade-in{animation:fadeIn .5s ease both}
-@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none)}
-
-.nav{padding:8px 10px;border-radius:12px;color:var(--bb-primary);font-weight:600}
-.nav.active{background:var(--bb-accent-2)}
-.icon-btn{
-  display:inline-flex;align-items:center;justify-content:center;
-  width:40px;height:40px;border-radius:999px;border:none;background:#fff;box-shadow:var(--bb-shadow);
-  cursor:pointer;transition:transform .15s ease
+.btn-secondary {
+  composes: btn-primary;
+  background: var(--bb-accent-2);
+  color: #2b2b2b;
 }
-.icon-btn:hover{transform:translateY(-1px)}
+
+/* GHOST Buttons */
+.btn-ghost, .ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  font-size: 13.5px;
+  font-weight: 600;
+  background: transparent;
+  border: 1px solid rgba(0,0,0,0.15);
+  color: var(--bb-primary);
+  border-radius: 8px;
+  box-shadow: none;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.btn-ghost:hover,
+.ghost:hover {
+  background: rgba(0,0,0,0.05);
+}
+
+/* ---------- Inputs ---------- */
+input, select, textarea {
+  width: 90%;
+  min-height: 30px;
+  font-size: 14px;
+  border: 1px solid rgba(0, 0, 0, .15);
+  border-radius: 14px;
+  padding: 5px 12px;
+  background: #fff;
+}
+
+/* ---------- Cards ---------- */
+.card {
+  background: #fff;
+  border-radius: var(--bb-radius);
+  box-shadow: var(--bb-shadow);
+  border: 1px solid rgba(0, 0, 0, .06);
+}
+
+/* ---------- Header Blur ---------- */
+.header-blur {
+  background: rgba(255, 255, 255, .82);
+  border-bottom: 1px solid rgba(0, 0, 0, .06);
+  backdrop-filter: saturate(180%) blur(10px);
+}
+
+/* ---------- Icon Buttons ---------- */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: none;
+  background: #fff;
+  box-shadow: var(--bb-shadow);
+  cursor: pointer;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.icon-btn:hover {
+  transform: translateY(-1px);
+}
+
+/* ---------- Animations ---------- */
+.fade-in {
+  animation: fadeIn .5s ease both;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---------- Toast ---------- */
+.toast {
+  position: fixed;
+  transform: translateX(-50%);
+  bottom: calc(12px + var(--bb-safe-bottom));
+  z-index: 9999;
+}
+
+/* ---------- Utilities ---------- */
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.sr-only {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- Responsive Grid ---------- */
+.grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+@media (max-width: 1100px) {
+  .grid-4 { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 800px) {
+  .grid-4 { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 520px) {
+  .grid-4 { grid-template-columns: 1fr; }
+}
+
+/* ---------- Mobile Polish ---------- */
+@media (max-width: 480px) {
+  .card {
+    border-radius: 14px;
+    box-shadow: 0 8px 18px rgba(0,0,0,.08);
+  }
+}
+
+/* ---------- Focus ---------- */
+:focus-visible {
+  outline: 3px solid color-mix(in oklab, var(--bb-accent), transparent 40%);
+  outline-offset: 2px;
+}
+.sheet-ft {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px; /* spacing between Cancel and Save */
+  margin-top: 1rem;
+}
+.ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.65rem 1.2rem;  /* Slightly increased to match primary */
+  font-size: 14px;
+  font-weight: 600;
+  background: transparent;
+  border: 1px solid rgba(0,0,0,0.15);
+  color: var(--bb-primary);
+  border-radius: 999px; /* match the pill shape */
+  min-height: 40px;     /* same height as .btn-primary */
+  box-shadow: none;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.ghost:hover {
+  background: rgba(0,0,0,0.05);
+}
+
+

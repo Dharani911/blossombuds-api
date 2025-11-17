@@ -4,6 +4,7 @@ import com.blossombuds.domain.DeliveryPartner;
 import com.blossombuds.dto.DeliveryPartnerDto;
 import com.blossombuds.repository.DeliveryPartnerRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,6 +15,7 @@ import java.util.List;
 import java.util.Optional;
 
 /** Application service for managing delivery/courier partners and their metadata. */
+@Slf4j
 @Service
 @Validated
 @RequiredArgsConstructor
@@ -34,6 +36,7 @@ public class DeliveryPartnerService {
         p.setActive(dto.getActive() != null ? dto.getActive() : Boolean.TRUE);
         //p.setCreatedBy(actor);
         //p.setCreatedAt(OffsetDateTime.now());
+        log.info("[DELIVERY_PARTNER][CREATE] Partner created: code={}, name={}, actor={}", p.getCode(), p.getName(), actor);
         return partnerRepo.save(p);
     }
 
@@ -52,9 +55,8 @@ public class DeliveryPartnerService {
         if (dto.getTrackingUrlTemplate() != null)p.setTrackingUrlTemplate(safeTrim(dto.getTrackingUrlTemplate()));
         if (dto.getActive() != null)             p.setActive(dto.getActive());
 
-        //p.setModifiedBy(actor);
-        //p.setModifiedAt(OffsetDateTime.now());
-        return p; // dirty-checked on commit
+        log.info("[DELIVERY_PARTNER][UPDATE] Partner updated: id={}, actor={}", id, actor);
+        return p;
     }
 
     /** Returns a partner by id or throws if missing. */
@@ -88,8 +90,7 @@ public class DeliveryPartnerService {
         if (id == null) throw new IllegalArgumentException("id is required");
         DeliveryPartner p = get(id);
         p.setActive(active);
-        //p.setModifiedBy(actor);
-        //p.setModifiedAt(OffsetDateTime.now());
+        log.info("[DELIVERY_PARTNER][ACTIVE] Set active={} for id={}, actor={}", active, id, actor);
         return p;
     }
 
@@ -99,6 +100,8 @@ public class DeliveryPartnerService {
     public void delete(Long id) {
         if (id == null) throw new IllegalArgumentException("id is required");
         partnerRepo.deleteById(id);
+        log.warn("[DELIVERY_PARTNER][DELETE] Partner deleted: id={}", id);
+
     }
 
     /** Trims a string, returning null if input is null. */

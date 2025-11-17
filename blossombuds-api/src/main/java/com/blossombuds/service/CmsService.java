@@ -6,6 +6,7 @@ import com.blossombuds.dto.CmsPageDto;
 import com.blossombuds.repository.CmsPageRepository;
 import com.blossombuds.repository.CmsPageRevisionRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +16,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 /** CMS service for managing pages and their immutable revisions. */
+@Slf4j
 @Service
 @Validated
 @RequiredArgsConstructor
@@ -44,6 +46,7 @@ public class CmsService {
         //p.setCreatedBy(actor);
         //p.setCreatedAt(OffsetDateTime.now());
         pageRepo.save(p);
+        log.info("[CMS][CREATE] Page created with slug '{}'", slug);
 
         saveRevision(p, 1, actor);
         return p;
@@ -87,8 +90,12 @@ public class CmsService {
                     .map(CmsPageRevision::getRevisionNumber)
                     .orElse(0) + 1;
             saveRevision(p, nextRev, actor);
+            log.info("[CMS][UPDATE] Page '{}' updated. New revision: {}", p.getSlug(), nextRev);
+        } else {
+            log.info("[CMS][UPDATE] Page '{}' updated. No content/title change.", p.getSlug());
         }
-        return p; // dirty-checked on commit
+
+        return p;
     }
 
     /** Retrieves a page by slug or throws if not found. */
@@ -118,8 +125,7 @@ public class CmsService {
         CmsPage p = pageRepo.findById(pageId)
                 .orElseThrow(() -> new IllegalArgumentException("Page not found: " + pageId));
         p.setActive(false);
-        //p.setModifiedBy(actor);
-        //p.setModifiedAt(OffsetDateTime.now());
+        log.info("[CMS][DELETE] Page '{}' soft-deleted by {}", p.getSlug(), actor);
     }
 
     /** Persists a new immutable revision snapshot for a page. */
@@ -136,6 +142,7 @@ public class CmsService {
         //rev.setCreatedBy(actor);
         //rev.setCreatedAt(OffsetDateTime.now());
         revRepo.save(rev);
+        log.info("[CMS][REVISION] Revision {} saved for page '{}'", revNo, p.getSlug());
     }
 
     // ─────────────────────────────── helpers ────────────────────────────────

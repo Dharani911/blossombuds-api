@@ -4,6 +4,7 @@ import com.blossombuds.domain.DeliveryFeeRules;
 import com.blossombuds.domain.DeliveryFeeRules.RuleScope;
 import com.blossombuds.repository.DeliveryFeeRulesRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,6 +14,7 @@ import java.util.Locale;
 import java.util.Optional;
 
 /** Computes effective delivery fees and exposes simple CRUD for rules. */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -32,6 +34,7 @@ public class DeliveryFeeRulesService {
         if (districtId != null) {
             var r = ruleRepo.findTopByScopeAndScopeIdAndActiveTrueOrderByIdDesc(RuleScope.DISTRICT, districtId);
             if (r.isPresent()) {
+                log.info("[FEE][DISTRICT] Using district-specific fee for districtId={}", districtId);
                 return Optional.of(sanitize(r.get().getFeeAmount()));
             }
         }
@@ -40,6 +43,7 @@ public class DeliveryFeeRulesService {
         if (stateId != null) {
             var r = ruleRepo.findTopByScopeAndScopeIdAndActiveTrueOrderByIdDesc(RuleScope.STATE, stateId);
             if (r.isPresent()) {
+                log.info("[FEE][STATE] Using state-specific fee for stateId={}", stateId);
                 return Optional.of(sanitize(r.get().getFeeAmount()));
             }
         }
@@ -47,9 +51,10 @@ public class DeliveryFeeRulesService {
         // Default rule (active)
         var r = ruleRepo.findTopByScopeAndScopeIdIsNullAndActiveTrueOrderByIdDesc(RuleScope.DEFAULT);
         if (r.isPresent()) {
+            log.info("[FEE][DEFAULT] Using default delivery fee");
             return Optional.of(sanitize(r.get().getFeeAmount()));
         }
-
+        log.warn("[FEE][MISSING] No active delivery fee found for stateId={}, districtId={}", stateId, districtId);
         return Optional.empty();
     }
 
@@ -64,12 +69,17 @@ public class DeliveryFeeRulesService {
      * If subtotal ≥ threshold → 0; else → effective fee.
      */
     public BigDecimal computeFeeWithThreshold(BigDecimal itemsSubtotal, Long stateId, Long districtId) {
-        if (itemsSubtotal == null) return getEffectiveFeeOrZero(stateId, districtId);
+        if (itemsSubtotal == null) {
+            log.info("[FEE][THRESHOLD] Subtotal null — returning base fee");
+        return getEffectiveFeeOrZero(stateId, districtId);
+    }
 
         var threshold = getBigDecimalSetting(KEY_FREE_THRESHOLD).orElse(VERY_LARGE);
         if (itemsSubtotal.compareTo(threshold) >= 0) {
+            log.info("[FEE][THRESHOLD] Subtotal {} >= threshold {} → free shipping", itemsSubtotal, threshold);
             return BigDecimal.ZERO;
         }
+        log.info("[FEE][THRESHOLD] Subtotal {} < threshold {} → applying fee", itemsSubtotal, threshold);
         return getEffectiveFeeOrZero(stateId, districtId);
     }
 
@@ -85,6 +95,7 @@ public class DeliveryFeeRulesService {
     public DeliveryFeeRules createRule(DeliveryFeeRules dto) {
         DeliveryFeeRules r = new DeliveryFeeRules();
         applyInto(r, dto);
+        log.info("[DELIVERY][CREATE] New rule created: scope={}, scopeId={}", r.getScope(), r.getScopeId());
         return ruleRepo.save(r);
     }
 
@@ -94,15 +105,18 @@ public class DeliveryFeeRulesService {
         DeliveryFeeRules r = ruleRepo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Rule not found: " + id));
         applyInto(r, dto);
+        log.info("[DELIVERY][UPDATE] Updated rule id={}", id);
         return ruleRepo.save(r);
     }
 
     /** Delete a rule. */
     @Transactional
     public void deleteRule(Long id) {
-        if (id != null) ruleRepo.deleteById(id);
+        if (id != null) {
+            log.warn("[DELIVERY][DELETE] Deleting rule id={}", id);
+            ruleRepo.deleteById(id);
+        }
     }
-
     /* ============================ Helpers ============================ */
 
     private void applyInto(DeliveryFeeRules target, DeliveryFeeRules src) {
@@ -132,6 +146,7 @@ public class DeliveryFeeRulesService {
             if (raw.isEmpty()) return Optional.empty();
             return Optional.of(new BigDecimal(raw)).map(this::sanitize);
         } catch (Exception e) {
+            log.error("[SETTINGS][ERROR] Failed to parse setting {} as BigDecimal", key, e);
             return Optional.empty();
         }
     }

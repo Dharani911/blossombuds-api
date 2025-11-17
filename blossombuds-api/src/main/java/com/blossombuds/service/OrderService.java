@@ -5,6 +5,7 @@ import com.blossombuds.dto.*;
 import com.blossombuds.repository.*;
 import com.blossombuds.web.OrderController;
 import lombok.*;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -21,6 +22,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /** Application service for Orders, Items, Payments, and Events. */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -60,7 +62,10 @@ public class OrderService {
         if (jdbcTemplate == null) return null;
         try {
             return jdbcTemplate.queryForObject("select next_public_code()", String.class);
-        } catch (Exception ignore) { return null; }
+        } catch (Exception ignore) {
+            log.warn("[ORDER][CODE] Failed to fetch next public code from DB");
+            return null;
+        }
     }
 
     /** Returns true if provided PIN looks like an Indian 6-digit PIN. */
@@ -83,7 +88,7 @@ public class OrderService {
     @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
     public Order createOrder(OrderDto dto) {
         if (dto == null) throw new IllegalArgumentException("OrderDto is required");
-
+        log.info("[ORDER][CREATE] Initiating order creation for customerId={}", dto.getCustomerId());
         Coupon resolvedCoupon = null;
         if (dto.getCouponId() != null) {
             resolvedCoupon = couponRepository.findById(dto.getCouponId())
@@ -198,6 +203,7 @@ public class OrderService {
         o.setActive(dto.getActive() != null ? dto.getActive() : Boolean.TRUE);
 
         Order saved = orderRepo.save(o);
+        log.info("[ORDER][CREATE] Order saved with ID={} and publicCode={}", saved.getId(), saved.getPublicCode());
 
         if (resolvedCoupon != null) {
             CouponRedemption red = new CouponRedemption();
@@ -207,7 +213,9 @@ public class OrderService {
             red.setAmountApplied(o.getDiscountTotal());
             red.setActive(Boolean.TRUE);
             couponRedemptionRepository.save(red);
+            log.info("[ORDER][COUPON] Applied coupon {} to orderId={} ", resolvedCoupon.getCode(), saved.getId());
         }
+
 
 
         if (o.getExternalReference() != null && !o.getExternalReference().isBlank()) {
@@ -216,6 +224,7 @@ public class OrderService {
             ev.setEventType("EXTERNAL_REF_ADDED");
             ev.setNote("External payment reference captured: " + o.getExternalReference());
             eventRepo.save(ev);
+            log.info("[ORDER][EVENT] External reference event logged for orderId={}", saved.getId());
         }
 
         return saved;
@@ -251,6 +260,7 @@ public class OrderService {
                     o.getGrandTotal()
             );
         }
+        log.info("[ORDER][PAID] Paid order created and confirmation sent: orderId={}, customerId={}", o.getId(), o.getCustomerId());
         return o;
     }
 
@@ -283,9 +293,11 @@ public class OrderService {
                 .orElseThrow(() -> new IllegalArgumentException("Customer not found: " + dto.getCustomerId()));
 
         if (items != null && !items.isEmpty()) {
-            for (OrderItemDto it : items) addItem(order.getId(), ensureItemNumbers(it));
+            for (OrderItemDto it : items) {addItem(order.getId(), ensureItemNumbers(it));
+            log.info("[ORDER][ITEM_ADDED] Added item to order {}: productId={}, quantity={}", order.getId(), it.getProductId(), it.getQuantity());}
         }
 
+        log.info("[EMAIL][ORDER_CONFIRM] Sending order confirmation to customer {}", cust.getId());
         emailService.sendOrderConfirmation(
                 cust.getEmail(), cust.getName(), order.getPublicCode(), order.getCurrency(), order.getGrandTotal()
         );
@@ -303,6 +315,7 @@ public class OrderService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public Order updateOrder(Long orderId, OrderDto patch, List<OrderItemDto> items, boolean replaceItems) {
+        log.info("[ORDER][UPDATE] Updating orderId={}, replaceItems={}", orderId, replaceItems);
         if (orderId == null) throw new IllegalArgumentException("orderId is required");
 
         Order existing = orderRepo.findById(orderId)
@@ -313,6 +326,7 @@ public class OrderService {
             updateStatusRequest.setTrackingURL(patch.getTrackingUrl());
 
         if (patch != null && patch.getStatus() != null && patch.getStatus() != existing.getStatus()) {
+            log.info("[ORDER][STATUS_CHANGE] OrderId={} status {} → {}", orderId, existing.getStatus(), patch.getStatus());
             existing = updateStatus(orderId, updateStatusRequest , "(via updateOrder)", "system");
         }
 
@@ -334,6 +348,7 @@ public class OrderService {
                     String built = trackingLinkService.buildTrackingUrl(partnerId, tn);
                     if (built != null && !built.isBlank()) {
                         existing.setTrackingUrl(built);
+                        log.info("[ORDER][TRACKING_BUILT] URL built for partnerId={}, trackingNumber={}", partnerId, tn);
                     }
                 }
             }
@@ -369,8 +384,11 @@ public class OrderService {
         orderRepo.save(existing);
 
         if (items != null) {
-            if (replaceItems) itemRepo.deleteByOrder_Id(orderId);
-            for (OrderItemDto it : items) addItem(orderId, ensureItemNumbers(it));
+            if (replaceItems) {log.info("[ORDER][REPLACE_ITEMS] Deleting existing items for orderId={}", orderId);
+                itemRepo.deleteByOrder_Id(orderId);}
+            for (OrderItemDto it : items){addItem(orderId, ensureItemNumbers(it));
+                log.info("[ORDER][ITEM_UPDATED] item added for orderId={} productId={}", orderId, it.getProductId());
+            }
         }
         return existing;
     }
@@ -380,6 +398,7 @@ public class OrderService {
     @PreAuthorize("hasRole('ADMIN')")
     public Order updateStatus(Long orderId, OrderController.UpdateStatusRequest updateStatusRequest, String eventNote, String actor) {
         if (orderId == null || updateStatusRequest.getStatus() == null) throw new IllegalArgumentException("orderId and newStatus are required");
+        log.info("[ORDER][STATUS_UPDATE] OrderId={} newStatus={} actor={}", orderId, updateStatusRequest.getStatus(), actor);
         Order order = orderRepo.findById(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
 
@@ -421,7 +440,7 @@ public class OrderService {
         if (order.getStatus() == OrderStatus.CANCELLED || order.getStatus() == OrderStatus.REFUNDED) {
             // a tiny helper in repo to find the redemption(s) for this order
             couponRedemptionRepository.findByOrder_IdAndActiveTrue(orderId).setActive(Boolean.FALSE);
-
+            log.info("[ORDER][COUPON_REVOKED] Coupon redemptions deactivated for orderId={}", orderId);
         }
 
         OrderEvent ev = new OrderEvent();
@@ -444,6 +463,7 @@ public class OrderService {
         if (cust != null && cust.getEmail() != null && !cust.getEmail().isBlank()) {
             // PASS BARE YYNNNN to email templates (they add the 'BB' themselves)
             String bareCode = order.getPublicCode();
+            log.info("[EMAIL][STATUS_UPDATE] Sending status update to customer {} for order {}", cust.getId(), bareCode);
             emailService.sendOrderStatusChanged(
                     cust.getEmail(), cust.getName(), bareCode, updateStatusRequest.getStatus().name(), eventNote, order.getTrackingUrl()
             );
@@ -456,6 +476,7 @@ public class OrderService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public OrderItem addItem(Long orderId, OrderItemDto dto) {
+        log.info("[ORDER][ADD_ITEM] Attempting to add item to orderId={}", orderId);
         if (orderId == null || dto == null) throw new IllegalArgumentException("orderId and OrderItemDto are required");
         Order o = orderRepo.findById(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
@@ -471,11 +492,14 @@ public class OrderService {
         it.setOptionsText(dto.getOptionsText());
         it.setActive(dto.getActive() != null ? dto.getActive() : Boolean.TRUE);
 
-        return itemRepo.save(it);
+        OrderItem saved = itemRepo.save(it);
+        log.info("[ORDER][ADD_ITEM] Item added to orderId={} with itemId={}", orderId, saved.getId());
+        return saved;
     }
 
     /** View-model list without back-references (safe to serialize). */
     public List<OrderItemView> listItemsView(Long orderId) {
+        log.info("Fetching items for orderId={}", orderId);
         if (orderId == null) throw new IllegalArgumentException("orderId is required");
         return itemRepo.findByOrder_Id(orderId).stream()
                 .map(OrderService::toView)
@@ -484,6 +508,7 @@ public class OrderService {
     }
 
     public List<PaymentView> listPaymentsView(Long orderId) {
+        log.info("Fetching payments for orderId={}", orderId);
         if (orderId == null) throw new IllegalArgumentException("orderId is required");
         return paymentRepo.findByOrder_Id(orderId).stream()
                 .map(OrderService::toView)
@@ -491,6 +516,7 @@ public class OrderService {
     }
 
     public List<OrderEventView> listEventsView(Long orderId) {
+        log.info("Fetching events for orderId={}", orderId);
         if (orderId == null) throw new IllegalArgumentException("orderId is required");
         return eventRepo.findByOrder_IdOrderByCreatedAtAsc(orderId).stream()
                 .map(OrderService::toView)
@@ -502,6 +528,7 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public Optional<OrderDetailDto> getDetailByPublicCode(String anyPublicCode) {
+        log.info("Fetching order detail for publicCode={}", anyPublicCode);
         String bare = normalizePublicCode(anyPublicCode);
         if (bare == null || bare.isBlank()) return Optional.empty();
 
@@ -574,12 +601,14 @@ public class OrderService {
         return b == null ? BigDecimal.ZERO : b;
     }
     public Optional<OrderLiteDto> getByPublicCodeLite(String anyPublicCode) {
+        log.info("Fetching lite order by publicCode={}", anyPublicCode);
         String bare = normalizePublicCode(anyPublicCode);
 
         return orderRepo.findByPublicCode(bare).map(this::toLiteWithNames);
     }
 
     public List<OrderLiteDto> listByCustomerLite(Long customerId) {
+        log.info("Listing orders for customerId={}", customerId);
         if (customerId == null) throw new IllegalArgumentException("customerId is required");
         List<Order> list = orderRepo.findByCustomerIdOrderByIdDesc(customerId);
         return attachLocationNames(list).stream().map(this::toLite).collect(Collectors.toList());
@@ -639,6 +668,8 @@ public class OrderService {
             String toIso,
             String statusesCsv // NEW: optional, comma-separated (e.g., "ORDERED,DISPATCHED")
     ) {
+        log.info("Listing all orders (page={}, size={}, sort={}, dir={}, from={}, to={}, statuses={})",
+                page, size, sort, dir, fromIso, toIso, statusesCsv);
         String sortField = (sort == null || sort.isBlank()) ? "id" : sort;
         Sort.Direction direction = Sort.Direction.fromOptionalString(dir).orElse(Sort.Direction.DESC);
         Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortField));
@@ -743,7 +774,9 @@ public class OrderService {
             if (p == null || p.isBlank()) continue;
             try {
                 out.add(OrderStatus.valueOf(p.trim().toUpperCase(Locale.ROOT)));
-            } catch (IllegalArgumentException ignore) { /* skip invalid */ }
+            } catch (IllegalArgumentException ignore) {
+                log.warn("[ORDER][PARSE_STATUS] Ignored invalid status '{}'", p);
+            }
         }
         // dedupe while preserving order
         return out.stream().distinct().toList();
@@ -764,6 +797,7 @@ public class OrderService {
                 // No zone provided → interpret as DB zone local time
                 return LocalDateTime.parse(iso);
             } catch (DateTimeParseException ex) {
+                log.warn("[ORDER][PARSE_ISO] Invalid ISO datetime '{}'", iso);
                 return null;
             }
         }
@@ -771,6 +805,7 @@ public class OrderService {
 
     /** Batch-attach readable names (without touching lazy associations during JSON write). */
     private List<Order> attachLocationNames(List<Order> orders) {
+        log.debug("[ORDER][LOCATION_ATTACH] Attaching country/state/district names to {} orders", orders.size());
         // Collect IDs
         Set<Long> cIds = new HashSet<>();
         Set<Long> sIds = new HashSet<>();
@@ -796,6 +831,7 @@ public class OrderService {
     private transient Map<Long, District> districtCache = Map.of();
 
     private OrderLiteDto toLiteWithNames(Order o) {
+        log.debug("[ORDER][LITE_CONVERT] Attaching location info for order {}", o.getId());
         // ensure caches for single element
         if (o.getShipCountry()!=null) countryCache = Map.of(o.getShipCountry().getId(), o.getShipCountry());
         if (o.getShipState()!=null)   stateCache   = Map.of(o.getShipState().getId(), o.getShipState());
@@ -804,6 +840,7 @@ public class OrderService {
     }
 
     private OrderLiteDto toLite(Order o) {
+        log.debug("[ORDER][TO_LITE] Mapping order {} to lite DTO", o.getId());
         OrderLiteDto d = new OrderLiteDto();
         d.setId(o.getId());
         d.setPublicCode(o.getPublicCode());
@@ -868,6 +905,7 @@ public class OrderService {
 
 
     private  List<OrderItemViewWithImage> toOrderItemViewWithImage(Order order){
+        log.debug("Fetching OrderItemViewWithImage for Order ID: {}", order.getId());
         List<OrderItem> orderItemList = itemRepo.findByOrder_Id(order.getId());
         List<OrderItemViewWithImage> orderItemViewWithImageList = new ArrayList<>();
         for(OrderItem item:orderItemList)
@@ -882,8 +920,17 @@ public class OrderService {
             orderItemViewWithImage.setProductId(item.getProductId());
             orderItemViewWithImage.setCreatedAt(item.getCreatedAt());
             orderItemViewWithImage.setUrl(catalogService.listProductImageResponses(item.getProductId()).stream().findFirst().get().getUrl());
+            try {
+                String imgUrl = catalogService.listProductImageResponses(item.getProductId())
+                        .stream().findFirst().get().getUrl();
+                orderItemViewWithImage.setUrl(imgUrl);
+            } catch (Exception e) {
+                log.warn("[ORDER][IMAGE_FETCH_FAIL] Could not fetch image for product ID: {}", item.getProductId());
+                orderItemViewWithImage.setUrl(null);
+            }
             orderItemViewWithImageList.add(orderItemViewWithImage);
         }
+        log.debug("Returning {} order item views for order ID: {}", orderItemViewWithImageList.size(), order.getId());
         return orderItemViewWithImageList;
     }
     private static OrderItemView toView(OrderItem it){
@@ -929,10 +976,12 @@ public class OrderService {
 
     public List<Order> listByCustomer(Long customerId) {
         if (customerId == null) throw new IllegalArgumentException("customerId is required");
+        log.info("[ORDER][LIST] Listing orders for customerId: {}", customerId);
         return orderRepo.findByCustomerIdOrderByIdDesc(customerId);
     }
 
     public Page<Order> listAll(int page, int size, String sort, String dir) {
+        log.info("[ORDER][LIST_ALL] Fetching orders page={} size={} sort={} dir={}", page, size, sort, dir);
         String sortField = (sort == null || sort.isBlank()) ? "id" : sort;
         Sort.Direction direction = Sort.Direction.fromOptionalString(dir).orElse(Sort.Direction.DESC);
         return orderRepo.findAll(PageRequest.of(page, size, Sort.by(direction, sortField)));
@@ -941,6 +990,7 @@ public class OrderService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public Payment recordPayment(Long orderId, PaymentDto dto) {
+        log.info("[PAYMENT][RECORD] Attempting to record payment for orderId: {}", orderId);
         if (orderId == null || dto == null) throw new IllegalArgumentException("orderId and PaymentDto are required");
         Order order = orderRepo.findById(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
@@ -962,6 +1012,8 @@ public class OrderService {
         if (dto.getStatus() == PaymentStatus.CAPTURED) {
             order.setPaidAt(OffsetDateTime.now());
             orderRepo.save(order);
+            log.info("[PAYMENT][CAPTURED] Order ID {} marked as paid", orderId);
+
         }
 
         OrderEvent ev = new OrderEvent();
@@ -969,7 +1021,7 @@ public class OrderService {
         ev.setEventType("PAYMENT_" + dto.getStatus().name());
         ev.setNote("RZP order=" + dto.getRzpOrderId() + ", payment=" + dto.getRzpPaymentId());
         eventRepo.save(ev);
-
+        log.info("[PAYMENT][RECORDED] Payment recorded successfully for orderId: {}", orderId);
         return p;
     }
 

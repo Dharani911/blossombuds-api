@@ -342,7 +342,7 @@ export default function OrdersSection({ orders }: { orders: OrderLite[] }) {
                       <div className="url">
                         <strong>URL:</strong>{" "}
                         {detail.trackingUrl ? (
-                          <>
+                          <span className="uval">
                             <a
                               href={detail.trackingUrl}
                               target="_blank"
@@ -354,10 +354,11 @@ export default function OrdersSection({ orders }: { orders: OrderLite[] }) {
                               className="copy"
                               onClick={() => copy(detail.trackingUrl)}
                               title="Copy"
+                              aria-label="Copy tracking URL"
                             >
-                              ⧉
+                              Copy
                             </button>
-                          </>
+                          </span>
                         ) : (
                           "—"
                         )}
@@ -471,6 +472,8 @@ const styles = `
 :root{
   --bb-accent:#F05D8B;          /* timeline accent */
   --ink:rgba(0,0,0,.08);
+  --items-row-h: 108px;         /* approx item row height (desktop) */
+  --items-gap: 10px;
 }
 
 /* scope */
@@ -483,12 +486,12 @@ const styles = `
   padding:6px 6px 10px;
 }
 .ords-hd h4{ margin:0; }
-.search{ position:relative; }
+.search{ position:relative; right : 5 px;}
 .search input{
   height:34px; border:1px solid rgba(0,0,0,.1);
   border-radius:10px; padding:0 36px 0 10px; min-width:240px; background:#fff;
 }
-.search svg{ position:absolute; right:10px; top:8px; opacity:.6; }
+.search svg{ position:absolute; right:25px; top:8px; opacity:.6;}
 
 /* empty state */
 .empty{ padding:16px; text-align:center; }
@@ -533,39 +536,37 @@ const styles = `
 /* panel (drawer content) */
 .panel{
   width:980px; max-width:calc(100vw - 24px);
-   /* fixed height so body can scroll independently */
   background:#fff; border:1px solid rgba(0,0,0,.1); border-radius:18px;
   box-shadow:0 24px 80px rgba(0,0,0,.28);
   display:flex; flex-direction:column;
   overflow:hidden;               /* keep scroll only in .pbd */
   touch-action:pan-y;
-  min-height:0;                   /* mobile: allow vertical pan */
+  min-height:0;
 }
 
 .phd{
-  flex:0 0 auto;                /* <-- pin header height */
+  flex:0 0 auto;
   display:flex;
   align-items:center;
   justify-content:space-between;
-  padding:6px 10px;             /* compact */
+  padding:6px 10px;
   border-bottom:1px solid var(--ink);
   min-height:40px;
-  height:auto;                  /* guard against any inherited height */
 }
 .ttl{
   display:flex;
   align-items:center;
   gap:8px;
   min-width:0;
-  flex-wrap:nowrap;             /* keep single line in normal cases */
+  flex-wrap:nowrap;
 }
 @media (max-width: 420px){
-  .ttl{ flex-wrap:wrap; }       /* allow wrap only on very small phones */
+  .ttl{ flex-wrap:wrap; }
 }
 .ttl strong{
   font-size:14px;
   font-weight:800;
-  line-height:1;                /* compact line height */
+  line-height:1;
 }
 .tag{
   padding:1px 6px;
@@ -591,7 +592,7 @@ const styles = `
 /* drawer body (independent scroll area) */
 .pbd{
   flex:1 1 auto;
-  min-height:0;                 /* critical so it doesn’t force header to grow */
+  min-height:0;
   overflow-y:auto;
   -webkit-overflow-scrolling:touch;
   overscroll-behavior:contain;
@@ -615,7 +616,7 @@ const styles = `
   width:80px; height:2px; background:rgba(0,0,0,.12); margin:0 10px; flex:0 0 auto;
 }
 
-/* tracking — perfect alignment & wrapping */
+/* tracking */
 .track{
   display:grid; gap:8px;
   border:1px dashed rgba(0,0,0,.12); border-radius:12px;
@@ -623,31 +624,55 @@ const styles = `
 }
 .track > div{
   display:grid; align-items:center; column-gap:10px;
-  grid-template-columns:140px 1fr;     /* label | value */
+  grid-template-columns:140px 1fr;     /* label | value (value contains link+button) */
 }
 .track > div > strong{
   color:#333; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
-/* URL row: add a 3rd column for the copy button */
-.track .url{
-  grid-template-columns:140px 1fr auto; /* label | link (flex) | copy */
-  align-items:center; row-gap:6px;
+
+/* URL: keep link + copy together */
+.track .url{ row-gap:6px; }
+.track .uval{
+  display:inline-flex; align-items:center; gap:8px; min-width:0; flex-wrap:wrap;
 }
-.track .url a{
+.track .uval a{
   display:inline-block; min-width:0; max-width:100%;
   word-break:break-all; overflow-wrap:anywhere;
 }
+
+/* Modern copy button (next to URL) */
 .track .copy{
-  margin-left:8px; height:26px; padding:0 10px;
-  border-radius:8px; border:1px solid rgba(0,0,0,.1);
-  background:#fff; cursor:pointer; white-space:nowrap;
+  height:32px; padding:0 12px;
+  border-radius:10px;
+  border:1px solid rgba(0,0,0,.10);
+  background: linear-gradient(180deg, rgba(255,255,255,.9), rgba(255,255,255,.8));
+  box-shadow: 0 6px 18px rgba(0,0,0,.10);
+  font-weight:900; letter-spacing:.2px;
+  cursor:pointer;
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+.track .copy:hover{
+  transform: translateY(-1px);
+  box-shadow: 0 10px 26px rgba(0,0,0,.14);
+  border-color: rgba(0,0,0,.16);
+}
+.track .copy:active{
+  transform: translateY(0);
+  box-shadow: 0 4px 12px rgba(0,0,0,.12);
 }
 
-/* items */
-.items{ display:grid; gap:10px; }
+/* items: show up to 2 rows, then scroll inside */
+.items{
+  display:grid; gap: var(--items-gap);
+  max-height: calc(var(--items-row-h) * 2 + var(--items-gap));
+  overflow:auto;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 2px; /* tiny gutter so scrollbar doesn't overlay content */
+}
 .item{
   display:grid; grid-template-columns:84px 1fr auto; gap:12px; align-items:center;
   border:1px solid var(--ink); border-radius:12px; padding:8px; background:#fff;
+  min-height: var(--items-row-h);
 }
 .item img{
   width:84px; height:84px; object-fit:cover; border-radius:10px; background:#f6f6f6;
@@ -689,6 +714,9 @@ const styles = `
   .search input{ min-width:180px; }
   .node .bar{ width:40px; }
 
+  /* smaller item row height on mobile */
+  :root{ --items-row-h: 92px; }
+
   .item{ grid-template-columns:64px 1fr auto; }
   .item img{ width:64px; height:64px; }
 
@@ -701,18 +729,13 @@ const styles = `
 }
 
 @media (max-width:560px){
-  /* Drawer body height already controlled; tighten spacing a bit more */
-  .panel{ min-height:0; }
-
-  /* stack tracking rows */
-  .track > div{ grid-template-columns:1fr; align-items:flex-start; }
-  .track .url{ grid-template-columns:1fr; }
-  .track .copy{ margin-left:0; }
-
-  /* list row density */
   .oline{ gap:10px; padding:8px; }
   .sum span{ font-size:11px; }
   .ghost{ height:30px; padding:0 8px; }
+
+  /* tracking rows: label on its own line; keep URL + Copy inline below */
+  .track > div{ grid-template-columns:1fr; align-items:flex-start; }
+  .track .url{ grid-template-columns:1fr; }
 }
 
 /* fallback if 100dvh unsupported */

@@ -5,6 +5,7 @@ import com.blossombuds.dto.FeatureImageDto;
 import com.blossombuds.dto.SettingDto;
 import com.blossombuds.repository.SettingRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +16,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 /** Application service for simple key/value settings (soft-delete via active=false). */
+@Slf4j
 @Service
 @Validated
 @RequiredArgsConstructor
@@ -43,7 +45,9 @@ public class SettingsService {
             //s.setModifiedBy(actor);
             //s.setModifiedAt(OffsetDateTime.now());
         }
-        return repo.save(s);
+        Setting saved = repo.save(s);
+        log.info("[SETTINGS][UPSERT] key='{}' actor='{}' created={}", dto.getKey(), actor, s.getId() == null);
+        return saved;
     }
 
     /** Retrieves a setting by key (throws if not found). */
@@ -51,13 +55,17 @@ public class SettingsService {
         if (key == null || key.trim().isEmpty()) {
             throw new IllegalArgumentException("key is required");
         }
-        return repo.findByKey(key)
+        Setting s = repo.findByKey(key)
                 .orElseThrow(() -> new IllegalArgumentException("Setting not found: " + key));
+        log.info("[SETTINGS][GET] key='{}' value='{}'", key, s.getValue());
+        return s;
     }
 
     /** Lists all settings (relies on @Where(active=true) if present on entity). */
     public List<Setting> list() {
-        return repo.findAll();
+        List<Setting> settings = repo.findAll();
+        log.info("[SETTINGS][LIST] total={}", settings.size());
+        return settings;
     }
 
     /** Soft-deletes a setting (admin only). */
@@ -66,11 +74,16 @@ public class SettingsService {
     public void delete(String key, String actor) {
         Setting s = get(key);
         s.setActive(false);
-        //s.setModifiedBy(actor);
-        //s.setModifiedAt(OffsetDateTime.now());
+        log.info("[SETTINGS][DELETE] key='{}' actor='{}'", key, actor);
     }
     public String safeGet(String key) {
-        try { return get(key).getValue(); } catch (Exception e) { return null; }
+        try {
+            String val = get(key).getValue();
+            log.info("[SETTINGS][SAFE_GET] key='{}' -> '{}'", key, val);
+            return val;
+        } catch (Exception e) {
+            log.warn("[SETTINGS][SAFE_GET] key='{}' not found (returning null)", key);
+            return null;
+        }
     }
-
 }

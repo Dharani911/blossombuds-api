@@ -12,6 +12,7 @@ import com.blossombuds.util.MagickBridge;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -36,7 +37,9 @@ import java.util.*;
  * Manages homepage feature tiles (no watermark).
  * Stores list in Settings key "ui.featureTiles.images" as JSON array of
  * { "key": "ui/feature_tiles/..", "altText": "...", "sortOrder": 0 }.
+ *
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class FeatureImageSettingsService {
@@ -67,8 +70,12 @@ public class FeatureImageSettingsService {
     /** Upload from multipart (no presign; same flow as product images). */
     public FeatureImageDto addFromUpload(MultipartFile file, String altText, Integer sortOrder)
             throws IOException, InterruptedException {
+        log.info("[FEATURE][UPLOAD] Incoming feature image upload: fileName={}, size={}",
+                file != null ? file.getOriginalFilename() : null,
+                file != null ? file.getSize() : null);
 
         if (file == null || file.isEmpty()) {
+            log.warn("[FEATURE][UPLOAD] File empty or null — rejecting upload");
             throw new IllegalArgumentException("File cannot be null or empty");
         }
 
@@ -80,20 +87,30 @@ public class FeatureImageSettingsService {
                     file.getOriginalFilename(),
                     file.getContentType()
             );
-        } catch (Exception e) {
+            log.info("[FEATURE][UPLOAD] Image normalized using ensureJpeg()");
+        }  catch (Exception e) {
             // fallback like your product flow
-            if (MagickBridge.looksLikeHeic(file.getContentType(), file.getOriginalFilename())) {
+            boolean looksHeic = MagickBridge.looksLikeHeic(file.getContentType(), file.getOriginalFilename());
+            log.warn("[FEATURE][UPLOAD] ensureJpeg() failed, HEIC fallback={} reason={}", looksHeic, e.getMessage());
+
+            if (looksHeic) {
                 normalizedJpeg = MagickBridge.heicToJpeg(file.getBytes(), magickCmd);
+                log.info("[FEATURE][UPLOAD] HEIC → JPEG conversion succeeded (fallback path)");
             } else {
+                log.error("[FEATURE][UPLOAD] Image conversion failed completely");
                 throw new IOException("Image conversion failed: " + e.getMessage(), e);
             }
         }
 
         // 2) Decode → resize (NO watermark for feature tiles)
         BufferedImage decoded = ImageMagickUtil.readImage(normalizedJpeg);
-        if (decoded == null) throw new IllegalArgumentException("Uploaded file is not a supported image");
+        if (decoded == null)
+        {log.error("[FEATURE][UPLOAD] Decoding failed — unsupported image");
+            throw new IllegalArgumentException("Uploaded file is not a supported image");
+        }
         int FEATURE_MAX_DIM = 1600;
         BufferedImage resized = ImageUtil.fitWithin(decoded, FEATURE_MAX_DIM);
+        log.info("[FEATURE][UPLOAD] Image resized to fit within {}px", FEATURE_MAX_DIM);
 
 // center-crop to 16:9 if you want consistent tile aspect
         int w = resized.getWidth(), h = resized.getHeight();
@@ -103,22 +120,28 @@ public class FeatureImageSettingsService {
         int x = Math.max(0, (w - cropW) / 2);
         int y = Math.max(0, (h - cropH) / 2);
         BufferedImage cropped = resized.getSubimage(x, y, cropW, cropH);
+        log.info("[FEATURE][UPLOAD] Image center‑cropped to 16:9: {}x{}", cropW, cropH);
 
 // then compress `cropped` instead of `resized`
         byte[] finalBytes;
         try {
             finalBytes = ImageMagickUtil.targetSizeJpeg(cropped);
+            log.info("[FEATURE][UPLOAD] JPEG compression via targetSizeJpeg() successful");
         } catch (Exception ce) {
             finalBytes = toJpegBytes(cropped, 0.82f);
+            log.warn("[FEATURE][UPLOAD] targetSizeJpeg() failed — fallback compression used");
         }
 
         // 4) Upload to R2
         String key = UI_PREFIX + UUID.randomUUID() + ".jpg";
+        log.info("[FEATURE][UPLOAD] Uploading to R2: key={}, size={}", key, finalBytes.length);
+
         ObjectMetadata meta = new ObjectMetadata();
         meta.setContentType("image/jpeg");
         meta.setContentLength(finalBytes.length);
         try (InputStream in = new ByteArrayInputStream(finalBytes)) {
             r2.putObject(new PutObjectRequest(bucket, key, in, meta));
+            log.info("[FEATURE][UPLOAD] Upload to R2 successful: {}", key);
         }
 
         // 5) Append to settings list (like addFromTempKey does)
@@ -129,13 +152,16 @@ public class FeatureImageSettingsService {
         row.put("sortOrder", sortOrder != null ? sortOrder : items.size());
         items.add(row);
         saveListJson(items);
+        log.info("[FEATURE][UPLOAD] Added entry to settings list: key={}, sortOrder={}", key, row.get("sortOrder"));
+        String signed = signGet(key);
+        log.info("[FEATURE][UPLOAD] Returning signed preview URL for key={}", key);
 
         // 6) Return signed GET for immediate preview
         FeatureImageDto dto = new FeatureImageDto();
         dto.setKey(key);
         dto.setAltText(altText);
         dto.setSortOrder(sortOrder);
-        dto.setUrl(signGet(key));
+        dto.setUrl(signed);
         return dto;
     }
 
@@ -181,9 +207,12 @@ public class FeatureImageSettingsService {
      * append to Settings list, and return a signed preview.
      */
     public FeatureImageDto addFromTempKey(String tempKey, String altText, Integer sortOrder) {
+        log.info("[FEATURE][TEMP] Processing tempKey={}", tempKey);
+
         String tmp = normalizeTempKey(tempKey);
         try {
             // 1) Read tmp object from R2
+            log.info("[FEATURE][TEMP] Fetching temp object from R2: {}", tmp);
             com.amazonaws.services.s3.model.S3Object obj = r2.getObject(bucket, tmp);
             BufferedImage original;
             try (InputStream in = obj.getObjectContent()) {
@@ -196,6 +225,7 @@ public class FeatureImageSettingsService {
             // 2) Resize + compress (no watermark)
             BufferedImage resized = ImageUtil.fitWithin(original, ImageUtil.MAX_DIM);
             byte[] jpegBytes = ImageUtil.toJpegUnderCap(resized);
+            log.info("[FEATURE][TEMP] Resized + compressed temp image ({} bytes)", jpegBytes.length);
 
             // 3) Upload final
             String finalKey = UI_PREFIX + UUID.randomUUID() + ".jpg";
@@ -205,9 +235,12 @@ public class FeatureImageSettingsService {
             try (InputStream up = new java.io.ByteArrayInputStream(jpegBytes)) {
                 r2.putObject(new com.amazonaws.services.s3.model.PutObjectRequest(bucket, finalKey, up, meta));
             }
+            log.info("[FEATURE][TEMP] Final image stored: {}", finalKey);
+
 
             // 4) Best-effort delete tmp
             safeDelete(tmp);
+            log.info("[FEATURE][TEMP] Temp key deleted: {}", tmp);
 
             // 5) Append to settings
             List<Map<String, Object>> items = readListJson();
@@ -217,6 +250,7 @@ public class FeatureImageSettingsService {
             if (sortOrder != null) row.put("sortOrder", sortOrder);
             items.add(row);
             saveListJson(items);
+            log.info("[FEATURE][TEMP] Metadata saved for key={}", finalKey);
 
 
             // 6) Build DTO with signed GET for preview
@@ -225,10 +259,12 @@ public class FeatureImageSettingsService {
             dto.setAltText(altText);
             dto.setSortOrder(sortOrder);
             dto.setUrl(signGet(finalKey));
+            log.info("[FEATURE][TEMP] Returning signed preview for finalKey={}", finalKey);
+
             return dto;
 
         } catch (com.amazonaws.SdkClientException | java.io.IOException e) {
-            // log.error("addFromTempKey failed for key={}", tempKey, e);
+            log.error("[FEATURE][TEMP] Processing failed for key={} error={}", tempKey, e.getMessage());
             throw new IllegalStateException("Failed to process uploaded image. Please re-upload.", e);
         }
 
@@ -240,6 +276,8 @@ public class FeatureImageSettingsService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void replaceAll(List<Map<String, Object>> items) {
+        log.info("[FEATURE][ADMIN] Replacing full feature image list: count={}",
+                items != null ? items.size() : 0);
         saveListJson(items != null ? items : List.of());
     }
 
@@ -247,18 +285,27 @@ public class FeatureImageSettingsService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void remove(String key, boolean deleteObject) {
+        log.info("[FEATURE][ADMIN] Removing key={} (deleteObject={})", key, deleteObject);
         List<Map<String, Object>> items = readListJson();
+
+        int before = items.size();
         items.removeIf(m -> Objects.equals(optStr(m.get("key")), key));
+        int after = items.size();
+        log.info("[FEATURE][ADMIN] Removed key={}, before={}, after={}", key, before, after);
         saveListJson(items);
         if (deleteObject && key != null && !key.isBlank()) {
+            log.info("[FEATURE][ADMIN] Deleting object from R2: key={}", key);
             safeDelete(key);
         }
     }
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void reorder(List<String> orderedKeys) {
+        log.info("[FEATURE][ADMIN] Reordering feature images using orderedKeys: count={}",
+                orderedKeys != null ? orderedKeys.size() : 0);
         List<Map<String, Object>> current = readListJson();
         if (current.isEmpty()) {
+            log.info("[FEATURE][ADMIN] No images to reorder");
             saveListJson(current);
             return;
         }
@@ -291,9 +338,9 @@ public class FeatureImageSettingsService {
             next.add(m);
         }
 
+        log.info("[FEATURE][ADMIN] Completed reorder. Total reordered={}", next.size());
         saveListJson(next);
     }
-
     /** Update a single item’s metadata (altText and/or sortOrder). */
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
@@ -301,6 +348,9 @@ public class FeatureImageSettingsService {
         if (key == null || key.isBlank()) {
             throw new IllegalArgumentException("key is required");
         }
+        log.info("[FEATURE][ADMIN] Updating meta for key={}, altText={}, sortOrder={}",
+                key, altText, sortOrder);
+
         List<Map<String, Object>> items = readListJson();
         boolean found = false;
 
@@ -320,6 +370,7 @@ public class FeatureImageSettingsService {
         }
 
         if (!found) {
+            log.warn("[FEATURE][ADMIN] Key not found during meta update: {}", key);
             throw new NoSuchElementException("Feature image not found: " + key);
         }
 
@@ -332,6 +383,7 @@ public class FeatureImageSettingsService {
             items.get(i).put("sortOrder", i);
         }
 
+        log.info("[FEATURE][ADMIN] Metadata updated and sortOrder normalized for all items");
         saveListJson(items);
     }
 

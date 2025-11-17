@@ -8,6 +8,7 @@ import com.blossombuds.repository.CouponRedemptionRepository;
 import com.blossombuds.repository.CouponRepository;
 import com.blossombuds.repository.OrderRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +26,7 @@ import java.util.Optional;
  * Coupons: create/update (admin), preview & apply (customer/admin), and redemption recording.
  * Now enforces min items (min_items) in addition to min order total.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -39,33 +41,41 @@ public class PromotionService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public CouponDto createCoupon(CouponDto dto) {
+        log.info("[COUPON][CREATE] Creating coupon with code={}", dto.getCode());
+
         Coupon c = new Coupon();
         applyCouponFields(c, dto, true);
         c = couponRepo.save(c);
+        log.info("[COUPON][CREATE] Created coupon id={} code={}", c.getId(), c.getCode());
         return toDto(c);
     }
 
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public CouponDto updateCoupon(Long id, CouponDto dto) {
+        log.info("[COUPON][UPDATE] Updating coupon id={}", id);
         Coupon c = couponRepo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Coupon not found: " + id));
         applyCouponFields(c, dto, false);
+        log.info("[COUPON][UPDATE] Updated coupon id={} newCode={}", id, c.getCode());
         return toDto(c);
     }
 
     public CouponDto getCoupon(Long id) {
+        log.info("[COUPON][FETCH] Fetching coupon id={}", id);
         return toDto(couponRepo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Coupon not found: " + id)));
     }
 
     public List<CouponDto> listCoupons() {
-        return couponRepo.findAll().stream().map(this::toDto).toList();
+        log.info("[COUPON][LIST] Listing all coupons"); return couponRepo.findAll().stream().map(this::toDto).toList();
     }
 
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void setCouponActive(Long id, boolean active) {
+        log.info("[COUPON][ACTIVATE] Setting coupon id={} active={}", id, active);
+
         Coupon c = couponRepo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Coupon not found: " + id));
         c.setActive(active);
@@ -154,6 +164,8 @@ public class PromotionService {
 
     /** Returns an active coupon by code, if present. */
     public Optional<Coupon> getActiveCoupon(String code) {
+        log.debug("[COUPON][LOOKUP] Looking up active coupon for code={}", code);
+
         String norm = normalize(code);
         if (norm == null || norm.isBlank()) return Optional.empty();
         return couponRepo.findByCodeIgnoreCaseAndActiveTrue(norm);
@@ -164,12 +176,18 @@ public class PromotionService {
      * Enforces validity window, usage limits (global & per-customer), min total, and min items.
      */
     public BigDecimal previewDiscount(String code, Long customerId, BigDecimal orderTotal, Integer itemsCount) {
+        log.info("[COUPON][PREVIEW] Preview discount code={} customerId={} orderTotal={}",
+                code, customerId, orderTotal);
+
         Coupon c = couponRepo.findByCodeIgnoreCaseAndActiveTrue(requireNormalize(code))
                 .orElseThrow(() -> new IllegalArgumentException("Coupon not found or inactive"));
         validateUsageAndWindow(c, customerId);
         validateMinTotal(c, orderTotal);
         validateMinItems(c, itemsCount);
-        return computeDiscount(c, orderTotal);
+        BigDecimal discount = computeDiscount(c, orderTotal);
+
+        log.info("[COUPON][PREVIEW] Discount computed={} for code={}", discount, code);
+        return discount;
     }
 
     /**
@@ -178,6 +196,8 @@ public class PromotionService {
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
     public CouponRedemption applyToOrder(String code, Long orderId, Long customerId, String actor) {
+        log.info("[COUPON][APPLY] Applying coupon={} orderId={} customerId={}", code, orderId, customerId);
+
         if (orderId == null) throw new IllegalArgumentException("orderId is required");
 
         Order order = orderRepo.findById(orderId)
@@ -213,18 +233,24 @@ public class PromotionService {
         r.setActive(Boolean.TRUE);
         //r.setCreatedBy(actor);
         //r.setCreatedAt(OffsetDateTime.now());
-        return redemptionRepo.save(r);
+        r = redemptionRepo.save(r);
+
+        log.info("[COUPON][APPLY] Applied successfully coupon={} orderId={} discount={}",
+                code, orderId, discount);
+
+        return r;
     }
 
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void revokeRedemption(Long redemptionId, String actor) {
+        log.info("[COUPON][REVOKE] Revoking redemption id={}", redemptionId);
+
         if (redemptionId == null) throw new IllegalArgumentException("redemptionId is required");
         CouponRedemption r = redemptionRepo.findById(redemptionId)
                 .orElseThrow(() -> new IllegalArgumentException("Redemption not found: " + redemptionId));
         r.setActive(Boolean.FALSE);
-        //r.setModifiedBy(actor);
-        //r.setModifiedAt(OffsetDateTime.now());
+        log.info("[COUPON][REVOKE] Redemption revoked id={}", redemptionId);
     }
 
     /* ======================= Internal helpers ======================= */
