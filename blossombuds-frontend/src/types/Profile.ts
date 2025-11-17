@@ -25,7 +25,7 @@ export type OrderLite = {
   id: number;
   publicCode?: string;
 
-  status?: OrderStatus | string;
+  status?: string;
 
   customerId?: number;
 

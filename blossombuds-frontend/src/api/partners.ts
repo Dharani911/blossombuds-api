@@ -9,7 +9,7 @@ export type DeliveryPartner = {
   active?: boolean;
 };
 
-async function listActivePartners(): Promise<DeliveryPartnerLite[]> {
+async function listActivePartners(): Promise<DeliveryPartner[]> {
   const res = await fetch(`/api/partners/active`); // no headers/credentials
   if (!res.ok) throw new Error("Failed to load partners");
   return await res.json();

@@ -683,7 +683,7 @@ export default function CheckoutPage() {
           couponId: typeof couponId === "number" ? couponId : undefined,
           couponCode: couponAmt > 0 ? coupon.trim() : undefined,
           orderNotes: orderNotes.trim() ? orderNotes.trim() : undefined,
-        courierName: partnerName,
+
         shipName: selectedAddress.name,
         shipPhone: selectedAddress.phone || undefined,
         shipLine1: selectedAddress.line1,

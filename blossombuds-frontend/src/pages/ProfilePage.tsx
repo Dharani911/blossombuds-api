@@ -107,7 +107,7 @@ export default function ProfilePage() {
         ]);
         if (!alive) return;
         setCust(c.data || null);
-        setFullName(c.data?.fullName || c.data?.name || "");
+        setFullName(c.data?.fullName || "");
         setPhone(c.data?.phone || "");
         setAddresses(a.data || []);
         setOrders(o.data || []);
@@ -123,7 +123,7 @@ export default function ProfilePage() {
   }, [user?.id]);
 
   const initials = useMemo(() => {
-    const src = cust?.fullName || cust?.name || cust?.email || "";
+    const src = cust?.fullName || cust?.email || "";
     const bits = src.split(" ").filter(Boolean);
     return (bits[0]?.[0] || "") + (bits[1]?.[0] || "");
   }, [cust?.fullName, cust?.email]);
@@ -268,7 +268,7 @@ export default function ProfilePage() {
       toasts.push("Default address updated", "ok");
     } catch (e: any) {
       const msg = e?.response?.data?.message || "Could not set default address.";
-      toasts.push(msg, "error");
+      toasts.push(msg, "bad");
     }
   }
 
@@ -282,7 +282,7 @@ export default function ProfilePage() {
       toasts.push("Address deleted", "ok");
     } catch (e: any) {
       const msg = e?.response?.data?.message || "Could not delete address.";
-      toasts.push(msg, "error");
+      toasts.push(msg, "bad");
     }
   }
 
@@ -295,7 +295,7 @@ export default function ProfilePage() {
 
         <ProfileHero
           initials={(initials || "BB").slice(0,2).toUpperCase()}
-          fullName={cust?.fullName || cust?.name || "Your profile"}
+          fullName={cust?.fullName || "Your profile"}
           ordersCount={ordersCount}
           onLogout={onLogout}
         />

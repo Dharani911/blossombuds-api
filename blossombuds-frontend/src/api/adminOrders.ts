@@ -219,7 +219,7 @@ export async function updateOrder(orderId: number, payload: {
     // 🔹 COUPON (write)
     couponId?: number;
     couponCode?: string;
-    orderNotes? string;
+
   }>;
   items?: Array<{
     productId?: number;
