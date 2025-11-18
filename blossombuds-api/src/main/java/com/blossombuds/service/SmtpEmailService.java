@@ -10,6 +10,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -228,8 +229,8 @@ public class SmtpEmailService implements EmailService {
     }
 
     /* ========================= Core sender (HTML + masked plain alternative) ========================= */
-
-    private void sendRichMasked(String toEmail, String subject, String maskedBodyWithMarkers) {
+    @Async("mailExecutor")
+    public void sendRichMasked(String toEmail, String subject, String maskedBodyWithMarkers) {
         // Produce plain-text WITHOUT raw URLs and HTML with anchors
         String plainMasked = maskToPlain(maskedBodyWithMarkers);
         try {

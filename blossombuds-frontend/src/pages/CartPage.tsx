@@ -280,12 +280,18 @@ function Thumb({
   productId,
   src,
   alt,
-}: { productId: number; src?: string; alt: string }) {
+}: { productId?: number; src?: string; alt: string }) {
   const [imgSrc, setImgSrc] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let alive = true;
+
+    // 🚫 If we don't have a productId, don't hit the API at all.
+    if (!productId) {
+      setImgSrc(src ? cacheBust(src) : null);
+      return () => { alive = false; };
+    }
 
     async function resolveFreshUrl() {
       // 1) Try product images API (fresh pre-signed URLs)
@@ -299,7 +305,9 @@ function Thumb({
           setImgSrc(cacheBust(first.url));
           return;
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
 
       // 2) Fallback to product primary image
       try {
@@ -309,7 +317,9 @@ function Thumb({
           setImgSrc(cacheBust(p.primaryImageUrl));
           return;
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
 
       // 3) Last resort: the cart-stored src
       if (alive) setImgSrc(src ? cacheBust(src) : null);
@@ -336,6 +346,7 @@ function Thumb({
     </div>
   );
 }
+
 
 function inr(n: number){
   try { return new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:2}).format(n||0); }
