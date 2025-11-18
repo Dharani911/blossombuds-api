@@ -1,9 +1,14 @@
 // src/api/http.ts
 import axios from "axios";
-
+import { API_BASE } from "./base";
 const AUTH_KEY = "bb.jwt";
 
+console.log("VITE_API_BASE =", import.meta.env.VITE_API_BASE);
+console.log("VITE_API_BASE_URL =", import.meta.env.VITE_API_BASE_URL);
 
+
+
+console.log("🔗 API_BASE resolved to =", API_BASE);
 /** Read the customer JWT from storage. */
 export function getAuthToken(): string | null {
   try { return localStorage.getItem(AUTH_KEY); } catch { return null; }
@@ -36,7 +41,7 @@ export function onUnauthorized(handler: UnauthHandler): () => void {
  * Central HTTP client
  */
 const http = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE || "", // e.g. "http://localhost:8080"
+  baseURL: API_BASE, // e.g. "http://localhost:8080"
   withCredentials: false, // using Authorization header, not cookies
 });
 

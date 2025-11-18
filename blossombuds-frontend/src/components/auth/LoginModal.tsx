@@ -89,11 +89,11 @@ export default function LoginModal() {
     if (!/^\S+@\S+\.\S+$/.test(fpEmail)) { setFpMsg("Please enter a valid email."); return; }
     setFpBusy(true); setFpMsg(null);
     try {
-      const res = await fetch("/api/customers/auth/password-reset/request", {
+      const res = await fetch(apiUrl("/api/customers/auth/password-reset/request", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ email: fpEmail }),
-      });
+      }));
       if (!res.ok) throw new Error();
       setFpMsg("If that email exists, a reset link has been sent.");
     } catch {

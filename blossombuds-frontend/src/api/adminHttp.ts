@@ -6,12 +6,22 @@ import axios from "axios";
  * Keeps its OWN token (bb.admin.jwt) separate from the customer token.
  */
 
-const adminHttp = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? "http://localhost:8080", // <— use backend directly
-  withCredentials: true,
-  timeout: 120000, // prevents large upload timeouts
-});
+// Resolve admin API base the same way as the main client
+const ADMIN_API_BASE =
+  import.meta.env.VITE_API_BASE_URL || // optional override
+  import.meta.env.VITE_API_BASE ||     // main API base (Railway / backend)
+  import.meta.env.VITE_API_URL ||      // legacy/admin-specific env
+  "/api";                              // fallback (dev proxy)
 
+console.log("🛠 ADMIN_API_BASE =", ADMIN_API_BASE);
+console.log("   VITE_API_BASE =", import.meta.env.VITE_API_BASE);
+console.log("   VITE_API_URL  =", import.meta.env.VITE_API_URL);
+
+const adminHttp = axios.create({
+  baseURL: ADMIN_API_BASE,
+  withCredentials: false,     // we use Bearer token, not cookies
+  timeout: 120000,            // prevents large upload timeouts
+});
 
 // ---- admin token plumbing ----
 let _adminJwt: string | null = null;
@@ -65,6 +75,5 @@ adminHttp.interceptors.response.use(
     return Promise.reject(err);
   }
 );
-
 
 export default adminHttp;

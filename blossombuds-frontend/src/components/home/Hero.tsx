@@ -28,11 +28,11 @@ export default function Hero() {
     let alive = true;
     (async () => {
       try {
-        const res = await fetch(ENDPOINT, {
+        const res = await fetch(apiUrl(ENDPOINT, {
           method: "GET",
           credentials: "include",
           headers: { Accept: "application/json" },
-        });
+        }));
         if (!res.ok) {
           if (alive) setSlides([]);
           return;

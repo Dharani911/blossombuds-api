@@ -20,10 +20,10 @@ export default function VerifyPage() {
       }
       setState("verifying");
       try {
-        const res = await fetch(`/api/customers/auth/verify?token=${encodeURIComponent(token)}`, {
+        const res = await fetch(apiUrl(`/api/customers/auth/verify?token=${encodeURIComponent(token)}`, {
           method: "POST",
           headers: { Accept: "application/json" },
-        });
+        }));
         if (!res.ok) throw new Error("Verification failed");
         setState("success");
         setMessage("Your email has been verified.");

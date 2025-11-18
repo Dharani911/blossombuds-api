@@ -4,10 +4,10 @@ import { useParams } from "react-router-dom";
 /** Fetch a setting by key (works for plain text, {"value": "..."} or raw string JSON) */
 async function fetchSettingValue(key: string): Promise<string> {
   try {
-    const res = await fetch(`/api/settings/${encodeURIComponent(key)}`, {
+    const res = await fetch(apiUrl(`/api/settings/${encodeURIComponent(key)}`, {
       credentials: "include",
       headers: { Accept: "application/json" },
-    });
+    }));
     if (!res.ok) return "";
     const text = await res.text();
     try {

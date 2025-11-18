@@ -1,14 +1,22 @@
 // src/api/authFetch.ts
-const API_BASE =
-  (import.meta as any).env?.VITE_API_URL?.replace(/\/$/, "") ||
-  "http://localhost:8080"; // <- backend
+import { apiUrl } from "./base";
+
 
 export function getToken(): string | null {
-  return localStorage.getItem("bb.admin.jwt");
+  try {
+    return localStorage.getItem("bb.admin.jwt");
+  } catch {
+    return null;
+  }
 }
 
 export async function authFetch(path: string, init: RequestInit = {}) {
-  const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
+  // If caller passes absolute URL, keep it. Otherwise prefix with backend base.
+  const url =
+    path.startsWith("http://") || path.startsWith("https://")
+      ? path
+      : apiUrl(path); // e.g. "/api/admin/..." → "https://blossombuds-api-production.../api/admin/..."
+
   const token = getToken();
   const headers = new Headers(init.headers || {});
   if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -16,6 +24,7 @@ export async function authFetch(path: string, init: RequestInit = {}) {
   const res = await fetch(url, {
     ...init,
     headers,
+    // you *can* keep "include" if you truly need cookies, but for pure JWT it’s usually "omit"
     credentials: "include",
   });
 
@@ -29,5 +38,6 @@ export async function authFetch(path: string, init: RequestInit = {}) {
     err.status = 403;
     throw err;
   }
+
   return res;
 }
