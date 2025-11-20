@@ -12,6 +12,13 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.util.HashMap;
+import java.util.Map;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -27,11 +34,15 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class SmtpEmailService implements EmailService {
 
-    private final JavaMailSender mailSender;
+    //private final JavaMailSender mailSender;
     private final SettingsService settings; // read brand.support_email / brand.whatsapp / brand.name / brand.url
 
     @Value("${app.mail.from:noreply@example.com}")
     private String from;
+    private final ObjectMapper objectMapper;
+
+    @Value("${app.mail.logoUrl:}")
+    private String logoUrl;
 
     /**
      * Frontend base URL, same idea as PasswordResetService.
@@ -51,7 +62,7 @@ public class SmtpEmailService implements EmailService {
     @Value("${app.mail.logo.svg:static/BB_logo.svg}")
     private String logoSvgPath;
 
-    private static final String LOGO_CID = "bb-logo";
+   // private static final String LOGO_CID = "bb-logo";
 
     /* ========================= Link masking helpers ========================= */
 
@@ -59,6 +70,14 @@ public class SmtpEmailService implements EmailService {
     private static final Pattern A_MARKER = Pattern.compile("\\{\\{A\\|([^|}]+)\\|([^}]+)}}");
 
     // Marker: {{A|Label|URL}}  -> HTML: 🔗 Label (blue) ; Plain: just "Label"
+    // HTTP client reused for all calls
+    private final HttpClient httpClient = HttpClient.newHttpClient();
+
+    @Value("${app.mail.apiUrl:https://api.resend.com/emails}")
+    private String mailApiUrl;
+
+    @Value("${app.mail.apiKey:}")
+    private String mailApiKey;
     private static String maskToHtml(String src) {
         if (src == null) return "";
         Matcher m = A_MARKER.matcher(src);
@@ -231,37 +250,49 @@ public class SmtpEmailService implements EmailService {
     /* ========================= Core sender (HTML + masked plain alternative) ========================= */
     @Async("mailExecutor")
     public void sendRichMasked(String toEmail, String subject, String maskedBodyWithMarkers) {
-        // Produce plain-text WITHOUT raw URLs and HTML with anchors
         String plainMasked = maskToPlain(maskedBodyWithMarkers);
+
+        if (mailApiKey == null || mailApiKey.isBlank()) {
+            log.error("[EMAIL][SEND] mailApiKey not configured – cannot send email to='{}'", toEmail);
+            return;
+        }
+
         try {
-            HtmlParts html = renderHtmlEmail(maskedBodyWithMarkers); // does HTML anchor conversion
-            InlineLogo logo = loadInlineLogo(); // may be null if not found
+            HtmlParts html = renderHtmlEmail(maskedBodyWithMarkers);
 
-            boolean multipart = (logo != null);
-            MimeMessage mime = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mime, multipart, "UTF-8");
-            helper.setFrom(from);
-            helper.setTo(toEmail);
-            helper.setSubject(subject);
-            helper.setText(plainMasked, html.htmlBody);
+            // Build JSON payload (Resend-style; adjust if you use another provider)
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("from", from);
+            payload.put("to", new String[]{toEmail});
+            payload.put("subject", subject);
+            payload.put("html", html.htmlBody());
+            payload.put("text", plainMasked);
 
-            if (logo != null) {
-                helper.addInline(logo.cid, new ByteArrayResource(logo.bytes), logo.contentType);
+            String json = objectMapper.writeValueAsString(payload);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(mailApiUrl))
+                    .header("Authorization", "Bearer " + mailApiKey)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(json))
+                    .build();
+
+            HttpResponse<String> response =
+                    httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                log.info("[EMAIL][SEND] HTTP email sent to='{}' subject='{}' status={}",
+                        toEmail, subject, response.statusCode());
+            } else {
+                log.error("[EMAIL][SEND] HTTP provider error status={} body={}",
+                        response.statusCode(), response.body());
             }
-
-            mailSender.send(mime);
-            log.info("[EMAIL][SEND] HTML sent to='{}' subject='{}'", toEmail, subject);
         } catch (Exception ex) {
-            // Fallback to plain text only (still without exposing raw URLs)
-            log.warn("[EMAIL][SEND] Fallback to plain text for='{}' subject='{}' due to error={}", toEmail, subject, ex.getMessage());
-            SimpleMailMessage msg = new SimpleMailMessage();
-            msg.setFrom(from);
-            msg.setTo(toEmail);
-            msg.setSubject(subject);
-            msg.setText(plainMasked + "\n\n--\n" + brandName() + " • " + contactLineText());
-            mailSender.send(msg);
+            log.error("[EMAIL][SEND] Failed to send email via HTTP provider to='{}' subject='{}'",
+                    toEmail, subject, ex);
         }
     }
+
 
     /* ========================= HTML Renderer ========================= */
 
@@ -274,10 +305,14 @@ public class SmtpEmailService implements EmailService {
         String bodyHtml = withAnchors.replace("\n", "<br/>");
         String contact = contactLineHtml();
 
-        String logoImgTag = """
-          <img src="cid:%s" alt="%s logo"
-               style="height:40px; display:block; margin:0 auto 8px;" />
-        """.formatted(LOGO_CID, escape(brandName()));
+        String logoImgTag = "";
+        if (hasText(logoUrl)) {
+            logoImgTag = """
+      <img src="%s" alt="%s logo"
+           style="height:40px; display:block; margin:0 auto 8px;" />
+    """.formatted(escapeAttr(logoUrl), escape(brandName()));
+        }
+
 
         String html = """
             <!doctype html>
@@ -325,7 +360,7 @@ public class SmtpEmailService implements EmailService {
 
     private record InlineLogo(String cid, byte[] bytes, String contentType) {}
 
-    private InlineLogo loadInlineLogo() {
+    /*private InlineLogo loadInlineLogo() {
         // Prefer PNG (better Outlook support), then SVG
         byte[] bytes = readClassPathBytes(logoPngPath);
         String ct = "image/png";
@@ -338,7 +373,7 @@ public class SmtpEmailService implements EmailService {
             log.warn("[EMAIL][LOGO] Both PNG and SVG logos missing");
         }
         return (bytes != null && ct != null) ? new InlineLogo(LOGO_CID, bytes, ct) : null;
-    }
+    }*/
 
     private byte[] readClassPathBytes(String path) {
         try {
