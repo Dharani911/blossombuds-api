@@ -1,6 +1,6 @@
 // src/api/reviewUploads.ts
 import adminHttp from "./adminHttp"; // or your public/authed axios; requires user JWT
-
+import { apiUrl } from "./base";
 export type PresignResponse = {
   key: string;         // e.g. uploads/tmp/uuid/file.heic
   url: string;         // presigned PUT url (10 min)
@@ -19,7 +19,7 @@ export async function presignReviewUpload(
   contentType: string,
   authToken: string
 ) {
-  const res = await fetch(apiUrl(`/api/reviews/images/presign`, {
+  const res = await fetch(apiUrl(`/api/reviews/images/presign`), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -28,7 +28,7 @@ export async function presignReviewUpload(
     },
     body: JSON.stringify({ filename, contentType }),
     credentials: "omit",
-  }));
+  });
   if (!res.ok) throw new Error(await res.text());
   return (await res.json()) as { key: string; url: string; contentType: string };
 }
@@ -55,7 +55,7 @@ export async function putToPresignedUrl(
   });
 }
 export async function deleteTempUpload(key: string, authToken: string): Promise<void> {
-  const res = await fetch(apiUrl(`/api/reviews/images/tmp/delete`, {
+  const res = await fetch(apiUrl(`/api/reviews/images/tmp/delete`), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -64,7 +64,7 @@ export async function deleteTempUpload(key: string, authToken: string): Promise<
     },
     body: JSON.stringify({ key }),
     credentials: "omit",
-  }));
+  });
   if (!res.ok) throw new Error(await res.text());
 }
 
@@ -85,7 +85,7 @@ export async function attachImageFromTempKey(
   key: string,
   authToken: string
 ) {
-  const res = await fetch(apiUrl(`/api/reviews/${reviewId}/images/attach`, {
+  const res = await fetch(apiUrl(`/api/reviews/${reviewId}/images/attach`), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -94,7 +94,7 @@ export async function attachImageFromTempKey(
     },
     body: JSON.stringify({ key }),
     credentials: "omit",
-  }));
+  });
   if (!res.ok) throw new Error(await res.text());
   return (await res.json()) as {
     id: number;

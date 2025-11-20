@@ -289,12 +289,12 @@ export async function addReviewImages(
 
 /** Presign a temp upload (PUT) for this review flow. Likely requires auth. */
 export async function presignReviewUpload(filename: string, contentType: string) {
-  const res = await fetch(apiUrl(`/api/reviews/images/presign`, {
+  const res = await fetch(apiUrl(`/api/reviews/images/presign`), {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ filename, contentType }),
     credentials: "omit",
-  }));
+  });
   if (!res.ok) throw new Error(await res.text());
   return (await res.json()) as { key: string; url: string; contentType: string };
 }
@@ -315,7 +315,7 @@ export async function putToPresignedUrl(url: string, file: File, onProgress?: (p
 }
 
 export async function attachImageFromTempKey(reviewId: number, key: string, authToken: string) {
-  const res = await fetch(apiUrl(`/api/reviews/${reviewId}/images/attach`, {
+  const res = await fetch(apiUrl(`/api/reviews/${reviewId}/images/attach`), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -324,7 +324,7 @@ export async function attachImageFromTempKey(reviewId: number, key: string, auth
     },
     body: JSON.stringify({ key }),
     credentials: "omit",
-  }));
+  });
   if (!res.ok) throw new Error(await res.text());
   return (await res.json()) as {
     id: number;

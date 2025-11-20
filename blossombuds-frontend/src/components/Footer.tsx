@@ -6,10 +6,10 @@ import Logo from "../assets/BB_Logo.svg";
 /** Fetch a setting by key directly (robust to JSON or plain text) */
 async function fetchSettingValue(key: string): Promise<string> {
   try {
-    const res = await fetch(apiUrl(`/api/settings/${encodeURIComponent(key)}`, {
+    const res = await fetch(apiUrl(`/api/settings/${encodeURIComponent(key)}`), {
       credentials: "include",
       headers: { Accept: "application/json" },
-    }));
+    });
     if (!res.ok) return "";
     const text = await res.text();
     try {
