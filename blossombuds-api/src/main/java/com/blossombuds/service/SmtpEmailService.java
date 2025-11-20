@@ -41,7 +41,7 @@ public class SmtpEmailService implements EmailService {
     private String from;
     private final ObjectMapper objectMapper;
 
-    @Value("${app.mail.logoUrl:}")
+    @Value("${app.mail.logoUrl:/static/BB_logo.png}")
     private String logoUrl;
 
     /**

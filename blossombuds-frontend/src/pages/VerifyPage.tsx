@@ -2,6 +2,9 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 
+import { apiUrl } from "../api/base";
+
+
 type State = "idle" | "verifying" | "success" | "error";
 
 export default function VerifyPage() {
@@ -20,10 +23,15 @@ export default function VerifyPage() {
       }
       setState("verifying");
       try {
-        const res = await fetch(apiUrl(`/api/customers/auth/verify?token=${encodeURIComponent(token)}`, {
-          method: "POST",
-          headers: { Accept: "application/json" },
-        }));
+        const url = apiUrl(
+                `/api/customers/auth/verify?token=${encodeURIComponent(token)}`
+              );
+
+              const res = await fetch(url, {
+                method: "POST",
+                headers: { Accept: "application/json" },
+              });
+
         if (!res.ok) throw new Error("Verification failed");
         setState("success");
         setMessage("Your email has been verified.");
