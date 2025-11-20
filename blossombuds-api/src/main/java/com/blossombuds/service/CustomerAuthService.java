@@ -15,6 +15,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
@@ -90,7 +92,11 @@ public class CustomerAuthService {
         if (isBlank(frontendBase)) {
             throw new IllegalStateException("Frontend base URL is not configured");
         }
-        String verifyUrl = frontendBase + "/verify-email?token=" + token;
+        String base = frontendBase;
+        if (base.endsWith("/")) {
+            base = base.substring(0, base.length() - 1);
+        }
+        String verifyUrl = base + "/verify-email?token=" + URLEncoder.encode(token, StandardCharsets.UTF_8);
         emailService.sendVerificationEmail(c.getEmail(), verifyUrl);
         log.info("[CUSTOMER][VERIFY_EMAIL] Verification email sent to: {}", email);
 
@@ -156,7 +162,7 @@ public class CustomerAuthService {
 
     /** Generates a URL-safe random token (240 bits). */
     private static String randomToken() {
-        byte[] b = new byte[30];
+        byte[] b = new byte[32];
         RNG.nextBytes(b);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(b);
     }
