@@ -39,6 +39,12 @@ public class RazorpayApiClient {
         );
         log.info("➡️  Razorpay createOrder called | receipt={} | amount={} | currency={} | capture={}",
                 receipt, amountPaise, currency, paymentCapture);
+        log.info(
+                "[RZP][CONFIG] baseUrl='{}' keyId='{}' secretPresent={} ",
+                props.getBaseUrl(),
+                props.getKeyId(),
+                props.getKeySecret() != null && !props.getKeySecret().isBlank()
+        );
 
         ResponseEntity<Map> resp = rest.exchange(url, HttpMethod.POST, new HttpEntity<>(body, h), Map.class);
         if (!resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null) {

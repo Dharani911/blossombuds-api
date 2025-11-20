@@ -107,7 +107,7 @@ export default function ProfilePage() {
         ]);
         if (!alive) return;
         setCust(c.data || null);
-        setFullName(c.data?.fullName || "");
+        setFullName(c.data?.name || "");
         setPhone(c.data?.phone || "");
         setAddresses(a.data || []);
         setOrders(o.data || []);
@@ -295,7 +295,7 @@ export default function ProfilePage() {
 
         <ProfileHero
           initials={(initials || "BB").slice(0,2).toUpperCase()}
-          fullName={cust?.fullName || "Your profile"}
+          fullName={cust?.name || "Your profile"}
           ordersCount={ordersCount}
           onLogout={onLogout}
         />
