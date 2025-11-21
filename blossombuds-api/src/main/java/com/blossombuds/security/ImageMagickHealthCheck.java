@@ -31,7 +31,7 @@ public class ImageMagickHealthCheck {
 
             try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(versionProc.getInputStream()))) {
-                reader.lines().limit(2).forEach(line -> log.info("  {}", line));
+                reader.lines().limit(2).forEach(line -> log.info("Version: {}", line));
             }
             versionProc.waitFor();
 
@@ -46,7 +46,7 @@ public class ImageMagickHealthCheck {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     if (line.contains("HEIC") || line.contains("HEIF")) {
-                        log.info("  ✅ HEIC Support: {}", line.trim());
+                        log.info("HEIC Support Found: {}", line.trim());
                         heicSupported = true;
                         break;
                     }
@@ -55,17 +55,15 @@ public class ImageMagickHealthCheck {
             formatProc.waitFor();
 
             if (!heicSupported) {
-                log.error("  ❌ HEIC support NOT FOUND!");
-                log.error("  ❌ HEIC image uploads WILL FAIL!");
+                log.error("HEIC support NOT FOUND! Image uploads may fail.");
             } else {
-                log.info("  ✅ ImageMagick properly configured for HEIC conversion");
+                log.info("ImageMagick HEIC support confirmed.");
             }
 
             log.info("════════════════════════════════════════════════════════════");
-
         } catch (Exception e) {
-            log.error("  ❌ ImageMagick check FAILED: {}", e.getMessage());
-            log.error("════════════════════════════════════════════════════════════");
+            log.error("ImageMagick health check FAILED: {}", e.getMessage(), e);
         }
     }
+
 }

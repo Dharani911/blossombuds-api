@@ -1,5 +1,5 @@
 # Build stage
-FROM maven:3.9-eclipse-temurin-21 AS build
+FROM maven:3.9-eclipse-temurin-21-alpine AS build
 WORKDIR /app
 
 # Copy pom.xml and download dependencies (cached layer)
@@ -14,9 +14,12 @@ RUN mvn clean package -DskipTests
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
-# Install ImageMagick with HEIC support (THIS IS THE KEY FIX)
+# Install ImageMagick with HEIC support
+# NOTE: Alpine 3.19+ splits HEIC support into imagemagick-heic subpackage
 RUN apk add --no-cache \
     imagemagick \
+    imagemagick-heic \
+    imagemagick-jpeg \
     libheif \
     libde265 \
     libjpeg-turbo \
@@ -32,5 +35,8 @@ EXPOSE 8080
 # Health check (optional but recommended)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s \
   CMD wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1
+
+# Ensure convert binary is in PATH
+ENV PATH="/usr/bin:${PATH}"
 
 ENTRYPOINT ["java", "-jar", "app.jar"]
