@@ -68,6 +68,12 @@ public class CatalogService {
     @Value("${cloudflare.r2.endpoint}")
     private String r2Endpoint;
 
+    @PostConstruct
+    public void logMagickCmd() {
+        log.info("[MAGICK][CONFIG] magickCmd='{}'", magickCmd);
+    }
+
+
     private static final long MAX_BYTES = 10L * 1024 * 1024;
     static { javax.imageio.ImageIO.setUseCache(false); }
     private static BufferedImage WATERMARK_IMG = null;
