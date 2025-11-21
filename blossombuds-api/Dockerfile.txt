@@ -1,30 +1,17 @@
 # Build stage
-FROM maven:3.9-eclipse-temurin-21-alpine AS build
+FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /app
 COPY pom.xml .
 RUN mvn dependency:go-offline -B
 COPY src ./src
 RUN mvn clean package -DskipTests
 
-# Runtime stage - Using proven base image with ImageMagick pre-installed
-FROM bitnami/minideb:bookworm
+# Runtime - Simple and proven
+FROM eclipse-temurin:21-jre-noble
 WORKDIR /app
 
-# Install Java runtime
-RUN install_packages openjdk-21-jre-headless
+RUN apt-get update && apt-get install -y imagemagick libheif1 libde265-0 && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install ImageMagick with all delegates including HEIC
-RUN install_packages \
-    imagemagick \
-    libheif1 \
-    libde265-0 \
-    ghostscript
-
-# Verify ImageMagick works
-RUN convert --version && convert -list format | grep -i heic
-
-# Copy the JAR
 COPY --from=build /app/target/*.jar app.jar
-
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]
