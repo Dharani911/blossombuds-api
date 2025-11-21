@@ -10,25 +10,30 @@ RUN mvn dependency:go-offline -B
 COPY src ./src
 RUN mvn clean package -DskipTests
 
-# Runtime stage - Using Debian for better ImageMagick support
+# Runtime stage - Using Ubuntu/Debian for better ImageMagick support
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 
-# Install ImageMagick with HEIC support on Debian
+# Install ImageMagick with HEIC support on Ubuntu/Debian
+# Note: Package names differ between Ubuntu versions
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     imagemagick \
     libheif1 \
     libde265-0 \
-    libjpeg62-turbo \
+    libjpeg-turbo8 \
     libpng16-16 \
     libwebp7 \
     wget && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Verify ImageMagick is installed
-RUN which convert && convert --version
+# Verify ImageMagick is installed during build
+RUN echo "=== ImageMagick Build Verification ===" && \
+    which convert && \
+    convert --version && \
+    convert -list format | grep -i heic && \
+    echo "=== ImageMagick HEIC Support Confirmed ==="
 
 # Copy the JAR from build stage
 COPY --from=build /app/target/*.jar app.jar
