@@ -9,87 +9,66 @@ import java.nio.charset.StandardCharsets;
 public final class MagickBridge {
     private static final Logger log = LoggerFactory.getLogger(MagickBridge.class);
 
-    private MagickBridge() {}
 
+
+
+    private MagickBridge() {}
 
     /**
      * Convert HEIC/HEIF bytes to JPEG bytes using ImageMagick.
-     * Handles corrupt HEIC metadata by stripping and retrying.
+     * Uses file-based conversion to handle corrupt metadata better.
      */
     public static byte[] heicToJpeg(byte[] heicBytes, String magickCmd) throws IOException {
         log.debug("Converting HEIC to JPEG, input size: {} bytes", heicBytes.length);
 
-        // First attempt: Normal conversion
-        try {
-            return convertHeic(heicBytes, magickCmd, false);
-        } catch (IOException e) {
-            // If metadata error, retry with stripped metadata
-            if (e.getMessage() != null && e.getMessage().contains("Metadata")) {
-                log.warn("HEIC metadata error detected, retrying with -strip flag");
-                try {
-                    return convertHeic(heicBytes, magickCmd, true);
-                } catch (IOException e2) {
-                    log.error("HEIC conversion failed even with -strip: {}", e2.getMessage());
-                    throw e2;
-                }
-            }
-            throw e;
-        }
-    }
-
-    private static byte[] convertHeic(byte[] heicBytes, String magickCmd, boolean stripMetadata) throws IOException {
-        ProcessBuilder pb;
-
-        if (stripMetadata) {
-            // Strip all metadata and profiles to handle corrupt HEIC files
-            if (magickCmd.equals("magick")) {
-                pb = new ProcessBuilder("magick", "convert", "heic:-", "-strip", "-quality", "85", "jpeg:-");
-            } else {
-                pb = new ProcessBuilder(magickCmd, "heic:-", "-strip", "-quality", "85", "jpeg:-");
-            }
-        } else {
-            // Normal conversion
-            if (magickCmd.equals("magick")) {
-                pb = new ProcessBuilder("magick", "convert", "heic:-", "-quality", "85", "jpeg:-");
-            } else {
-                pb = new ProcessBuilder(magickCmd, "heic:-", "-quality", "85", "jpeg:-");
-            }
-        }
-
-        pb.redirectErrorStream(false);
-        Process proc = pb.start();
-
-        // Write HEIC to stdin
-        try (OutputStream os = proc.getOutputStream()) {
-            os.write(heicBytes);
-        } catch (IOException e) {
-            proc.destroyForcibly();
-            throw new IOException("Failed to write HEIC data to ImageMagick stdin", e);
-        }
-
-        // Read JPEG from stdout
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-
-        // Capture stderr for error messages
-        ByteArrayOutputStream err = new ByteArrayOutputStream();
-        Thread stderrReader = new Thread(() -> {
-            try (InputStream es = proc.getErrorStream()) {
-                es.transferTo(err);
-            } catch (IOException ignored) {}
-        });
-        stderrReader.setDaemon(true);
-        stderrReader.start();
-
-        // Read stdout
-        try (InputStream is = proc.getInputStream()) {
-            is.transferTo(out);
-        }
+        File tempHeic = null;
+        File tempJpeg = null;
 
         try {
+            // Create temp files
+            tempHeic = File.createTempFile("heic-input-", ".heic");
+            tempJpeg = File.createTempFile("jpeg-output-", ".jpg");
+
+            // Write HEIC data to temp file
+            try (FileOutputStream fos = new FileOutputStream(tempHeic)) {
+                fos.write(heicBytes);
+            }
+
+            // Try conversion with auto-orient and strip (handles most corrupt files)
+            ProcessBuilder pb;
+            if (magickCmd.equals("magick")) {
+                pb = new ProcessBuilder("magick", "convert",
+                        tempHeic.getAbsolutePath(),
+                        "-auto-orient",
+                        "-strip",
+                        "-quality", "85",
+                        tempJpeg.getAbsolutePath());
+            } else {
+                pb = new ProcessBuilder(magickCmd,
+                        tempHeic.getAbsolutePath(),
+                        "-auto-orient",
+                        "-strip",
+                        "-quality", "85",
+                        tempJpeg.getAbsolutePath());
+            }
+
+            pb.redirectErrorStream(false);
+            Process proc = pb.start();
+
+            // Capture stderr
+            ByteArrayOutputStream err = new ByteArrayOutputStream();
+            Thread stderrReader = new Thread(() -> {
+                try (InputStream es = proc.getErrorStream()) {
+                    es.transferTo(err);
+                } catch (IOException ignored) {}
+            });
+            stderrReader.setDaemon(true);
+            stderrReader.start();
+
             int code = proc.waitFor();
             stderrReader.join(2000);
 
-            if (code != 0 || out.size() == 0) {
+            if (code != 0 || !tempJpeg.exists() || tempJpeg.length() == 0) {
                 String errorMsg = err.toString(StandardCharsets.UTF_8).trim();
                 log.error("ImageMagick conversion failed (exit {}): {}", code, errorMsg);
                 throw new IOException(
@@ -97,14 +76,30 @@ public final class MagickBridge {
                 );
             }
 
-            log.debug("HEIC conversion successful, output size: {} bytes", out.size());
+            // Read converted JPEG
+            byte[] jpegBytes = new byte[(int) tempJpeg.length()];
+            try (FileInputStream fis = new FileInputStream(tempJpeg)) {
+                int read = fis.read(jpegBytes);
+                if (read != jpegBytes.length) {
+                    throw new IOException("Failed to read complete JPEG output");
+                }
+            }
+
+            log.debug("HEIC conversion successful, output size: {} bytes", jpegBytes.length);
+            return jpegBytes;
+
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
-            proc.destroyForcibly();
             throw new IOException("ImageMagick convert interrupted", ie);
+        } finally {
+            // Clean up temp files
+            if (tempHeic != null && tempHeic.exists()) {
+                tempHeic.delete();
+            }
+            if (tempJpeg != null && tempJpeg.exists()) {
+                tempJpeg.delete();
+            }
         }
-
-        return out.toByteArray();
     }
 
     public static boolean looksLikeHeic(String contentType, String filename) {
