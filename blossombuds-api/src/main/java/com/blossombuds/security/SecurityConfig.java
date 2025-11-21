@@ -106,7 +106,15 @@ public class SecurityConfig {
                                 .requestMatchers(HttpMethod.GET, "/files/**").permitAll()
                                 .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
 
-
+                                .requestMatchers(HttpMethod.GET,
+                                        "/BB_logo.png",
+                                        "/BB_logo.svg",
+                                        "/favicon.ico",
+                                        "/static/**",
+                                        "/images/**",
+                                        "/css/**",
+                                        "/js/**"
+                                ).permitAll()
 
                                 // anything else
                         .anyRequest().authenticated()
