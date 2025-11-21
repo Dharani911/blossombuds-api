@@ -1,48 +1,30 @@
 # Build stage
-FROM maven:3.9-eclipse-temurin-21 AS build
+FROM maven:3.9-eclipse-temurin-21-alpine AS build
 WORKDIR /app
-
-# Copy pom.xml and download dependencies (cached layer)
 COPY pom.xml .
 RUN mvn dependency:go-offline -B
-
-# Copy source and build
 COPY src ./src
 RUN mvn clean package -DskipTests
 
-# Runtime stage - Using Ubuntu/Debian for better ImageMagick support
-FROM eclipse-temurin:21-jre
+# Runtime stage - Using proven base image with ImageMagick pre-installed
+FROM bitnami/minideb:bookworm
 WORKDIR /app
 
-# Install ImageMagick with HEIC support on Ubuntu/Debian
-# Note: Package names differ between Ubuntu versions
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+# Install Java runtime
+RUN install_packages openjdk-21-jre-headless
+
+# Install ImageMagick with all delegates including HEIC
+RUN install_packages \
     imagemagick \
     libheif1 \
     libde265-0 \
-    libjpeg-turbo8 \
-    libpng16-16 \
-    libwebp7 \
-    wget && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    ghostscript
 
-# Verify ImageMagick is installed during build
-RUN echo "=== ImageMagick Build Verification ===" && \
-    which convert && \
-    convert --version && \
-    convert -list format | grep -i heic && \
-    echo "=== ImageMagick HEIC Support Confirmed ==="
+# Verify ImageMagick works
+RUN convert --version && convert -list format | grep -i heic
 
-# Copy the JAR from build stage
+# Copy the JAR
 COPY --from=build /app/target/*.jar app.jar
 
-# Expose port
 EXPOSE 8080
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=40s \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1
-
 ENTRYPOINT ["java", "-jar", "app.jar"]
