@@ -137,7 +137,9 @@ public class SecurityConfig {
                 "http://localhost:5173",
                 "http://localhost:5174",
                 "http://127.0.0.1:3000",
-                "http://127.0.0.1:5173"
+                "http://127.0.0.1:5173",
+                "https://blossombuds-frontend.vercel.app",
+                "https://blossombuds-floral-artistry.com"
         ));
 
         // NEW: allow Vite when served on your LAN IP / mDNS host
@@ -161,7 +163,9 @@ public class SecurityConfig {
                 "http://172.30.*.*:5173",
                 "http://172.31.*.*:5173",
                 "http://*.local:5173",
-                "http://*.lan:5173"
+                "http://*.lan:5173",
+                "https://*.vercel.app",
+                "https://blossom-buds-floral-artistry.com"
         ));
 
         cfg.setAllowedMethods(List.of("GET","POST","PUT","DELETE","PATCH","OPTIONS"));

@@ -31,7 +31,10 @@ export default function ReviewsPage() {
   const [toast, setToast] = useState<{kind:"ok"|"bad"; msg:string} | null>(null);
 
   // NEW: modal state
-  const [viewId, setViewId] = useState<number | null>(null);
+    const [viewId, setViewId] = useState<number | null>(null);
+
+    // 🔹 NEW: reload key to force refetch
+    const [reloadKey, setReloadKey] = useState(0);
 
   const statusFilter: ReviewStatus | undefined =
     tab === "ALL" ? undefined : (tab as ReviewStatus);
@@ -62,11 +65,13 @@ export default function ReviewsPage() {
     })();
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, q, page, size, consent]);
+   }, [tab, q, page, size, consent, reloadKey]);
 
-  function refreshSamePage() {
-    setPage(p => p);
-  }
+
+    function refreshSamePage() {
+      // bump the key → triggers useEffect → refetch listAdminReviews
+      setReloadKey(k => k + 1);
+    }
 
   async function doModerate(
     r: ProductReview,

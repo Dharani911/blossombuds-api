@@ -1,5 +1,7 @@
 // src/pages/admin/ProductsPage.tsx
 import React, { useEffect, useMemo, useState } from "react";
+import { validateImageFile } from "../../utils/imageValidations";
+
 import {
   listProducts,
   createProduct,
@@ -536,8 +538,9 @@ export function ImagesTab({ productId, onDone, onChanged, onNext, setToast }: Im
   const [busy, setBusy] = React.useState(false);
 
   const [queue, setQueue] = React.useState<
-    { id: string; name: string; previewUrl: string; isHeic: boolean; error?: string; pct?: number }[]
+    { id: string; name: string; previewUrl: string; error?: string; pct?: number }[]
   >([]);
+
 
   const MAX = 5;
 
@@ -566,109 +569,91 @@ export function ImagesTab({ productId, onDone, onChanged, onNext, setToast }: Im
     await onChanged();
   }
 
-  function isHeicNameOrType(file: File): boolean {
-    const n = (file.name || "").toLowerCase();
-    return /image\/hei[cf]/i.test(file.type) || n.endsWith(".heic") || n.endsWith(".heif");
-  }
-  function loadImage(url: string): Promise<HTMLImageElement | null> {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.onload = () => resolve(img);
-      img.onerror = () => resolve(null);
-      img.src = url;
-    });
-  }
-  function drawLogoPlaceholder(logo: HTMLImageElement | null): string {
-    const w = 560, h = 560;
-    const c = document.createElement("canvas");
-    c.width = w; c.height = h;
-    const ctx = c.getContext("2d")!;
-    ctx.fillStyle = "#f6f6f6"; ctx.fillRect(0,0,w,h);
-    ctx.globalAlpha = .18; ctx.strokeStyle="#eaeaea";
-    for(let x=-h; x<w+h; x+=22){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x+h,h); ctx.stroke(); }
-    ctx.globalAlpha = 1;
-    const cx=w/2, cy=h/2;
-    if (logo){
-      const s=Math.min((w*.28)/logo.width,(h*.28)/logo.height,1);
-      const lw=Math.max(60,Math.floor(logo.width*s));
-      const lh=Math.max(60,Math.floor(logo.height*s));
-      ctx.beginPath(); ctx.arc(cx,cy,Math.min(w,h)*.18,0,Math.PI*2); ctx.fillStyle="rgba(0,0,0,.04)"; ctx.fill();
-      ctx.drawImage(logo,cx-lw/2,cy-lh/2,lw,lh);
-    } else {
-      ctx.beginPath(); ctx.arc(cx,cy,Math.min(w,h)*.18,0,Math.PI*2); ctx.fillStyle="rgba(0,0,0,.05)"; ctx.fill();
-      ctx.beginPath(); ctx.arc(cx,cy,Math.min(w,h)*.12,0,Math.PI*2); ctx.fillStyle="rgba(0,0,0,.08)"; ctx.fill();
-    }
-    return c.toDataURL("image/png");
-  }
-  async function previewUrlFor(file: File): Promise<{ url: string; isHeic: boolean }> {
-    if (isHeicNameOrType(file)) {
-      const logo = await loadImage(BRAND_LOGO_URL);
-      return { url: drawLogoPlaceholder(logo), isHeic: true };
-    }
-    return { url: URL.createObjectURL(file), isHeic: false };
-  }
+
+
+
 
   async function onUploadSelected(files: FileList | null) {
     if (!files || files.length === 0) return;
 
-    const MAX_BYTES = 10 * 1024 * 1024;
-    const EXT_OK = [".jpg",".jpeg",".png",".webp",".tif",".tiff",".heic",".heif",".bmp",".gif"];
-
-
     const existing = items?.length || 0;
     const alreadyQueued = queue.length;
-    const remaining = Math.max(0, MAX - (existing + alreadyQueued));
-    if (remaining === 0) { setToast({ kind: "bad", msg: "You already have 5 images" }); return; }
 
-    const all = Array.from(files);
-    const valid: File[] = [];
-    const rejected: string[] = [];
+    // ✅ Use shared validator: enforces max files, size, and blocks HEIC
+    const { valid, errors } = validateImageFiles(files, {
+      maxFiles: MAX,
+      existingCount: existing + alreadyQueued,
+    });
 
-    for (const f of all) {
-      const lower = (f.name || "file").toLowerCase();
-      const looksLikeImage =
-        (f.type && f.type.startsWith("image/")) || EXT_OK.some((ext) => lower.endsWith(ext));
-      if (!looksLikeImage) { rejected.push(`“${f.name}” is not an image`); continue; }
-      if (f.size > MAX_BYTES) { rejected.push(`“${f.name}” exceeds 10 MB`); continue; }
-      valid.push(f);
-      if (valid.length >= remaining) break;
+    if (errors.length > 0) {
+      // Show only the first error to keep toast clean
+      setToast({ kind: "bad", msg: errors[0] });
     }
 
-    if (valid.length === 0) { setToast({ kind: "bad", msg: rejected[0] || "No valid files" }); return; }
-    if (rejected.length > 0) setToast({ kind: "bad", msg: `${rejected[0]} (some skipped)` });
+    if (!valid.length) return;
 
-    const optimistic = await Promise.all(valid.map(async (f) => {
-      const p = await previewUrlFor(f);
-      return { id: crypto.randomUUID(), name: f.name, previewUrl: p.url, isHeic: p.isHeic, pct: 1 };
+    // Simple optimistic previews (HEIC will never be here now)
+    const optimistic = valid.map((f) => ({
+      id: crypto.randomUUID(),
+      name: f.name,
+      previewUrl: URL.createObjectURL(f),
+      pct: 1,
     }));
-    setQueue(q => [...q, ...optimistic]);
 
+    setQueue((q) => [...q, ...optimistic]);
     setBusy(true);
+
     try {
       let sortBase = items?.length || 0;
+
       for (let i = 0; i < valid.length; i++) {
         const f = valid[i];
         const tempId = optimistic[i].id;
+
         try {
-          await uploadProductImage(productId, f, undefined, sortBase++, (pct)=> {
-            setQueue(q => q.map(x => x.id === tempId ? ({...x, pct}) : x));
+          await uploadProductImage(
+            productId,
+            f,
+            undefined,
+            sortBase++,
+            (pct) => {
+              setQueue((q) =>
+                q.map((x) =>
+                  x.id === tempId ? { ...x, pct } : x
+                )
+              );
+            }
+          );
+
+          // Remove from queue after success + cleanup blob URL
+          setQueue((q) => {
+            const found = q.find((x) => x.id === tempId);
+            if (found?.previewUrl.startsWith("blob:")) {
+              URL.revokeObjectURL(found.previewUrl);
+            }
+            return q.filter((x) => x.id !== tempId);
           });
-          setQueue(q => {
-            const found = q.find(x => x.id === tempId);
-            if (found?.previewUrl.startsWith("blob:")) URL.revokeObjectURL(found.previewUrl);
-            return q.filter(x => x.id !== tempId);
-          });
-        } catch (e:any) {
-          setQueue(q => q.map(x => x.id === tempId ? ({...x, error: e?.response?.data?.message || "Upload failed"}) : x));
+        } catch (e: any) {
+          const msg =
+            e?.response?.data?.message ||
+            e?.message ||
+            "Upload failed";
+
+          setQueue((q) =>
+            q.map((x) =>
+              x.id === tempId ? { ...x, error: msg } : x
+            )
+          );
         }
       }
+
       await refresh();
       setToast({ kind: "ok", msg: `Uploaded ${valid.length} image(s)` });
     } finally {
       setBusy(false);
     }
   }
+
 
   function moveUp(idx: number)  { if (!items || idx<=0) return; reorder(idx, idx-1); }
   function moveDown(idx: number){ if (!items || idx>=items.length-1) return; reorder(idx, idx+1); }
@@ -701,16 +686,20 @@ export function ImagesTab({ productId, onDone, onChanged, onNext, setToast }: Im
         <div className="imgbar">
           <div>
             <div className="count">{count}/{MAX} images</div>
-            <div className="hint">Any image up to ~10MB (JPG/PNG/WEBP/TIFF/HEIC…). Server applies watermark.</div>
+            <div className="hint">
+              Any image up to ~10MB (JPG, PNG, WebP). Server applies watermark.
+            </div>
+
           </div>
           <label className={"upload" + (count >= MAX ? " disabled" : "")}>
             <input
               type="file"
-              accept="image/*,.heic,.heif"
+              accept="image/jpeg,image/png,image/webp"
               multiple
               disabled={busy || count >= MAX}
               onChange={(e) => onUploadSelected(e.target.files)}
             />
+
             Upload
           </label>
         </div>

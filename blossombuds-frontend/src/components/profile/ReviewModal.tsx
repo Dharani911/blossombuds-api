@@ -8,6 +8,11 @@ import {
   attachImageFromTempKey,
   deleteTempUpload,
 } from "../../api/reviewUploads";
+import {
+  WEB_IMAGE_ACCEPT,
+  validateImageFile,
+} from "../../utils/imageValidations";
+
 
 /* ---------------- 3s "thank you" popup (top-most layer) ---------------- */
 // ⬇ drop-in replacement for showThankYouPopup()
@@ -131,12 +136,12 @@ type Props = {
 type QueueItem = {
   id: string;
   name: string;
-  previewUrl: string; // data: URL or generic canvas preview
-  isHeic: boolean;
+  previewUrl: string; // data: URL preview
   pct?: number;
   err?: string;
   tempKey?: string; // uploads/reviews/tmp/...
 };
+
 
 export default function ReviewModal({
   open,
@@ -213,10 +218,7 @@ export default function ReviewModal({
   const remainingChars = 1000 - (text?.length || 0);
 
   /* ----------------------- Preview helpers ----------------------- */
-  function isHeic(file: File) {
-    const n = (file.name || "").toLowerCase();
-    return /image\/hei[cf]/i.test(file.type) || n.endsWith(".heic") || n.endsWith(".heif");
-  }
+
 
   function drawGenericPreview(): string {
     const w = 360, h = 240;
@@ -268,72 +270,43 @@ export default function ReviewModal({
      return;
    }
 
-   const MAX = 3;
-   const remainingSlots = Math.max(0, MAX - queue.length);
+   const MAX_IMAGES = 3;
+   const remainingSlots = Math.max(0, MAX_IMAGES - queue.length);
    if (remainingSlots <= 0) {
      setErr("You already attached 3 images.");
      if (inputEl) inputEl.value = "";
      return;
    }
 
-   const MAX_BYTES = 10 * 1024 * 1024;
-   const EXT_OK = [
-     ".jpg", ".jpeg", ".png", ".webp",
-     ".tif", ".tiff",
-     ".heic", ".heif",
-     ".bmp", ".gif"
-   ];
-
-   // ---- PICK FILES WITH iOS STABILITY ----
    const picked = Array.from(files).slice(0, remainingSlots);
-
-   // DEBUG (optional)
-   console.log("Picked files:", picked.map(f => ({
-     name: f.name,
-     type: f.type,
-     size: f.size,
-     ext: f.name.split(".").pop(),
-   })));
-
 
    const valid: File[] = [];
    const errors: string[] = [];
 
-   // ---- VALIDATION FIXED FOR iPHONE ----
    for (const f of picked) {
-     const name = f.name || "file";
-     const lower = name.toLowerCase();
-
-     const typeOk = f.type?.startsWith("image/") || false;
-     const extOk = EXT_OK.some(ext => lower.endsWith(ext));
-
-     if (!(typeOk || extOk)) {
-       errors.push(`“${name}” is not a supported image format.`);
-       continue;
+     const msg = validateImageFile(f, { label: "review image" });
+     if (msg) {
+       errors.push(`“${f.name}”: ${msg}`);
+     } else {
+       valid.push(f);
      }
-
-     if (f.size > MAX_BYTES) {
-       errors.push(`“${name}” exceeds 10 MB.`);
-       continue;
-     }
-
-     valid.push(f);
    }
 
-   if (errors.length > 0) setErr(errors.join("\n"));
+   if (errors.length > 0) {
+     setErr(errors.join("\n"));
+   }
 
    if (!valid.length) {
      if (inputEl) inputEl.value = "";
      return;
    }
 
-   // ---- OPTIMISTIC UI PREVIEW ----
+   // optimistic queue entries
    const optimistic: QueueItem[] = valid.map((f) => ({
      id: crypto.randomUUID(),
      name: f.name,
      previewUrl: placeholderPreview(),
-     isHeic: isHeic(f),
-     pct: 1
+     pct: 1,
    }));
 
    setQueue((q) => [...q, ...optimistic]);
@@ -344,18 +317,15 @@ export default function ReviewModal({
        const f = valid[i];
        const tempId = optimistic[i].id;
 
-       // ---- GENERATE PREVIEW ----
+       // preview
        try {
          let previewUrl = "";
-         if (!isHeic(f)) {
-           try {
-             previewUrl = await fileToDataUrl(f);
-           } catch (e) {
-             console.warn("Preview failed", e);
-             previewUrl = "";
-           }
+         try {
+           previewUrl = await fileToDataUrl(f);
+         } catch (e) {
+           console.warn("Preview failed", e);
+           previewUrl = "";
          }
-
 
          setQueue((q) =>
            q.map((x) => (x.id === tempId ? { ...x, previewUrl } : x))
@@ -364,11 +334,11 @@ export default function ReviewModal({
          console.warn("Preview failed:", e);
        }
 
-       // ---- UPLOAD TO PRESIGNED URL ----
+       // presign + upload
        try {
          const p = await presignReviewUpload(
            f.name,
-           f.type || "application/octet-stream",
+           f.type || "image/jpeg",
            token
          );
 
@@ -378,7 +348,9 @@ export default function ReviewModal({
 
          await putToPresignedUrl(p.url, f, (pct) => {
            setQueue((q) =>
-             q.map((x) => (x.id === tempId ? { ...x, pct } : x))
+             q.map((x) =>
+               x.id === tempId ? { ...x, pct } : x
+             )
            );
          });
 
@@ -402,6 +374,7 @@ export default function ReviewModal({
      if (inputEl) inputEl.value = "";
    }
  }
+
 
 
   /* ------------------------------ Submit flow ------------------------------ */
@@ -546,18 +519,18 @@ export default function ReviewModal({
                 <input
                   id="rv-upload-input"
                   type="file"
-                  accept="image/*,.heic,.heif"
+                  accept={WEB_IMAGE_ACCEPT}   // .jpg, .jpeg, .png, .webp
                   multiple
                   style={{ display: "none" }}
                   onChange={(e) => {
                     onPickFiles(e.target.files, e.target);
-                    console.log("onPickFiles called with files:", files?.length);
-
                   }}
-
                 />
-
+                <div className="minihelp">
+                  JPG, JPEG, PNG, WebP only · Max 10&nbsp;MB per image · HEIC / Live Photos are not supported.
+                </div>
               </div>
+
 
 
               <div className="imgs">
@@ -565,16 +538,14 @@ export default function ReviewModal({
                   <div key={q.id} className="img-row">
                     <div className="thumb">
                       {q.previewUrl ? (
-                        <>
-                          <img loading="eager" decoding="async" src={q.previewUrl} alt={q.name} />
-                          {q.isHeic && <span className="badge">HEIC</span>}
-                        </>
+                        <img loading="eager" decoding="async" src={q.previewUrl} alt={q.name} />
                       ) : (
                         <div style={{ fontSize: "12px", textAlign: "center", padding: "6px" }}>
                           <strong>{q.name}</strong>
                           <div style={{ opacity: 0.6, marginTop: "4px" }}>Preview not available</div>
                         </div>
                       )}
+
                     </div>
 
                     <div className="meta">
@@ -775,7 +746,6 @@ const css = `
   }
 }
 .upload-trigger {
-  height: 36px;
   padding: 0 16px;
   background: #f05d8b;
   color: white;
@@ -786,9 +756,11 @@ const css = `
   box-shadow: 0 8px 20px rgba(240, 93, 139, 0.3);
   font-size: 15px;
 }
+
 input[type="file"] {
   z-index: 99999;
   position: relative;
 }
+
 
 `;

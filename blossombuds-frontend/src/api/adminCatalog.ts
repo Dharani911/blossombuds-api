@@ -1,4 +1,6 @@
 import adminHttp from "./adminHttp";
+import { validateImageFile } from "../utils/imageValidations";
+
 
 /** ---------- Shared types ---------- */
 
@@ -210,6 +212,11 @@ export async function uploadProductImage(
   sortOrder?: number,
   onProgress?: (pct: number) => void
 ){
+const err = validateImageFile(file);
+  if (err) {
+    // Surface as a rejected Promise so calling UI can show the message
+    return Promise.reject(new Error(err));
+  }
   const fd = new FormData();
   fd.append("file", file, file.name);
   if (altText != null)  fd.append("altText", String(altText));

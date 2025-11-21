@@ -131,6 +131,8 @@ export default function ResetPasswordPage() {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+const [showPw, setShowPw] = useState(false);
+const [showPw2, setShowPw2] = useState(false);
 
   const nav = useNavigate();
   const location = useLocation();
@@ -205,31 +207,112 @@ export default function ResetPasswordPage() {
                 </div>
               )}
 
+
               <label className="lbl" htmlFor="new-pw">New password</label>
-              <input
-                id="new-pw"
-                className={"in" + (pw && pwErr ? " invalid" : "")}
-                type="password"
-                value={pw}
-                onChange={(e) => setPw(e.target.value)}
-                autoComplete="new-password"
-                placeholder="••••••••"
-                aria-invalid={!!(pw && pwErr)}
-              />
+              <div className="in-wrap">
+                <input
+                  id="new-pw"
+                  className={"in" + (pw && pwErr ? " invalid" : "")}
+                  type={showPw ? "text" : "password"}
+                  value={pw}
+                  onChange={(e) => setPw(e.target.value)}
+                  autoComplete="new-password"
+                  placeholder="••••••••"
+                  aria-invalid={!!(pw && pwErr)}
+                />
+                <button
+                  type="button"
+                  className="pw-toggle"
+                  onClick={() => setShowPw(v => !v)}
+                  aria-label={showPw ? "Hide password" : "Show password"}
+                >
+                  {showPw ? (
+                    // eye-off icon
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        d="M3 3l18 18M10.58 10.58A3 3 0 0113.42 13.4M9.88 5.09A9.77 9.77 0 0112 5c7 0 11 7 11 7a18.21 18.21 0 01-3.06 3.93M6.53 6.53A18.42 18.42 0 001 12s4 7 11 7a11.64 11.64 0 004.47-.86"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  ) : (
+                    // eye icon
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                      />
+                      <circle
+                        cx="12"
+                        cy="12"
+                        r="3"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                      />
+                    </svg>
+                  )}
+                </button>
+              </div>
               {pw && pwErr && <div className="hint bad">{pwErr}</div>}
 
+
               <label className="lbl" htmlFor="new-pw2">Confirm new password</label>
-              <input
-                id="new-pw2"
-                className={"in" + (pw2 && matchErr ? " invalid" : "")}
-                type="password"
-                value={pw2}
-                onChange={(e) => setPw2(e.target.value)}
-                autoComplete="new-password"
-                placeholder="••••••••"
-                aria-invalid={!!(pw2 && matchErr)}
-              />
+              <div className="in-wrap">
+                <input
+                  id="new-pw2"
+                  className={"in" + (pw2 && matchErr ? " invalid" : "")}
+                  type={showPw2 ? "text" : "password"}
+                  value={pw2}
+                  onChange={(e) => setPw2(e.target.value)}
+                  autoComplete="new-password"
+                  placeholder="••••••••"
+                  aria-invalid={!!(pw2 && matchErr)}
+                />
+                <button
+                  type="button"
+                  className="pw-toggle"
+                  onClick={() => setShowPw2(v => !v)}
+                  aria-label={showPw2 ? "Hide password" : "Show password"}
+                >
+                  {showPw2 ? (
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        d="M3 3l18 18M10.58 10.58A3 3 0 0113.42 13.4M9.88 5.09A9.77 9.77 0 0112 5c7 0 11 7 11 7a18.21 18.21 0 01-3.06 3.93M6.53 6.53A18.42 18.42 0 001 12s4 7 11 7a11.64 11.64 0 004.47-.86"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                      />
+                      <circle
+                        cx="12"
+                        cy="12"
+                        r="3"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                      />
+                    </svg>
+                  )}
+                </button>
+              </div>
               {pw2 && matchErr && <div className="hint bad">{matchErr}</div>}
+
 
               {err && <div className="error" role="alert">{err}</div>}
 
@@ -374,4 +457,42 @@ h2{
 @media (max-width: 420px){
   .brand-text{ display:none; }
 }
+.in-wrap{
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.in-wrap .in{
+  padding-right: 40px; /* space for eye icon */
+}
+.pw-toggle{
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  color: rgba(0,0,0,.6);
+}
+.pw-toggle svg{
+  width: 20px;
+  height: 20px;
+}
+.pw-toggle:hover{
+  color: rgba(0,0,0,.9);
+}
+.pw-toggle:focus-visible{
+  outline: 2px solid var(--bb-accent);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
 `;
