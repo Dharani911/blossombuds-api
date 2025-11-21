@@ -34,20 +34,20 @@ public final class MagickBridge {
                 fos.write(heicBytes);
             }
 
-            // Try conversion with auto-orient and strip (handles most corrupt files)
+            // Try conversion - decode with libheif directly, bypass corrupt metadata
             ProcessBuilder pb;
             if (magickCmd.equals("magick")) {
                 pb = new ProcessBuilder("magick", "convert",
-                        tempHeic.getAbsolutePath(),
-                        "-auto-orient",
-                        "-strip",
+                        tempHeic.getAbsolutePath() + "[0]",  // Force first frame
+                        "-define", "heic:ignore-metadata=true",  // Bypass metadata
+                        "-colorspace", "sRGB",
                         "-quality", "85",
                         tempJpeg.getAbsolutePath());
             } else {
                 pb = new ProcessBuilder(magickCmd,
-                        tempHeic.getAbsolutePath(),
-                        "-auto-orient",
-                        "-strip",
+                        tempHeic.getAbsolutePath() + "[0]",  // Force first frame
+                        "-define", "heic:ignore-metadata=true",  // Bypass metadata
+                        "-colorspace", "sRGB",
                         "-quality", "85",
                         tempJpeg.getAbsolutePath());
             }
