@@ -416,7 +416,7 @@ public class CatalogService {
     }
 
     // ───────────────── addProductImage (REPLACE) ─────────────────
-    @Transactional
+    /*@Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public ProductImage addProductImage(Long productId, MultipartFile file, String altText, Integer sortOrder)
             throws IOException, InterruptedException {
@@ -512,7 +512,176 @@ public class CatalogService {
         log.info("[IMAGE][ADD][OK] id={} productId={} elapsedMs={}",
                 saved.getId(), productId, Duration.between(t0, Instant.now()).toMillis());
         return saved;
+    }*/
+    /**
+     * Fallback when HEIC → JPEG conversion fails completely.
+     * Stores the original bytes (HEIC/whatever) to R2 without watermark,
+     * so the upload never blocks.
+     */
+    private ProductImage uploadRawProductImageFallback(
+            Long productId,
+            MultipartFile file,
+            byte[] rawBytes,
+            String altText,
+            Integer sortOrder,
+            Instant t0
+    ) throws IOException {
+
+        String name = (file.getOriginalFilename() == null ? "" : file.getOriginalFilename().toLowerCase());
+        String ext = ".bin";
+        if (name.endsWith(".heic")) ext = ".heic";
+        else if (name.endsWith(".heif")) ext = ".heif";
+        else if (name.endsWith(".jpg") || name.endsWith(".jpeg")) ext = ".jpg";
+        else if (name.endsWith(".png")) ext = ".png";
+        else if (name.endsWith(".webp")) ext = ".webp";
+
+        String key = "products/raw/" + UUID.randomUUID() + ext;
+
+        String ct = file.getContentType();
+        if (ct == null || ct.isBlank()) {
+            ct = guessContentType(name, "application/octet-stream");
+        }
+
+        ObjectMetadata meta = new ObjectMetadata();
+        meta.setContentType(ct);
+        meta.setContentLength(rawBytes.length);
+        try (InputStream in = new ByteArrayInputStream(rawBytes)) {
+            r2Client.putObject(new PutObjectRequest(bucketName, key, in, meta));
+        }
+        String fileUrl = r2Endpoint + "/" + bucketName + "/" + key;
+
+        log.info("[IMAGE][ADD][RAW_FALLBACK][UPLOAD][OK] key='{}' bytes={} ct='{}'", key, rawBytes.length, ct);
+
+        ProductImage imgRow = new ProductImage();
+        imgRow.setProduct(productRepo.getReferenceById(productId));
+        imgRow.setPublicId(key);
+        imgRow.setUrl(fileUrl);
+        imgRow.setWatermarkVariantUrl(fileUrl); // or null if you want to distinguish
+        imgRow.setAltText(altText);
+        imgRow.setSortOrder(sortOrder != null ? sortOrder : 0);
+        imgRow.setActive(true);
+
+        ProductImage saved = imageRepo.save(imgRow);
+        log.info("[IMAGE][ADD][RAW_FALLBACK][OK] id={} productId={} elapsedMs={}",
+                saved.getId(), productId, Duration.between(t0, Instant.now()).toMillis());
+
+        return saved;
     }
+    // ───────────────── addProductImage (UPDATED WITH HEIC FALLBACK) ─────────────────
+    @Transactional
+    @PreAuthorize("hasRole('ADMIN')")
+    public ProductImage addProductImage(Long productId, MultipartFile file, String altText, Integer sortOrder)
+            throws IOException, InterruptedException {
+
+        Instant t0 = Instant.now();
+        log.info("[IMAGE][ADD] productId={} file='{}' type='{}' size={}",
+                productId,
+                (file != null ? file.getOriginalFilename() : "<null>"),
+                (file != null ? file.getContentType() : "<null>"),
+                (file != null ? file.getSize() : -1));
+
+        if (file == null || file.isEmpty()) {
+            log.warn("[IMAGE][ADD][FAIL] Empty file productId={}", productId);
+            throw new IllegalArgumentException("File cannot be null or empty");
+        }
+
+        // Accept HEIC sent as octet-stream if extension looks like an image
+        try {
+            validateFile(file); // ← your validator from bottom of class
+        } catch (IllegalArgumentException iae) {
+            String ct = file.getContentType() == null ? "" : file.getContentType();
+            String fn = (file.getOriginalFilename() == null ? "" : file.getOriginalFilename().toLowerCase());
+            boolean extOk = fn.endsWith(".heic") || fn.endsWith(".heif") || fn.endsWith(".jpg") || fn.endsWith(".jpeg")
+                    || fn.endsWith(".png") || fn.endsWith(".webp") || fn.endsWith(".tif") || fn.endsWith(".tiff")
+                    || fn.endsWith(".bmp") || fn.endsWith(".gif");
+            if (!"application/octet-stream".equalsIgnoreCase(ct) || !extOk) {
+                log.warn("[IMAGE][ADD][FAIL] Invalid content-type/ext ct='{}' name='{}'", ct, fn);
+                throw iae;
+            }
+            log.info("[IMAGE][ADD] Proceeding with octet-stream due to image-like extension.");
+        }
+
+        // Read original bytes once
+        final byte[] originalBytes = file.getBytes();
+        final String originalName  = file.getOriginalFilename();
+        final String originalCt    = file.getContentType();
+
+        // 1) Normalize to JPEG (HEIC-safe, with graceful fallback)
+        byte[] normalizedJpeg;
+        try {
+            normalizedJpeg = ImageMagickUtil.ensureJpeg(originalBytes, originalName, originalCt);
+            log.info("[IMAGE][ADD] ensureJpeg -> {} bytes", normalizedJpeg.length);
+        } catch (Exception primary) {
+            boolean looksHeic = MagickBridge.looksLikeHeic(originalCt, originalName);
+            if (looksHeic) {
+                log.info("[IMAGE][ADD][HEIC] ensureJpeg failed, trying MagickBridge.heicToJpeg ... err={}", primary.toString());
+                try {
+                    normalizedJpeg = MagickBridge.heicToJpeg(originalBytes, magickCmd);
+                    log.info("[IMAGE][ADD] heicToJpeg -> {} bytes", normalizedJpeg.length);
+                } catch (Exception magickFail) {
+                    // 🔥 FINAL FALLBACK: do NOT block upload – store raw bytes as-is (no watermark)
+                    log.warn(
+                            "[IMAGE][ADD][HEIC][FALLBACK] Both ensureJpeg + heicToJpeg failed. " +
+                                    "Falling back to raw upload for productId={} name='{}'. primaryErr={} magickErr={}",
+                            productId, originalName, primary.toString(), magickFail.toString()
+                    );
+                    return uploadRawProductImageFallback(productId, file, originalBytes, altText, sortOrder, t0);
+                }
+            } else {
+                log.error("[IMAGE][ADD][FAIL] Conversion error (non-HEIC): {}", primary.toString());
+                throw new IOException("Image conversion failed: " + primary.getMessage(), primary);
+            }
+        }
+
+        // 2) Decode → resize → watermark (stays same)
+        BufferedImage decoded = ImageMagickUtil.readImage(normalizedJpeg);
+        if (decoded == null) {
+            log.warn("[IMAGE][ADD][FAIL] Unsupported image after decode");
+            throw new IllegalArgumentException("Uploaded file is not a supported image");
+        }
+        BufferedImage base = ImageUtil.fitWithin(decoded, ImageUtil.MAX_DIM);
+
+        BufferedImage stamped = watermarkLogoOrText(base, WATERMARK_IMG, "BLOSSOM BUDS");
+
+        // 3) Compress
+        byte[] finalBytes;
+        try {
+            finalBytes = ImageMagickUtil.targetSizeJpeg(stamped);
+            if (finalBytes.length >= normalizedJpeg.length) {
+                finalBytes = toJpegBytes(stamped, 0.82f);
+            }
+        } catch (Exception ce) {
+            log.warn("[IMAGE][ADD] Compression fallback: {}", ce.toString());
+            finalBytes = toJpegBytes(stamped, 0.82f);
+        }
+
+        // 4) Upload to R2 (JPEG with watermark) – unchanged
+        String key = "products/" + UUID.randomUUID() + ".jpg";
+        ObjectMetadata meta = new ObjectMetadata();
+        meta.setContentType("image/jpeg");
+        meta.setContentLength(finalBytes.length);
+        try (InputStream in = new ByteArrayInputStream(finalBytes)) {
+            r2Client.putObject(new PutObjectRequest(bucketName, key, in, meta));
+        }
+        String fileUrl = r2Endpoint + "/" + bucketName + "/" + key;
+        log.info("[IMAGE][ADD][UPLOAD][OK] key='{}' bytes={}", key, finalBytes.length);
+
+        // 5) Persist
+        ProductImage imgRow = new ProductImage();
+        imgRow.setProduct(productRepo.getReferenceById(productId));
+        imgRow.setPublicId(key);
+        imgRow.setUrl(fileUrl);
+        imgRow.setWatermarkVariantUrl(fileUrl);
+        imgRow.setAltText(altText);
+        imgRow.setSortOrder(sortOrder != null ? sortOrder : 0);
+        imgRow.setActive(true);
+
+        ProductImage saved = imageRepo.save(imgRow);
+        log.info("[IMAGE][ADD][OK] id={} productId={} elapsedMs={}",
+                saved.getId(), productId, Duration.between(t0, Instant.now()).toMillis());
+        return saved;
+    }
+
 
     // ──────────────── updateProductImage (REPLACE) ────────────────
     @Transactional
