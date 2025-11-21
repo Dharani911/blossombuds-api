@@ -12,9 +12,14 @@ public final class MagickBridge {
      */
     public static byte[] heicToJpeg(byte[] heicBytes, String magickCmd) throws IOException {
         // NOTE: with IM7 you call "magick convert", then stream stdin → stdout
-        ProcessBuilder pb = new ProcessBuilder(
-                magickCmd, "convert", "heic:-", "jpeg:-"
-        );
+        ProcessBuilder pb;
+        if (magickCmd.equals("magick")) {
+            // ImageMagick 7: magick convert heic:- jpeg:-
+            pb = new ProcessBuilder("magick", "convert", "heic:-", "-quality", "85", "jpeg:-");
+        } else {
+            // ImageMagick 6: convert heic:- jpeg:-
+            pb = new ProcessBuilder(magickCmd, "heic:-", "-quality", "85", "jpeg:-");
+        }
         pb.redirectErrorStream(true); // merge stderr into stdout for easier debugging
         Process proc = pb.start();
 
