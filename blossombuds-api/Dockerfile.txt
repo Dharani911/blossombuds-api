@@ -1,5 +1,5 @@
 # Build stage
-FROM maven:3.9-eclipse-temurin-21-alpine AS build
+FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /app
 
 # Copy pom.xml and download dependencies (cached layer)
@@ -10,21 +10,25 @@ RUN mvn dependency:go-offline -B
 COPY src ./src
 RUN mvn clean package -DskipTests
 
-# Runtime stage
-FROM eclipse-temurin:21-jre-alpine
+# Runtime stage - Using Debian for better ImageMagick support
+FROM eclipse-temurin:21-jre
 WORKDIR /app
 
-# Install ImageMagick with HEIC support
-# NOTE: Alpine 3.19+ splits HEIC support into imagemagick-heic subpackage
-RUN apk add --no-cache \
+# Install ImageMagick with HEIC support on Debian
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
     imagemagick \
-    imagemagick-heic \
-    imagemagick-jpeg \
-    libheif \
-    libde265 \
-    libjpeg-turbo \
-    libpng \
-    libwebp
+    libheif1 \
+    libde265-0 \
+    libjpeg62-turbo \
+    libpng16-16 \
+    libwebp7 \
+    wget && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Verify ImageMagick is installed
+RUN which convert && convert --version
 
 # Copy the JAR from build stage
 COPY --from=build /app/target/*.jar app.jar
@@ -32,11 +36,8 @@ COPY --from=build /app/target/*.jar app.jar
 # Expose port
 EXPOSE 8080
 
-# Health check (optional but recommended)
+# Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s \
   CMD wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1
-
-# Ensure convert binary is in PATH
-ENV PATH="/usr/bin:${PATH}"
 
 ENTRYPOINT ["java", "-jar", "app.jar"]
