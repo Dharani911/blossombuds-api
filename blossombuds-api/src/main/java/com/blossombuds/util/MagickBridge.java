@@ -1,7 +1,7 @@
 package com.blossombuds.util;
 
-
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 
 public final class MagickBridge {
     private MagickBridge() {}
@@ -11,7 +11,6 @@ public final class MagickBridge {
      * Requires the configured ImageMagick command ("magick" or full path) to be available.
      */
     public static byte[] heicToJpeg(byte[] heicBytes, String magickCmd) throws IOException {
-        // NOTE: with IM7 you call "magick convert", then stream stdin → stdout
         ProcessBuilder pb;
         if (magickCmd.equals("magick")) {
             // ImageMagick 7: magick convert heic:- jpeg:-
@@ -20,24 +19,45 @@ public final class MagickBridge {
             // ImageMagick 6: convert heic:- jpeg:-
             pb = new ProcessBuilder(magickCmd, "heic:-", "-quality", "85", "jpeg:-");
         }
-        pb.redirectErrorStream(true); // merge stderr into stdout for easier debugging
+
+        // DON'T merge stderr - we need to capture it separately for errors
+        pb.redirectErrorStream(false);
         Process proc = pb.start();
 
-        // write HEIC to stdin
+        // Write HEIC to stdin
         try (OutputStream os = proc.getOutputStream()) {
             os.write(heicBytes);
         }
 
-        // read JPEG from stdout
+        // Read JPEG from stdout
         ByteArrayOutputStream out = new ByteArrayOutputStream();
+
+        // Capture stderr in parallel (errors appear here)
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+
+        Thread stderrReader = new Thread(() -> {
+            try (InputStream es = proc.getErrorStream()) {
+                es.transferTo(err);
+            } catch (IOException e) {
+                // Ignore
+            }
+        });
+        stderrReader.start();
+
+        // Read stdout
         try (InputStream is = proc.getInputStream()) {
             is.transferTo(out);
         }
 
         try {
             int code = proc.waitFor();
+            stderrReader.join(1000); // Wait for stderr to finish
+
             if (code != 0 || out.size() == 0) {
-                throw new IOException("ImageMagick convert failed (exit " + code + ")");
+                String errorMsg = err.toString(StandardCharsets.UTF_8);
+                throw new IOException(
+                        String.format("ImageMagick convert failed (exit %d): %s", code, errorMsg)
+                );
             }
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
@@ -47,7 +67,7 @@ public final class MagickBridge {
         return out.toByteArray();
     }
 
-    /** quick helper */
+    /** Quick helper */
     public static boolean looksLikeHeic(String contentType, String filename) {
         if (contentType != null && contentType.toLowerCase().startsWith("image/hei")) return true;
         if (filename != null) {
@@ -57,4 +77,3 @@ public final class MagickBridge {
         return false;
     }
 }
-
