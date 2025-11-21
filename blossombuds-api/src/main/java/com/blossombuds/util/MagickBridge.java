@@ -9,24 +9,23 @@ import java.nio.charset.StandardCharsets;
 public final class MagickBridge {
     private static final Logger log = LoggerFactory.getLogger(MagickBridge.class);
 
-
-
-
     private MagickBridge() {}
 
     /**
-     * Convert HEIC/HEIF bytes to JPEG bytes using ImageMagick.
-     * Uses file-based conversion to handle corrupt metadata better.
+     * Convert HEIC/HEIF bytes to JPEG bytes using heif-convert + ImageMagick.
+     * Two-step process handles corrupt HEIC metadata better.
      */
     public static byte[] heicToJpeg(byte[] heicBytes, String magickCmd) throws IOException {
         log.debug("Converting HEIC to JPEG, input size: {} bytes", heicBytes.length);
 
         File tempHeic = null;
+        File tempPng = null;
         File tempJpeg = null;
 
         try {
             // Create temp files
             tempHeic = File.createTempFile("heic-input-", ".heic");
+            tempPng = File.createTempFile("heif-png-", ".png");
             tempJpeg = File.createTempFile("jpeg-output-", ".jpg");
 
             // Write HEIC data to temp file
@@ -34,21 +33,44 @@ public final class MagickBridge {
                 fos.write(heicBytes);
             }
 
-            // Try conversion - decode with libheif directly, bypass corrupt metadata
+            // Step 1: Use heif-convert to extract raw image (handles corrupt metadata)
+            log.debug("Step 1: Converting HEIC to PNG with heif-convert");
+            ProcessBuilder heifPb = new ProcessBuilder("heif-convert",
+                    tempHeic.getAbsolutePath(),
+                    tempPng.getAbsolutePath());
+            heifPb.redirectErrorStream(true);
+            Process heifProc = heifPb.start();
+
+            // Capture heif-convert output
+            ByteArrayOutputStream heifOut = new ByteArrayOutputStream();
+            try (InputStream is = heifProc.getInputStream()) {
+                is.transferTo(heifOut);
+            }
+
+            int heifCode = heifProc.waitFor();
+
+            if (heifCode != 0 || !tempPng.exists() || tempPng.length() == 0) {
+                String heifError = heifOut.toString(StandardCharsets.UTF_8);
+                log.error("heif-convert failed (exit {}): {}", heifCode, heifError);
+                throw new IOException("heif-convert failed (exit " + heifCode + "): " + heifError);
+            }
+
+            log.debug("Step 1 complete: PNG size {} bytes", tempPng.length());
+
+            // Step 2: Convert PNG to optimized JPEG with ImageMagick
+            log.debug("Step 2: Converting PNG to JPEG with ImageMagick");
             ProcessBuilder pb;
             if (magickCmd.equals("magick")) {
                 pb = new ProcessBuilder("magick", "convert",
-                        tempHeic.getAbsolutePath() + "[0]",  // Force first frame
-                        "-define", "heic:ignore-metadata=true",  // Bypass metadata
-                        "-colorspace", "sRGB",
+                        tempPng.getAbsolutePath(),
                         "-quality", "85",
+                        "-auto-orient",
                         tempJpeg.getAbsolutePath());
             } else {
                 pb = new ProcessBuilder(magickCmd,
-                        tempHeic.getAbsolutePath() + "[0]",  // Force first frame
-                        "-define", "heic:ignore-metadata=true",  // Bypass metadata
-                        "-colorspace", "sRGB",
+                        tempPng.getAbsolutePath(),
                         "-quality", "85",
+                        "-auto-orient",
                         tempJpeg.getAbsolutePath());
             }
 
@@ -85,20 +107,17 @@ public final class MagickBridge {
                 }
             }
 
-            log.debug("HEIC conversion successful, output size: {} bytes", jpegBytes.length);
+            log.debug("HEIC conversion successful, final JPEG size: {} bytes", jpegBytes.length);
             return jpegBytes;
 
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
-            throw new IOException("ImageMagick convert interrupted", ie);
+            throw new IOException("Conversion interrupted", ie);
         } finally {
             // Clean up temp files
-            if (tempHeic != null && tempHeic.exists()) {
-                tempHeic.delete();
-            }
-            if (tempJpeg != null && tempJpeg.exists()) {
-                tempJpeg.delete();
-            }
+            if (tempHeic != null && tempHeic.exists()) tempHeic.delete();
+            if (tempPng != null && tempPng.exists()) tempPng.delete();
+            if (tempJpeg != null && tempJpeg.exists()) tempJpeg.delete();
         }
     }
 
@@ -110,5 +129,4 @@ public final class MagickBridge {
         }
         return false;
     }
-
 }
