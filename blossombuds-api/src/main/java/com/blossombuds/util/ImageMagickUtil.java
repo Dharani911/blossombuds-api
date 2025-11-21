@@ -20,7 +20,7 @@ public final class ImageMagickUtil {
 
     /** Return the ImageMagick CLI. Adjust if you need a full path or IM6's "convert". */
     public static String magickCmd() {
-        return "magick"; // IM7 on Windows/macOS/Linux; change to "convert" if you use IM6
+        return "convert"; // IM7 on Windows/macOS/Linux; change to "convert" if you use IM6
     }
 
     static void execOrThrow(String[] cmd) throws IOException, InterruptedException {
