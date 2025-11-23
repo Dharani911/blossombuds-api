@@ -2,6 +2,7 @@
 import React, { useMemo, useState } from "react";
 import { requestPasswordReset } from "../api/authReset";
 import { Link, useLocation } from "react-router-dom";
+import logo from "../../assets/BB_logo.svg";
 
 function isEmail(v: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
@@ -51,7 +52,7 @@ export default function ForgotPasswordPage() {
       <div className="fp-card card fade-in" role="dialog" aria-modal="true" aria-labelledby="fp-title">
         <div className="fp-hd">
           <div className="brand">
-            <img src="/src/assets/BB_logo.svg" alt="" className="brand-logo" />
+            <img src={logo} alt="" className="brand-logo" />
             <div className="brand-text">Blossom Buds Floral Artistry</div>
           </div>
         </div>

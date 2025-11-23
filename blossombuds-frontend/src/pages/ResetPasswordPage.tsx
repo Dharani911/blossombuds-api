@@ -2,6 +2,7 @@
 import React, { useMemo, useState } from "react";
 import { useSearchParams, Link, useNavigate, useLocation } from "react-router-dom";
 import { confirmPasswordReset } from "../api/authReset";
+import logo from "../../assets/BB_logo.svg";
 
 function validatePassword(pw: string) {
   if (!pw || pw.length < 8) return "Password must be at least 8 characters.";
@@ -175,7 +176,7 @@ const [showPw2, setShowPw2] = useState(false);
       <div className="rp-card card fade-in" role="dialog" aria-modal="true" aria-labelledby="rp-title">
         <div className="rp-hd">
           <div className="brand">
-            <img src="/src/assets/BB_logo.svg" alt="" className="brand-logo" />
+            <img src={logo} alt="" className="brand-logo" />
             <div className="brand-text">Blossom Buds Floral Artistry</div>
           </div>
         </div>

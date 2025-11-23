@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { customerLogin } from "../../api/auth";
 import { useAuth } from "../../app/AuthProvider";
 import { useNavigate, useLocation, Link } from "react-router-dom";
+import logo from "../../assets/BB_logo.svg";
 
 export default function LoginModal() {
   const nav = useNavigate();
@@ -111,7 +112,7 @@ export default function LoginModal() {
         <div ref={sheetRef} className="sheet sheet-in" onClick={(e)=>e.stopPropagation()}>
           <header className="am-head">
             <div className="brand">
-              <img src="/src/assets/BB_logo.svg" alt="" />
+              <img src={logo} alt="" />
               <div className="brand-name">
                 <span className="big">Blossom Buds</span>
                 <span className="small">Floral Artistry</span>

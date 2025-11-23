@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { customerRegister } from "../../api/auth";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "../../app/AuthProvider";
+import logo from "../../assets/BB_logo.svg";
 
 export default function RegisterModal() {
   const nav = useNavigate();
@@ -86,7 +87,7 @@ export default function RegisterModal() {
         <div ref={sheetRef} className="sheet" onClick={(e)=>e.stopPropagation()}>
           <header className="am-head">
             <div className="brand">
-              <img src="/src/assets/BB_logo.svg" alt="" />
+              <img src={logo} alt="" />
               <div className="brand-name">
                 <span className="big">Blossom Buds</span>
                 <span className="small">Floral Artistry</span>
