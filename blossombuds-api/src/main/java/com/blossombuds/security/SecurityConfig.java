@@ -140,7 +140,7 @@ public class SecurityConfig {
         cfg.setExposedHeaders(List.of("Authorization"));
 
         // IMPORTANT: when using "*" you CANNOT allow credentials
-        cfg.setAllowCredentials(false);
+        cfg.setAllowCredentials(true);
 
         cfg.setMaxAge(3600L);
 
