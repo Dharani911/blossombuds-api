@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import "cropperjs/dist/cropper.css";
 import Cropper from "cropperjs";
-import heic2any from "heic2any";
+
 
 import adminHttp from "../../api/adminHttp";
 import {
