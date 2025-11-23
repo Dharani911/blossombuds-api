@@ -296,20 +296,18 @@ export default function AdminFeatureImagesSetting() {
   }
 
   async function doCropAndUpload() {
-    const c = cropperRef.current;
-    if (!c) return;
+    if (!cropperRef.current) return;
 
+    setBusy(true);
     try {
-      setBusy(true);
-
-      const canvas = c.getCroppedCanvas({
+      const canvas = cropperRef.current.getCroppedCanvas({
         width: 1920,
         height: 1080,
         imageSmoothingEnabled: true,
         imageSmoothingQuality: "high",
       });
 
-      // 1) Convert to Blob
+      // 1) Wrap toBlob in a Promise properly
       const blob = await new Promise<Blob>((resolve, reject) => {
         canvas.toBlob(
           (b) => {
@@ -324,7 +322,7 @@ export default function AdminFeatureImagesSetting() {
         );
       });
 
-      // 2) Build form data
+      // 2) Build FormData
       const base = (originalName.replace(/\.[^.]+$/, "") || "image") + "_16x9";
       const fname = `${base}.jpg`;
 
@@ -333,22 +331,29 @@ export default function AdminFeatureImagesSetting() {
       fd.append("altText", "");
       fd.append("sortOrder", String(items.length));
 
-      // DO NOT set Content-Type manually (axios sets boundary)
+      // 3) Call backend
       const { data } = await adminHttp.post<FeatureImage>(
         "/api/settings/admin/feature-images",
-        fd
+        fd,
+        { headers: { "Content-Type": "multipart/form-data" } }
       );
 
+      // 4) Update list + close
       setItems((prev) => [...prev, data].sort(cmp));
       bumpToast("Uploaded");
       closeCropper();
     } catch (err: any) {
-      console.error("Crop & upload failed:", err);
-      bumpToast(err?.response?.data?.message || err?.message || "Upload failed");
+      console.error("Crop & Upload failed", err);
+      bumpToast(
+        err?.response?.data?.message ||
+        err?.message ||
+        "Upload failed"
+      );
     } finally {
       setBusy(false);
     }
   }
+
 
 
 
