@@ -1,5 +1,6 @@
 // src/components/home/Hero.tsx
 import React, { useEffect, useRef, useState } from "react";
+import { apiUrl } from "../../api/base";
 import { Link } from "react-router-dom";
 
 /** Fallbacks if API returns nothing */
@@ -28,28 +29,45 @@ export default function Hero() {
     let alive = true;
     (async () => {
       try {
-        const res = await fetch(apiUrl(ENDPOINT, {
-          method: "GET",
-          credentials: "include",
-          headers: { Accept: "application/json" },
-        }));
+        const res = await fetch(
+          apiUrl(ENDPOINT),
+          {
+            method: "GET",
+            credentials: "include",
+            headers: { Accept: "application/json" },
+          }
+        );
+
         if (!res.ok) {
           if (alive) setSlides([]);
           return;
         }
+
         const json = (await res.json()) as FeatureImageDto[];
+        console.log("feature images JSON", json); // ← TEMP: see what backend returns
+
         const usable = (Array.isArray(json) ? json : [])
-          .filter((x) => !!x?.url)
+          .filter((x) => !!x?.url) // make sure backend is actually sending 'url'
           .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-          .map((x) => ({ url: normalizeUrlForPhone(x.url), alt: (x.altText || "").trim() }))
+          .map((x) => ({
+            url: normalizeUrlForPhone(x.url),
+            alt: (x.altText || "").trim(),
+          }))
           .filter((x) => !!x.url);
+
+        console.log("usable slides", usable);      // ← TEMP
+
         if (alive) setSlides(usable);
-      } catch {
+      } catch (e) {
+        console.error("feature images load failed", e);
         if (alive) setSlides([]);
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, []);
+
 
   // Crossfade every 6s
   useEffect(() => {
