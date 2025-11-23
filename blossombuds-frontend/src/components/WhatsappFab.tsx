@@ -1,6 +1,6 @@
 // src/components/WhatsappFab.tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { useWhatsAppNumber, waHrefFor } from "../lib/whatsapp";
+import { useWhatsAppNumber, waHrefFor } from "../lib/Whatsapp";
 
 type View = "menu" | "general" | "custom" | "tracking";
 
