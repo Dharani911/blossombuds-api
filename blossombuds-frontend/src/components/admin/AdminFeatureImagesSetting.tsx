@@ -4,6 +4,8 @@ import "cropperjs/dist/cropper.css";
 import Cropper from "cropperjs";
 
 
+
+
 import adminHttp from "../../api/adminHttp";
 import {
   listFeatureImagesPublic,
@@ -54,35 +56,21 @@ export default function AdminFeatureImagesSetting() {
 
   async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
-    e.target.value = "";
+    e.target.value = ""; // allow picking the same file again
     if (!f) return;
 
     try {
       const name = f.name || "image";
       setOriginalName(name);
 
-      const isHeic =
-        /image\/hei[cf]/i.test(f.type) ||
-        name.toLowerCase().endsWith(".heic") ||
-        name.toLowerCase().endsWith(".heif");
-
-      let blob: Blob = f;
-
-      // Convert HEIC/HEIF → JPEG so the browser can display & crop it
-      if (isHeic) {
-        const converted = await heic2any({
-          blob: f,
-          toType: "image/jpeg",
-          quality: 0.98,
-        });
-        blob = Array.isArray(converted) ? converted[0] : converted;
-      }
+      // Just use the original file — no HEIC conversion
+      const blob: Blob = f;
 
       if (cropSrc) URL.revokeObjectURL(cropSrc);
       const url = URL.createObjectURL(blob);
-      // show modal; Cropper will be created only after <img> onLoad fires
+
+      // Show modal; Cropper is created after <img> onLoad
       setCropSrc(url);
-      // reset flags for a clean init
       isReadyRef.current = false;
       setZoomPct(100);
     } catch (err: any) {
@@ -321,7 +309,7 @@ export default function AdminFeatureImagesSetting() {
         imageSmoothingQuality: "high",
       });
 
-      // 1) Get blob first
+      // 1) Convert to Blob
       const blob = await new Promise<Blob>((resolve, reject) => {
         canvas.toBlob(
           (b) => {
@@ -345,11 +333,10 @@ export default function AdminFeatureImagesSetting() {
       fd.append("altText", "");
       fd.append("sortOrder", String(items.length));
 
-      // ❗ IMPORTANT: let the browser set the boundary
+      // DO NOT set Content-Type manually (axios sets boundary)
       const { data } = await adminHttp.post<FeatureImage>(
         "/api/settings/admin/feature-images",
         fd
-        // do NOT manually set Content-Type: axios will set multipart/form-data with boundary
       );
 
       setItems((prev) => [...prev, data].sort(cmp));
@@ -362,6 +349,7 @@ export default function AdminFeatureImagesSetting() {
       setBusy(false);
     }
   }
+
 
 
   function closeCropper() {
@@ -382,7 +370,13 @@ export default function AdminFeatureImagesSetting() {
         <h3>Home Carousel Images</h3>
         <div className="actions">
           <label className={`pick ${busy ? "disabled" : ""}`}>
-            <input type="file" accept="image/*,.heic,.heif" onChange={onPick} disabled={busy} />
+            <input
+              type="file"
+              accept="image/*"
+              onChange={onPick}
+              disabled={busy}
+            />
+
             + Upload
           </label>
           <button className="ghost" onClick={saveOrder} disabled={busy}>
