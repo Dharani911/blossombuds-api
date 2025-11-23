@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from "react";
 import { useSearchParams, Link, useNavigate, useLocation } from "react-router-dom";
 import { confirmPasswordReset } from "../api/authReset";
-import logo from "../../assets/BB_logo.svg";
+import logo from "../assets/BB_logo.svg";
 
 function validatePassword(pw: string) {
   if (!pw || pw.length < 8) return "Password must be at least 8 characters.";

@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from "react";
 import { requestPasswordReset } from "../api/authReset";
 import { Link, useLocation } from "react-router-dom";
-import logo from "../../assets/BB_logo.svg";
+import logo from "../assets/BB_logo.svg";
 
 function isEmail(v: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
