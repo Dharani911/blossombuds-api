@@ -308,55 +308,61 @@ export default function AdminFeatureImagesSetting() {
   }
 
   async function doCropAndUpload() {
-    if (!cropperRef.current) return;
+    const c = cropperRef.current;
+    if (!c) return;
 
     try {
       setBusy(true);
 
-      const canvas = cropperRef.current.getCroppedCanvas({
+      const canvas = c.getCroppedCanvas({
         width: 1920,
         height: 1080,
         imageSmoothingEnabled: true,
         imageSmoothingQuality: "high",
       });
 
-      await new Promise<void>((resolve, reject) => {
+      // 1) Get blob first
+      const blob = await new Promise<Blob>((resolve, reject) => {
         canvas.toBlob(
-          async (blob) => {
-            if (!blob) {
+          (b) => {
+            if (!b) {
               reject(new Error("Could not create image blob"));
-              return;
+            } else {
+              resolve(b);
             }
-            const base = (originalName.replace(/\.[^.]+$/, "") || "image") + "_16x9";
-            const fname = `${base}.jpg`;
-
-            const fd = new FormData();
-            fd.append("file", new File([blob], fname, { type: "image/jpeg" }));
-            fd.append("altText", "");
-            fd.append("sortOrder", String(items.length));
-
-            const { data } = await adminHttp.post<FeatureImage>(
-              "/api/settings/admin/feature-images",
-              fd,
-              { headers: { "Content-Type": "multipart/form-data" } }
-            );
-
-            setItems((prev) => [...prev, data].sort(cmp));
-            resolve();
           },
           "image/jpeg",
           0.92
         );
       });
 
+      // 2) Build form data
+      const base = (originalName.replace(/\.[^.]+$/, "") || "image") + "_16x9";
+      const fname = `${base}.jpg`;
+
+      const fd = new FormData();
+      fd.append("file", new File([blob], fname, { type: "image/jpeg" }));
+      fd.append("altText", "");
+      fd.append("sortOrder", String(items.length));
+
+      // ❗ IMPORTANT: let the browser set the boundary
+      const { data } = await adminHttp.post<FeatureImage>(
+        "/api/settings/admin/feature-images",
+        fd
+        // do NOT manually set Content-Type: axios will set multipart/form-data with boundary
+      );
+
+      setItems((prev) => [...prev, data].sort(cmp));
       bumpToast("Uploaded");
       closeCropper();
     } catch (err: any) {
+      console.error("Crop & upload failed:", err);
       bumpToast(err?.response?.data?.message || err?.message || "Upload failed");
     } finally {
       setBusy(false);
     }
   }
+
 
   function closeCropper() {
     destroyCropper();
