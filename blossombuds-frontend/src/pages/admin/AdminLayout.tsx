@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { adminLogout } from "../../api/adminAuth";
-import Logo from "../../assets/BB_Logo.svg";
+import Logo from "../../assets/BB_logo.svg";
 
 const PRIMARY = "#4A4F41";
 const ACCENT  = "#F05D8B";
