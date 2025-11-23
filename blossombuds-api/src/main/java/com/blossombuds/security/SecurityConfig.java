@@ -131,53 +131,24 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cfg = new CorsConfiguration();
 
-        // Keep localhost for desktop dev
-        cfg.setAllowedOrigins(List.of(
-                "http://localhost:3000",
-                "http://localhost:5173",
-                "http://localhost:5174",
-                "http://127.0.0.1:3000",
-                "http://127.0.0.1:5173",
-                "https://blossombuds-frontend.vercel.app",
-                "https://blossombuds-floral-artistry.com"
-        ));
+        // TEMP: allow all origins while we debug
+        cfg.setAllowedOriginPatterns(List.of("*"));
+        // (don't use setAllowedOrigins at the same time)
 
-        // NEW: allow Vite when served on your LAN IP / mDNS host
-        cfg.setAllowedOriginPatterns(List.of(
-                "http://192.168.*.*:5173",
-                "http://10.*.*.*:5173",
-                "http://172.16.*.*:5173",
-                "http://172.17.*.*:5173",
-                "http://172.18.*.*:5173",
-                "http://172.19.*.*:5173",
-                "http://172.20.*.*:5173",
-                "http://172.21.*.*:5173",
-                "http://172.22.*.*:5173",
-                "http://172.23.*.*:5173",
-                "http://172.24.*.*:5173",
-                "http://172.25.*.*:5173",
-                "http://172.26.*.*:5173",
-                "http://172.27.*.*:5173",
-                "http://172.28.*.*:5173",
-                "http://172.29.*.*:5173",
-                "http://172.30.*.*:5173",
-                "http://172.31.*.*:5173",
-                "http://*.local:5173",
-                "http://*.lan:5173",
-                "https://blossombuds-frontend.vercel.app",
-                "https://blossom-buds-floral-artistry.com"
-        ));
-
-        cfg.setAllowedMethods(List.of("GET","POST","PUT","DELETE","PATCH","OPTIONS"));
-        cfg.setAllowedHeaders(List.of("*")); // simpler for dev; or list explicit headers
+        cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
+        cfg.setAllowedHeaders(List.of("*"));
         cfg.setExposedHeaders(List.of("Authorization"));
-        cfg.setAllowCredentials(true);
+
+        // IMPORTANT: when using "*" you CANNOT allow credentials
+        cfg.setAllowCredentials(false);
+
         cfg.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource src = new UrlBasedCorsConfigurationSource();
         src.registerCorsConfiguration("/**", cfg);
         return src;
     }
+
 
 
     @Bean
