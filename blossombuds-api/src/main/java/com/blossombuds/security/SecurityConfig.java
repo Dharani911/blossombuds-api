@@ -138,7 +138,7 @@ public class SecurityConfig {
                 "http://localhost:5174",
                 "http://127.0.0.1:3000",
                 "http://127.0.0.1:5173",
-                "https://*.vercel.app",
+                "https://blossombuds-frontend.vercel.app",
                 "https://blossombuds-floral-artistry.com"
         ));
 
@@ -164,7 +164,7 @@ public class SecurityConfig {
                 "http://172.31.*.*:5173",
                 "http://*.local:5173",
                 "http://*.lan:5173",
-                "https://*.vercel.app",
+                "https://blossombuds-frontend.vercel.app",
                 "https://blossom-buds-floral-artistry.com"
         ));
 
