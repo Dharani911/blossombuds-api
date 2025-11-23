@@ -1,7 +1,7 @@
 // src/components/Footer.tsx
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import Logo from "../assets/BB_Logo.svg";
+import Logo from "../assets/BB_logo.svg";
 
 /** Fetch a setting by key directly (robust to JSON or plain text) */
 async function fetchSettingValue(key: string): Promise<string> {

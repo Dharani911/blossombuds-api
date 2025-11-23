@@ -3,7 +3,7 @@ import { NavLink, Link, useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../app/AuthProvider";
 import { useCart } from "../app/CartProvider";
-import Logo from "../assets/BB_Logo.svg";
+import Logo from "../assets/BB_logo.svg";
 
 type LinkDef = { to: string; label: string; exact?: boolean };
 
