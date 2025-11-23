@@ -1,7 +1,7 @@
 import React from "react";
 import Hero from "../components/home/Hero";
 import FeatureTiles from "../components/home/FeatureTiles";
-import ProductShowcase from "../components/home/ProductShowcase";
+import ProductShowcase from "../components/home/ProductShowCase";
 import Testimonials from "../components/home/Testimonials";
 import CustomOrderCTA from "../components/home/CustomOrderCTA";
 // Note: HomeCarousel import kept (unused) to avoid logic changes
