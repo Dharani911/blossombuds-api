@@ -6,9 +6,9 @@ import com.blossombuds.dto.*;
 import com.blossombuds.repository.*;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
-import com.blossombuds.util.ImageMagickUtil;
+
 import com.blossombuds.util.ImageUtil;
-import com.blossombuds.util.MagickBridge;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.dao.DuplicateKeyException;
@@ -58,8 +58,6 @@ public class CatalogService {
     private final ProductOptionRepository optionRepo;
     private final ProductOptionValueRepository valueRepo;
 
-    @Value("${app.imagemagick.cmd}")
-    private String magickCmd;
 
     private final AmazonS3 r2Client;
     @Value("${cloudflare.r2.bucket}")
@@ -67,11 +65,6 @@ public class CatalogService {
 
     @Value("${cloudflare.r2.endpoint}")
     private String r2Endpoint;
-
-    @PostConstruct
-    public void logMagickCmd() {
-        log.info("[MAGICK][CONFIG] magickCmd='{}'", magickCmd);
-    }
 
 
     private static final long MAX_BYTES = 10L * 1024 * 1024;
@@ -424,7 +417,8 @@ public class CatalogService {
     // ───────────────── addProductImage (REPLACE) ─────────────────
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
-    public ProductImage addProductImage(Long productId, MultipartFile file, String altText, Integer sortOrder) throws IOException, InterruptedException {
+    public ProductImage addProductImage(Long productId, MultipartFile file, String altText, Integer sortOrder)
+            throws IOException {
         Instant t0 = Instant.now();
 
         log.info("[IMAGE][ADD] productId={} file='{}' type='{}' size={}",
@@ -438,98 +432,70 @@ public class CatalogService {
             throw new IllegalArgumentException("File cannot be null or empty");
         }
 
-        // Accept HEIC sent as octet-stream if extension looks like an image
-        try {
-            validateFile(file);
-        } catch (IllegalArgumentException iae) {
-            String ct = file.getContentType() != null ? file.getContentType() : "";
-            String fn = file.getOriginalFilename() != null ? file.getOriginalFilename().toLowerCase() : "";
-            boolean extOk = fn.endsWith(".heic") || fn.endsWith(".heif") || fn.endsWith(".jpg") ||
-                    fn.endsWith(".jpeg") || fn.endsWith(".png") || fn.endsWith(".webp") ||
-                    fn.endsWith(".tif") || fn.endsWith(".tiff") || fn.endsWith(".bmp") || fn.endsWith(".gif");
-            if (!"application/octet-stream".equalsIgnoreCase(ct) || !extOk) {
-                log.warn("[IMAGE][ADD][FAIL] Invalid content-type/ext: ct={} fn={}", ct, fn);
-                throw iae;
-            }
-            log.info("[IMAGE][ADD] Proceeding with octet-stream due to image-like extension.");
-        }
+        // Basic size/type validation (no HEIC now)
+        validateFile(file);
 
-        // 1. Normalize to JPEG (HEIC-safe)
-        byte[] normalizedJpeg;
-        try {
-            normalizedJpeg = ImageMagickUtil.ensureJpeg(file.getBytes(), file.getOriginalFilename(), file.getContentType());
-            log.info("[IMAGE][ADD] ensureJpeg -> {} bytes", normalizedJpeg.length);
-        } catch (Exception e) {
-            if (MagickBridge.looksLikeHeic(file.getContentType(), file.getOriginalFilename())) {
-                normalizedJpeg = MagickBridge.heicToJpeg(file.getBytes(), magickCmd);
-                log.info("[IMAGE][ADD] heicToJpeg -> {} bytes", normalizedJpeg.length);
-            } else {
-                log.error("[IMAGE][ADD][FAIL] Conversion error: {}", e.toString());
-                throw new IOException("Image conversion failed: " + e.getMessage(), e);
-            }
+        // 1) Decode using pure Java
+        BufferedImage original;
+        try (InputStream in = file.getInputStream()) {
+            original = ImageIO.read(in);
         }
-
-        // 2. Decode and resize
-        BufferedImage decoded = ImageMagickUtil.readImage(normalizedJpeg);
-        if (decoded == null) {
+        if (original == null) {
             log.warn("[IMAGE][ADD][FAIL] Unsupported image after decode");
-            throw new IllegalArgumentException("Uploaded file is not a supported image");
+            throw new IllegalArgumentException("Uploaded file is not a supported image (JPG, PNG, WebP…).");
         }
 
-        BufferedImage base = ImageUtil.fitWithin(decoded, ImageUtil.MAX_DIM);
-        BufferedImage stamped = watermarkLogoOrText(base, WATERMARK_IMG, "BLOSSOM BUDS");
+        // 2) Resize to MAX_DIM
+        BufferedImage resized = ImageUtil.fitWithin(original, ImageUtil.MAX_DIM);
 
-        // 3. Compress
-        byte[] finalBytes;
-        try {
-            finalBytes = ImageMagickUtil.targetSizeJpeg(stamped);
-            if (finalBytes.length > normalizedJpeg.length) {
-                finalBytes = toJpegBytes(stamped, 0.82f);
-            }
-        } catch (Exception ce) {
-            log.warn("[IMAGE][ADD] Compression fallback: {}", ce.toString());
-            finalBytes = toJpegBytes(stamped, 0.82f);
-        }
+        // 3) Apply watermark (logo if present, else text grid)
+        BufferedImage stamped = watermarkLogoOrText(resized, WATERMARK_IMG, "BLOSSOM BUDS");
 
-        // 4. Upload to R2
+        // 4) Compress to JPEG using your existing helper
+        byte[] finalBytes = ImageUtil.toJpegUnderCap(stamped);
+        log.info("[IMAGE][ADD] final JPEG size={} bytes", finalBytes.length);
+
+        // 5) Upload to R2
         String key = "products/" + UUID.randomUUID() + ".jpg";
         ObjectMetadata meta = new ObjectMetadata();
         meta.setContentType("image/jpeg");
         meta.setContentLength(finalBytes.length);
-        try {
-            InputStream in = new ByteArrayInputStream(finalBytes);
+
+        try (InputStream in = new ByteArrayInputStream(finalBytes)) {
             r2Client.putObject(new PutObjectRequest(bucketName, key, in, meta));
-            String fileUrl = r2Endpoint + "/" + bucketName + "/" + key;
-            log.info("[IMAGE][ADD][UPLOAD][OK] key={} bytes={}", key, finalBytes.length);
-
-            // 5. Persist
-            ProductImage imgRow = new ProductImage();
-            imgRow.setProduct(productRepo.getReferenceById(productId));
-            imgRow.setPublicId(key);
-            imgRow.setUrl(fileUrl);
-            imgRow.setWatermarkVariantUrl(fileUrl);
-            imgRow.setAltText(altText);
-            imgRow.setSortOrder(sortOrder != null ? sortOrder : 0);
-            imgRow.setActive(true);
-
-            ProductImage saved = imageRepo.save(imgRow);
-            log.info("[IMAGE][ADD][OK] id={} productId={} elapsedMs={}",
-                    saved.getId(), productId, Duration.between(t0, Instant.now()).toMillis());
-
-            return saved;
-        } catch (Exception ex) {
-            log.error("[IMAGE][ADD][FAIL] R2 upload error: {}", ex.toString());
-            throw new IOException("Failed to upload image to R2: " + ex.getMessage(), ex);
         }
+
+        String fileUrl = r2Endpoint + "/" + bucketName + "/" + key;
+        log.info("[IMAGE][ADD][UPLOAD][OK] key={} bytes={}", key, finalBytes.length);
+
+        // 6) Persist row
+        ProductImage imgRow = new ProductImage();
+        imgRow.setProduct(productRepo.getReferenceById(productId));
+        imgRow.setPublicId(key);
+        imgRow.setUrl(fileUrl);
+        imgRow.setWatermarkVariantUrl(fileUrl);
+        imgRow.setAltText(altText);
+        imgRow.setSortOrder(sortOrder != null ? sortOrder : 0);
+        imgRow.setActive(true);
+
+        ProductImage saved = imageRepo.save(imgRow);
+        log.info("[IMAGE][ADD][OK] id={} productId={} elapsedMs={}",
+                saved.getId(), productId, Duration.between(t0, Instant.now()).toMillis());
+
+        return saved;
     }
+
 
     // ──────────────── updateProductImage (REPLACE) ────────────────
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public ProductImage updateProductImage(ProductImageDto dto, MultipartFile newFile)
-            throws IOException, InterruptedException {
+            throws IOException {
         Instant t0 = Instant.now();
-        log.info("[IMAGE][UPDATE] id={} productId={} replaceFile={}", (dto!=null?dto.getId():null), (dto!=null?dto.getProductId():null), (newFile!=null && !newFile.isEmpty()));
+        log.info("[IMAGE][UPDATE] id={} productId={} replaceFile={}",
+                (dto != null ? dto.getId() : null),
+                (dto != null ? dto.getProductId() : null),
+                (newFile != null && !newFile.isEmpty()));
 
         if (dto == null || dto.getId() == null || dto.getProductId() == null)
             throw new IllegalArgumentException("Image id and productId are required");
@@ -539,38 +505,34 @@ public class CatalogService {
                     log.warn("[IMAGE][UPDATE][MISS] id={}", dto.getId());
                     return new IllegalArgumentException("Image not found: " + dto.getId());
                 });
-        if (!imgRow.getProduct().getId().equals(dto.getProductId()))
-        {  log.warn("[IMAGE][UPDATE][FAIL] Image not under product imageId={} productId={}", dto.getId(), dto.getProductId());
+
+        if (!imgRow.getProduct().getId().equals(dto.getProductId())) {
+            log.warn("[IMAGE][UPDATE][FAIL] Image not under product imageId={} productId={}", dto.getId(), dto.getProductId());
             throw new IllegalArgumentException("Image does not belong to product " + dto.getProductId());
         }
+
+        // Optional new file → process like addProductImage
         if (newFile != null && !newFile.isEmpty()) {
-            validateFile(newFile); // ← use the defined validator
+            validateFile(newFile);
 
-            byte[] normalizedJpeg = convertAnyToJpegBytes(
-                    newFile.getBytes(),
-                    newFile.getOriginalFilename(),
-                    newFile.getContentType()
-            );
-
-            BufferedImage decoded = ImageMagickUtil.readImage(normalizedJpeg);
-            if (decoded == null){log.warn("[IMAGE][UPDATE][FAIL] Unsupported image after decode");
-                throw new IllegalArgumentException("Uploaded file is not a supported image");
+            BufferedImage original;
+            try (InputStream in = newFile.getInputStream()) {
+                original = ImageIO.read(in);
             }
-            BufferedImage base = ImageUtil.fitWithin(decoded, ImageUtil.MAX_DIM);
-            BufferedImage stamped = watermarkLogoOrText(base, WATERMARK_IMG, "BLOSSOM BUDS");
-
-            byte[] finalBytes;
-            try {
-                finalBytes = ImageMagickUtil.targetSizeJpeg(stamped);
-            } catch (Exception e) {
-                log.warn("[IMAGE][UPDATE] Compression fallback: {}", e.toString());
-                finalBytes = toJpegBytes(stamped, 0.82f);
+            if (original == null) {
+                log.warn("[IMAGE][UPDATE][FAIL] Unsupported image after decode");
+                throw new IllegalArgumentException("Uploaded file is not a supported image (JPG, PNG, WebP…).");
             }
+
+            BufferedImage resized = ImageUtil.fitWithin(original, ImageUtil.MAX_DIM);
+            BufferedImage stamped = watermarkLogoOrText(resized, WATERMARK_IMG, "BLOSSOM BUDS");
+            byte[] finalBytes = ImageUtil.toJpegUnderCap(stamped);
 
             String key = "products/" + UUID.randomUUID() + ".jpg";
             ObjectMetadata meta = new ObjectMetadata();
             meta.setContentType("image/jpeg");
             meta.setContentLength(finalBytes.length);
+
             try (InputStream in = new ByteArrayInputStream(finalBytes)) {
                 r2Client.putObject(new PutObjectRequest(bucketName, key, in, meta));
             }
@@ -578,6 +540,7 @@ public class CatalogService {
             String url = r2Endpoint + "/" + bucketName + "/" + key;
             imgRow.setPublicId(key);
             imgRow.setUrl(url);
+            imgRow.setWatermarkVariantUrl(url);
             log.info("[IMAGE][UPDATE][UPLOAD][OK] key='{}' bytes={}", key, finalBytes.length);
         }
 
@@ -586,9 +549,11 @@ public class CatalogService {
         if (dto.getActive() != null) imgRow.setActive(dto.getActive());
 
         ProductImage saved = imageRepo.save(imgRow);
-        log.info("[IMAGE][UPDATE][OK] id={} elapsedMs={}", saved.getId(), Duration.between(t0, Instant.now()).toMillis());
+        log.info("[IMAGE][UPDATE][OK] id={} elapsedMs={}",
+                saved.getId(), Duration.between(t0, Instant.now()).toMillis());
         return saved;
     }
+
 
     /**
      * Tiles your PNG logo (if present) diagonally with low opacity.
@@ -712,7 +677,7 @@ public class CatalogService {
         return fallback;
     }
 
-    private byte[] convertAnyToJpegBytes(byte[] raw, String filename, String contentType) throws IOException {
+    /*private byte[] convertAnyToJpegBytes(byte[] raw, String filename, String contentType) throws IOException {
         String ct = (contentType == null || contentType.isBlank())
                 ? guessContentType(filename, "application/octet-stream")
                 : contentType;
@@ -731,7 +696,7 @@ public class CatalogService {
             log.error("[IMAGE][CONVERT][FAIL] {}", primaryFail.toString());
             throw new IOException("Image conversion failed. " + primaryFail.getMessage(), primaryFail);
         }
-    }
+    }*/
 
     // --- 1) Presign a browser PUT to R2 (10 min)
     public PresignResponse presignPut(String filename, String contentType) {
@@ -799,7 +764,7 @@ public class CatalogService {
         return toResponse(saved);
     }
 
-    private byte[] toJpegBytes(BufferedImage image, float quality) throws IOException {
+   /* private byte[] toJpegBytes(BufferedImage image, float quality) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         ImageWriter jpgWriter = ImageIO.getImageWritersByFormatName("jpg").next();
         ImageWriteParam param = jpgWriter.getDefaultWriteParam();
@@ -813,7 +778,7 @@ public class CatalogService {
             jpgWriter.dispose();
         }
         return baos.toByteArray();
-    }
+    }*/
 
     /** Draw a diagonal tiled text watermark onto an RGB copy and return it. */
     private BufferedImage applyTiledTextWatermark(
@@ -1137,17 +1102,17 @@ public class CatalogService {
                 name.endsWith(".jpg")  || name.endsWith(".jpeg") ||
                         name.endsWith(".png")  || name.endsWith(".webp") ||
                         name.endsWith(".gif")  || name.endsWith(".bmp")  ||
-                        name.endsWith(".tif")  || name.endsWith(".tiff") ||
-                        name.endsWith(".heic") || name.endsWith(".heif");
+                        name.endsWith(".tif")  || name.endsWith(".tiff");
 
-        boolean typeOk = ct.startsWith("image/") || extOk;
+        boolean typeOk = ct.startsWith("image/") && extOk;
 
         if (!typeOk) {
-            log.warn("[FILE][VALIDATE][FAIL] Not an image ct='{}' name='{}'", ct, name);
-            throw new IllegalArgumentException("Only image files are supported (JPG, PNG, WebP, HEIC…)");
+            log.warn("[FILE][VALIDATE][FAIL] Not an image or unsupported type ct='{}' name='{}'", ct, name);
+            throw new IllegalArgumentException("Only JPG, PNG, WebP, GIF, BMP, TIFF images are supported (no HEIC).");
         }
         log.debug("[FILE][VALIDATE][OK] name='{}' ct='{}' size={}", name, ct, file.getSize());
     }
+
     // ───────────────────── Featured Products ─────────────────────
 
     /** Page only featured (active=true via @Where). */

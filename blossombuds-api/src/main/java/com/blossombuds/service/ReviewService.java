@@ -10,8 +10,7 @@ import com.blossombuds.dto.*;
 import com.blossombuds.repository.CustomerRepository;
 import com.blossombuds.repository.ProductReviewImageRepository;
 import com.blossombuds.repository.ProductReviewRepository;
-import com.blossombuds.util.ImageMagickUtil;
-import com.blossombuds.util.MagickBridge;
+import com.blossombuds.util.ImageUtil;
 import jakarta.persistence.criteria.Subquery;
 import jakarta.validation.Valid;
 import lombok.Data;
@@ -31,6 +30,8 @@ import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.URL;
 import java.time.Duration;
@@ -53,10 +54,9 @@ public class ReviewService {
     @Value("${cloudflare.r2.bucket}")   private String bucketName;
     @Value("${cloudflare.r2.endpoint}") private String r2Endpoint;
 
-    @Value("${app.imagemagick.cmd}")    private String magickCmd;
 
-    @Value("${reviews.images.alwaysNormalize:true}")
-    private boolean alwaysNormalize;
+
+
 
     private static final long MAX_BYTES = 10L * 1024 * 1024;
 
@@ -183,7 +183,7 @@ public class ReviewService {
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
     public ProductReviewImage uploadImage(Long reviewId, MultipartFile file, String actor)
-            throws IOException, InterruptedException {
+            throws IOException {
         log.info("[REVIEW][UPLOAD] Uploading image for reviewId={} actor={} filename={}",
                 reviewId, actor, file != null ? file.getOriginalFilename() : "null");
 
@@ -194,29 +194,36 @@ public class ReviewService {
                 .orElseThrow(() -> new IllegalArgumentException("Review not found: " + reviewId));
         ensureActorIsAdminOrCustomerSelf(actor, r.getCustomerId());
 
-        List<ProductReviewImage> existing = imageRepo.findByReviewIdAndActiveTrueOrderBySortOrderAsc(reviewId);
-        if (existing.size() >= 3) throw new IllegalStateException("Maximum 3 images per review");
+        List<ProductReviewImage> existing =
+                imageRepo.findByReviewIdAndActiveTrueOrderBySortOrderAsc(reviewId);
+        if (existing.size() >= 3) {
+            throw new IllegalStateException("Maximum 3 images per review");
+        }
 
-        // Validate like CatalogService
+        // Validate type/size (no HEIC)
         validateFile(file);
 
-        // Normalize any input → JPEG (HEIC-safe)
-        byte[] normalizedJpeg = convertAnyToJpegBytes(
-                file.getBytes(), file.getOriginalFilename(), file.getContentType()
-        );
+        // Decode using pure Java
+        BufferedImage original;
+        try (InputStream in = file.getInputStream()) {
+            original = ImageIO.read(in);
+        }
+        if (original == null) {
+            throw new IllegalArgumentException(
+                    "Uploaded file is not a supported image (JPG, PNG, WebP, GIF, BMP, TIFF).");
+        }
 
-        // (No watermark for reviews) Optionally cap/compress to reasonable size
-        // If you have ImageMagickUtil.targetSizeJpeg(...) use it; else keep normalizedJpeg
-        try {
-            normalizedJpeg = ImageMagickUtil.targetSizeJpeg(ImageMagickUtil.readImage(normalizedJpeg));
-        } catch (Exception ignore) { /* keep normalizedJpeg */ }
+        // Resize + compress using your ImageUtil
+        BufferedImage resized = ImageUtil.fitWithin(original, ImageUtil.MAX_DIM);
+        byte[] jpegBytes = ImageUtil.toJpegUnderCap(resized);
 
         // Upload to R2 under reviews/{reviewId}/
         String key = "reviews/" + reviewId + "/" + UUID.randomUUID() + ".jpg";
         ObjectMetadata meta = new ObjectMetadata();
         meta.setContentType("image/jpeg");
-        meta.setContentLength(normalizedJpeg.length);
-        try (InputStream in = new ByteArrayInputStream(normalizedJpeg)) {
+        meta.setContentLength(jpegBytes.length);
+
+        try (InputStream in = new ByteArrayInputStream(jpegBytes)) {
             r2Client.putObject(new PutObjectRequest(bucketName, key, in, meta));
         }
         String fileUrl = r2Endpoint + "/" + bucketName + "/" + key;
@@ -228,9 +235,10 @@ public class ReviewService {
         row.setSortOrder(existing.size());
         row.setActive(Boolean.TRUE);
 
-        log.info("[REVIEW][UPLOAD] Image uploaded to key={} size={}B", key, normalizedJpeg.length);
+        log.info("[REVIEW][UPLOAD] Image uploaded to key={} size={}B", key, jpegBytes.length);
         return imageRepo.save(row);
     }
+
 
     // ───── Presign + finalize (browser uploads to temp key; then attach) ─────
 
@@ -253,64 +261,67 @@ public class ReviewService {
 
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
-    public ProductReviewImageDto attachImageFromTempKey(Long reviewId, String tempKey, String actor) throws IOException {
-        log.info("[REVIEW][ATTACH] Attaching image from tempKey={} to reviewId={} by actor={}", tempKey, reviewId, actor);
+    public ProductReviewImageDto attachImageFromTempKey(Long reviewId, String tempKey, String actor)
+            throws IOException {
+        log.info("[REVIEW][ATTACH] Attaching image from tempKey={} to reviewId={} by actor={}",
+                tempKey, reviewId, actor);
+
         if (reviewId == null || !StringUtils.hasText(tempKey))
             throw new IllegalArgumentException("reviewId and key are required");
 
-        var r = reviewRepo.findById(reviewId)
+        ProductReview r = reviewRepo.findById(reviewId)
                 .orElseThrow(() -> new IllegalArgumentException("Review not found: " + reviewId));
         ensureActorIsAdminOrCustomerSelf(actor, r.getCustomerId());
 
-        var existing = imageRepo.findByReviewIdAndActiveTrueOrderBySortOrderAsc(reviewId);
-        if (existing.size() >= 3) throw new IllegalStateException("Maximum 3 images per review");
-
-        // Peek metadata only (no download)
-        var om = r2Client.getObjectMetadata(bucketName, tempKey);
-        String ctMeta = Optional.ofNullable(om.getContentType()).orElse("");
-        String ctGuess = guessContentType(tempKey, "application/octet-stream");
-        String ct = ctMeta.isBlank() ? ctGuess : ctMeta;
-
-        boolean isHeic = "image/heic".equalsIgnoreCase(ct)
-                || tempKey.toLowerCase().endsWith(".heic")
-                || tempKey.toLowerCase().endsWith(".heif");
-
-        String destKey;
-        if (!isHeic) {
-            // FAST PATH: server-side copy, keep format
-            String ext = extFromKey(tempKey);
-            destKey = "reviews/" + reviewId + "/" + UUID.randomUUID() + ext;
-            var copy = new CopyObjectRequest(bucketName, tempKey, bucketName, destKey);
-            var newMeta = new ObjectMetadata();
-            if (!ct.isBlank()) newMeta.setContentType(ct);
-            copy.setNewObjectMetadata(newMeta);
-            r2Client.copyObject(copy);
-            try { r2Client.deleteObject(new DeleteObjectRequest(bucketName, tempKey)); } catch (Exception ignore) {}
-        } else {
-            // HEIC: copy now, convert later (async)
-            destKey = "reviews/" + reviewId + "/" + UUID.randomUUID()
-                    + (tempKey.toLowerCase().endsWith(".heif") ? ".heif" : ".heic");
-            var copy = new CopyObjectRequest(bucketName, tempKey, bucketName, destKey);
-            var newMeta = new ObjectMetadata();
-            newMeta.setContentType("image/heic");
-            copy.setNewObjectMetadata(newMeta);
-            r2Client.copyObject(copy);
-            try { r2Client.deleteObject(new DeleteObjectRequest(bucketName, tempKey)); } catch (Exception ignore) {}
+        List<ProductReviewImage> existing =
+                imageRepo.findByReviewIdAndActiveTrueOrderBySortOrderAsc(reviewId);
+        if (existing.size() >= 3) {
+            throw new IllegalStateException("Maximum 3 images per review");
         }
 
-        var row = new ProductReviewImage();
+        // Download temp object bytes
+        byte[] raw;
+        try (S3Object obj = r2Client.getObject(bucketName, tempKey);
+             InputStream in = obj.getObjectContent();
+             ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            in.transferTo(baos);
+            raw = baos.toByteArray();
+        }
+
+        // Decode & validate as image
+        BufferedImage original = ImageIO.read(new ByteArrayInputStream(raw));
+        if (original == null) {
+            log.warn("[REVIEW][ATTACH][FAIL] Unsupported image tempKey={}", tempKey);
+            throw new IllegalArgumentException(
+                    "Uploaded file is not a supported image (JPG, PNG, WebP, GIF, BMP, TIFF).");
+        }
+
+        // Resize + compress to JPEG
+        BufferedImage resized = ImageUtil.fitWithin(original, ImageUtil.MAX_DIM);
+        byte[] jpegBytes = ImageUtil.toJpegUnderCap(resized);
+
+        String destKey = "reviews/" + reviewId + "/" + UUID.randomUUID() + ".jpg";
+        ObjectMetadata meta = new ObjectMetadata();
+        meta.setContentType("image/jpeg");
+        meta.setContentLength(jpegBytes.length);
+        try (InputStream up = new ByteArrayInputStream(jpegBytes)) {
+            r2Client.putObject(new PutObjectRequest(bucketName, destKey, up, meta));
+        }
+
+        // Best-effort delete temp object
+        try { r2Client.deleteObject(new DeleteObjectRequest(bucketName, tempKey)); }
+        catch (Exception ignore) {
+            log.warn("[REVIEW][ATTACH] Could not delete temp key='{}' (ignored)", tempKey);
+        }
+
+        ProductReviewImage row = new ProductReviewImage();
         row.setReviewId(reviewId);
         row.setPublicId(destKey);
         row.setUrl(r2Endpoint + "/" + bucketName + "/" + destKey);
         row.setSortOrder(existing.size());
         row.setActive(Boolean.TRUE);
-        var saved = imageRepo.save(row);
+        ProductReviewImage saved = imageRepo.save(row);
 
-        if (isHeic) {
-            transcodeHeicToJpegAsync(saved.getId(), destKey);
-        }
-
-        // Return immediately (milliseconds)
         ProductReviewImageDto dto = new ProductReviewImageDto();
         dto.setId(saved.getId());
         dto.setPublicId(saved.getPublicId());
@@ -319,7 +330,8 @@ public class ReviewService {
         log.info("[REVIEW][ATTACH] Image attached at {} and saved with ID {}", destKey, saved.getId());
         return dto;
     }
-    @Async("reviewExecutor")
+
+    /*@Async("reviewExecutor")
     @Transactional
     public void transcodeHeicToJpegAsync(Long imageRowId, String heicKey) {
         log.info("[REVIEW][HEIC] Transcoding HEIC to JPEG for imageId={} key={}", imageRowId, heicKey);
@@ -356,7 +368,7 @@ public class ReviewService {
         } catch (Exception e) {
             log.warn("[REVIEW][HEIC] Async transcode failed imageId={} key={} err={}", imageRowId, heicKey, e.toString());
         }
-    }
+    }*/
 
 
     // tiny helper
@@ -578,40 +590,23 @@ public class ReviewService {
                 .orElse("")
                 .toLowerCase(Locale.ROOT);
 
-        // ✅ Check for allowed extensions
-        boolean extOk = name.endsWith(".jpg") || name.endsWith(".jpeg") ||
-                name.endsWith(".png") || name.endsWith(".webp") ||
-                name.endsWith(".gif") || name.endsWith(".bmp") ||
-                name.endsWith(".tif") || name.endsWith(".tiff") ||
-                name.endsWith(".heic") || name.endsWith(".heif");
+        boolean extOk =
+                name.endsWith(".jpg")  || name.endsWith(".jpeg") ||
+                        name.endsWith(".png")  || name.endsWith(".webp") ||
+                        name.endsWith(".gif")  || name.endsWith(".bmp")  ||
+                        name.endsWith(".tif")  || name.endsWith(".tiff");
 
-        // ✅ Check MIME type is image/*
         boolean mimeOk = ct.startsWith("image/");
 
         if (!(extOk && mimeOk)) {
-            throw new IllegalArgumentException("Only image files are supported (JPG, PNG, WebP, HEIC). You uploaded: " + name);
+            throw new IllegalArgumentException(
+                    "Only JPG, PNG, WebP, GIF, BMP, TIFF images are supported (no HEIC). You uploaded: " + name);
         }
     }
 
 
-    private byte[] convertAnyToJpegBytes(byte[] raw, String filename, String contentType) throws IOException {
-        String ct = (contentType == null || contentType.isBlank())
-                ? guessContentType(filename, "application/octet-stream")
-                : contentType;
 
-        try {
-            return ImageMagickUtil.ensureJpeg(raw, filename, ct);
-        } catch (Exception primaryFail) {
-            if (MagickBridge.looksLikeHeic(ct, filename)) {
-                try {
-                    return MagickBridge.heicToJpeg(raw, magickCmd);
-                } catch (Exception magickFail) {
-                    throw new IOException("Image conversion failed (HEIC). " + primaryFail.getMessage(), magickFail);
-                }
-            }
-            throw new IOException("Image conversion failed. " + primaryFail.getMessage(), primaryFail);
-        }
-    }
+
 
     private String guessContentType(String name, String fallback) {
         if (name == null) return fallback;

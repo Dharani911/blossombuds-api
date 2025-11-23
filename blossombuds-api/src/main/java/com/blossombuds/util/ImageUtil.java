@@ -18,10 +18,12 @@ public final class ImageUtil {
     private static final long MAX_BYTES = 10L * 1024 * 1024;
 
 
-    public static final int  MAX_DIM          = 2400;
-    public static final long MAX_OUTPUT_BYTES = 3L * 1024 * 1024;
-    public static final float QUALITY_START   = 0.72f;
-    public static final float QUALITY_FLOOR   = 0.50f;
+    public static final int  MAX_DIM          = 1800;
+    // ~250 KB cap
+    public static final long MAX_OUTPUT_BYTES = 250L * 1024L;  // 256000 bytes
+
+    public static final float QUALITY_START = 0.80f;
+    public static final float QUALITY_FLOOR = 0.20f;  // allow more aggressive compression
 
     // Accept by MIME *or* filename extension (Chrome often sends HEIC as octet-stream)
     public static void validateFileEnvelope(MultipartFile file) {
@@ -45,6 +47,10 @@ public final class ImageUtil {
     }
 
 
+
+    public static byte[] toJpegBytes(BufferedImage img) throws IOException {
+        return toJpegUnderCap(img); // uses the 250 KB cap now
+    }
 
     public static BufferedImage readAny(MultipartFile file) throws IOException {
         try (InputStream in = file.getInputStream()) {

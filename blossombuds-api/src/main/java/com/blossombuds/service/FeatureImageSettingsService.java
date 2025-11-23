@@ -6,9 +6,7 @@ import com.amazonaws.services.s3.model.*;
 import com.blossombuds.domain.Setting;
 import com.blossombuds.dto.FeatureImageDto;
 import com.blossombuds.dto.SettingDto;
-import com.blossombuds.util.ImageMagickUtil;
 import com.blossombuds.util.ImageUtil;
-import com.blossombuds.util.MagickBridge;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -21,11 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
-import javax.imageio.ImageWriteParam;
-import javax.imageio.ImageWriter;
-import javax.imageio.stream.ImageOutputStream;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.URL;
@@ -37,7 +31,6 @@ import java.util.*;
  * Manages homepage feature tiles (no watermark).
  * Stores list in Settings key "ui.featureTiles.images" as JSON array of
  * { "key": "ui/feature_tiles/..", "altText": "...", "sortOrder": 0 }.
- *
  */
 @Slf4j
 @Service
@@ -46,8 +39,6 @@ public class FeatureImageSettingsService {
 
     private final AmazonS3 r2;              // Cloudflare R2 client
     private final SettingsService settings; // your existing SettingsService
-    @Value("${app.imagemagick.cmd}")
-    private String magickCmd;
     private final ObjectMapper om = new ObjectMapper();
 
     @Value("${cloudflare.r2.bucket}")
@@ -69,7 +60,7 @@ public class FeatureImageSettingsService {
 
     /** Upload from multipart (no presign; same flow as product images). */
     public FeatureImageDto addFromUpload(MultipartFile file, String altText, Integer sortOrder)
-            throws IOException, InterruptedException {
+            throws IOException {
         log.info("[FEATURE][UPLOAD] Incoming feature image upload: fileName={}, size={}",
                 file != null ? file.getOriginalFilename() : null,
                 file != null ? file.getSize() : null);
@@ -79,60 +70,41 @@ public class FeatureImageSettingsService {
             throw new IllegalArgumentException("File cannot be null or empty");
         }
 
-        // 1) Normalize to JPEG (HEIC-safe)
-        byte[] normalizedJpeg;
-        try {
-            normalizedJpeg = ImageMagickUtil.ensureJpeg(
-                    file.getBytes(),
-                    file.getOriginalFilename(),
-                    file.getContentType()
-            );
-            log.info("[FEATURE][UPLOAD] Image normalized using ensureJpeg()");
-        }  catch (Exception e) {
-            // fallback like your product flow
-            boolean looksHeic = MagickBridge.looksLikeHeic(file.getContentType(), file.getOriginalFilename());
-            log.warn("[FEATURE][UPLOAD] ensureJpeg() failed, HEIC fallback={} reason={}", looksHeic, e.getMessage());
-
-            if (looksHeic) {
-                normalizedJpeg = MagickBridge.heicToJpeg(file.getBytes(), magickCmd);
-                log.info("[FEATURE][UPLOAD] HEIC → JPEG conversion succeeded (fallback path)");
-            } else {
-                log.error("[FEATURE][UPLOAD] Image conversion failed completely");
-                throw new IOException("Image conversion failed: " + e.getMessage(), e);
-            }
+        // 1) Decode using pure Java (no HEIC)
+        BufferedImage decoded;
+        try (InputStream in = file.getInputStream()) {
+            decoded = ImageIO.read(in);
+        }
+        if (decoded == null) {
+            log.error("[FEATURE][UPLOAD] Decoding failed — unsupported image");
+            throw new IllegalArgumentException(
+                    "Uploaded file is not a supported image (JPG, PNG, WebP, GIF, BMP, TIFF)");
         }
 
-        // 2) Decode → resize (NO watermark for feature tiles)
-        BufferedImage decoded = ImageMagickUtil.readImage(normalizedJpeg);
-        if (decoded == null)
-        {log.error("[FEATURE][UPLOAD] Decoding failed — unsupported image");
-            throw new IllegalArgumentException("Uploaded file is not a supported image");
-        }
+        // 2) Resize (no watermark for feature tiles)
         int FEATURE_MAX_DIM = 1600;
         BufferedImage resized = ImageUtil.fitWithin(decoded, FEATURE_MAX_DIM);
         log.info("[FEATURE][UPLOAD] Image resized to fit within {}px", FEATURE_MAX_DIM);
 
-// center-crop to 16:9 if you want consistent tile aspect
+        // 3) Center-crop to 16:9 for consistent hero aspect
         int w = resized.getWidth(), h = resized.getHeight();
         double target = 16.0 / 9.0;
-        int cropW = w, cropH = (int)Math.round(w / target);
-        if (cropH > h) { cropH = h; cropW = (int)Math.round(h * target); }
+        int cropW = w;
+        int cropH = (int) Math.round(w / target);
+        if (cropH > h) {
+            cropH = h;
+            cropW = (int) Math.round(h * target);
+        }
         int x = Math.max(0, (w - cropW) / 2);
         int y = Math.max(0, (h - cropH) / 2);
         BufferedImage cropped = resized.getSubimage(x, y, cropW, cropH);
-        log.info("[FEATURE][UPLOAD] Image center‑cropped to 16:9: {}x{}", cropW, cropH);
+        log.info("[FEATURE][UPLOAD] Image center-cropped to 16:9: {}x{}", cropW, cropH);
 
-// then compress `cropped` instead of `resized`
-        byte[] finalBytes;
-        try {
-            finalBytes = ImageMagickUtil.targetSizeJpeg(cropped);
-            log.info("[FEATURE][UPLOAD] JPEG compression via targetSizeJpeg() successful");
-        } catch (Exception ce) {
-            finalBytes = toJpegBytes(cropped, 0.82f);
-            log.warn("[FEATURE][UPLOAD] targetSizeJpeg() failed — fallback compression used");
-        }
+        // 4) Compress to JPEG using ImageUtil (no ImageMagick)
+        byte[] finalBytes = ImageUtil.toJpegUnderCap(cropped);
+        log.info("[FEATURE][UPLOAD] JPEG compression complete: {} bytes", finalBytes.length);
 
-        // 4) Upload to R2
+        // 5) Upload to R2
         String key = UI_PREFIX + UUID.randomUUID() + ".jpg";
         log.info("[FEATURE][UPLOAD] Uploading to R2: key={}, size={}", key, finalBytes.length);
 
@@ -144,7 +116,7 @@ public class FeatureImageSettingsService {
             log.info("[FEATURE][UPLOAD] Upload to R2 successful: {}", key);
         }
 
-        // 5) Append to settings list (like addFromTempKey does)
+        // 6) Append to settings list
         List<Map<String, Object>> items = readListJson();
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("key", key);
@@ -153,10 +125,11 @@ public class FeatureImageSettingsService {
         items.add(row);
         saveListJson(items);
         log.info("[FEATURE][UPLOAD] Added entry to settings list: key={}, sortOrder={}", key, row.get("sortOrder"));
+
         String signed = signGet(key);
         log.info("[FEATURE][UPLOAD] Returning signed preview URL for key={}", key);
 
-        // 6) Return signed GET for immediate preview
+        // 7) Return signed GET for immediate preview
         FeatureImageDto dto = new FeatureImageDto();
         dto.setKey(key);
         dto.setAltText(altText);
@@ -213,10 +186,10 @@ public class FeatureImageSettingsService {
         try {
             // 1) Read tmp object from R2
             log.info("[FEATURE][TEMP] Fetching temp object from R2: {}", tmp);
-            com.amazonaws.services.s3.model.S3Object obj = r2.getObject(bucket, tmp);
+            S3Object obj = r2.getObject(bucket, tmp);
             BufferedImage original;
             try (InputStream in = obj.getObjectContent()) {
-                original = javax.imageio.ImageIO.read(in);
+                original = ImageIO.read(in);
             }
             if (original == null) {
                 throw new IllegalArgumentException("Uploaded file is not a supported image");
@@ -229,14 +202,13 @@ public class FeatureImageSettingsService {
 
             // 3) Upload final
             String finalKey = UI_PREFIX + UUID.randomUUID() + ".jpg";
-            var meta = new com.amazonaws.services.s3.model.ObjectMetadata();
+            ObjectMetadata meta = new ObjectMetadata();
             meta.setContentType("image/jpeg");
             meta.setContentLength(jpegBytes.length);
-            try (InputStream up = new java.io.ByteArrayInputStream(jpegBytes)) {
-                r2.putObject(new com.amazonaws.services.s3.model.PutObjectRequest(bucket, finalKey, up, meta));
+            try (InputStream up = new ByteArrayInputStream(jpegBytes)) {
+                r2.putObject(new PutObjectRequest(bucket, finalKey, up, meta));
             }
             log.info("[FEATURE][TEMP] Final image stored: {}", finalKey);
-
 
             // 4) Best-effort delete tmp
             safeDelete(tmp);
@@ -244,14 +216,13 @@ public class FeatureImageSettingsService {
 
             // 5) Append to settings
             List<Map<String, Object>> items = readListJson();
-            Map<String, Object> row = new java.util.LinkedHashMap<>();
+            Map<String, Object> row = new LinkedHashMap<>();
             row.put("key", finalKey);
             if (altText != null && !altText.isBlank()) row.put("altText", altText);
             if (sortOrder != null) row.put("sortOrder", sortOrder);
             items.add(row);
             saveListJson(items);
             log.info("[FEATURE][TEMP] Metadata saved for key={}", finalKey);
-
 
             // 6) Build DTO with signed GET for preview
             FeatureImageDto dto = new FeatureImageDto();
@@ -263,14 +234,12 @@ public class FeatureImageSettingsService {
 
             return dto;
 
-        } catch (com.amazonaws.SdkClientException | java.io.IOException e) {
+        } catch (com.amazonaws.SdkClientException | IOException e) {
             log.error("[FEATURE][TEMP] Processing failed for key={} error={}", tempKey, e.getMessage());
             throw new IllegalStateException("Failed to process uploaded image. Please re-upload.", e);
         }
 
     }
-
-
 
     /** Replace entire list (expects entries with keys already in UI_PREFIX). */
     @Transactional
@@ -298,6 +267,7 @@ public class FeatureImageSettingsService {
             safeDelete(key);
         }
     }
+
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void reorder(List<String> orderedKeys) {
@@ -341,6 +311,7 @@ public class FeatureImageSettingsService {
         log.info("[FEATURE][ADMIN] Completed reorder. Total reordered={}", next.size());
         saveListJson(next);
     }
+
     /** Update a single item’s metadata (altText and/or sortOrder). */
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
@@ -444,55 +415,6 @@ public class FeatureImageSettingsService {
     private String currentActor() {
         Authentication a = SecurityContextHolder.getContext().getAuthentication();
         return (a != null && a.getName() != null) ? a.getName() : "system";
-    }
-
-    /* ─────────────────── Image conversion/compression ─────────────────── */
-
-    private static String guessContentType(String name, String fallback) {
-        if (name == null) return fallback;
-        String n = name.toLowerCase();
-        if (n.endsWith(".heic") || n.endsWith(".heif")) return "image/heic";
-        if (n.endsWith(".jpg") || n.endsWith(".jpeg")) return "image/jpeg";
-        if (n.endsWith(".png")) return "image/png";
-        if (n.endsWith(".webp")) return "image/webp";
-        if (n.endsWith(".tif") || n.endsWith(".tiff")) return "image/tiff";
-        if (n.endsWith(".bmp")) return "image/bmp";
-        if (n.endsWith(".gif")) return "image/gif";
-        return fallback;
-    }
-
-    private byte[] convertAnyToJpegBytes(byte[] raw, String filename, String contentType) throws IOException {
-        String ct = (contentType == null || contentType.isBlank())
-                ? guessContentType(filename, "application/octet-stream")
-                : contentType;
-        try {
-            return ImageMagickUtil.ensureJpeg(raw, filename, ct);
-        } catch (Exception primaryFail) {
-            if (MagickBridge.looksLikeHeic(ct, filename)) {
-                try {
-                    return MagickBridge.heicToJpeg(raw, System.getenv("MAGICK_CMD")); // or inject if you prefer
-                } catch (Exception magickFail) {
-                    throw new IOException("Image conversion failed (HEIC). " + primaryFail.getMessage(), magickFail);
-                }
-            }
-            throw new IOException("Image conversion failed. " + primaryFail.getMessage(), primaryFail);
-        }
-    }
-
-    private byte[] toJpegBytes(BufferedImage image, float quality) throws IOException {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        ImageWriter jpgWriter = ImageIO.getImageWritersByFormatName("jpg").next();
-        ImageWriteParam param = jpgWriter.getDefaultWriteParam();
-        param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
-        param.setCompressionQuality(quality);
-
-        try (ImageOutputStream ios = ImageIO.createImageOutputStream(baos)) {
-            jpgWriter.setOutput(ios);
-            jpgWriter.write(null, new IIOImage(image, null, null), param);
-        } finally {
-            jpgWriter.dispose();
-        }
-        return baos.toByteArray();
     }
 
     /* ───────────────────────── Small utils ───────────────────────── */
