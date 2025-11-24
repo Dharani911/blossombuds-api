@@ -34,7 +34,7 @@ export async function fetchWhatsAppNumber(): Promise<string> {
   try {
     const res = await fetch(apiUrl(`/api/settings/${encodeURIComponent("brand.whatsapp")}`), {
       method: "GET",
-      credentials: "include", // in case your backend uses cookies/session
+      //credentials: "include", // in case your backend uses cookies/session
       headers: { "Accept": "application/json" },
     });
 
