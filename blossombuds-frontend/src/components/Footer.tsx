@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Logo from "../assets/BB_logo.svg";
-import {apiUrl} from "../api/base"
+import {apiUrl} from "../api/base";
 
 /** Fetch a setting by key directly (robust to JSON or plain text) */
 async function fetchSettingValue(key: string): Promise<string> {

@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-
+import {apiUrl} from "../api/base";
 type Setting = { key: string; value?: string; active?: boolean };
 
 async function fetchAllSettings(): Promise<Setting[]> {
   try {
-    const res = await fetch("/api/settings", { headers: { Accept: "application/json" } });
+    const res = await fetch(apiUrl("/api/settings"), { headers: { Accept: "application/json" } });
     if (!res.ok) return [];
     return res.json();
   } catch {

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import {apiUrl} from "../api/base"
+import {apiUrl} from "../api/base";
 /** Fetch a setting by key (works for plain text, {"value": "..."} or raw string JSON) */
 async function fetchSettingValue(key: string): Promise<string> {
   try {
