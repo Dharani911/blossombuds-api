@@ -580,7 +580,7 @@ export function ImagesTab({ productId, onDone, onChanged, onNext, setToast }: Im
     const alreadyQueued = queue.length;
 
     // ✅ Use shared validator: enforces max files, size, and blocks HEIC
-    const { valid, errors } = validateImageFiles(files, {
+    const { valid, errors } = validateImageFile(files, {
       maxFiles: MAX,
       existingCount: existing + alreadyQueued,
     });
