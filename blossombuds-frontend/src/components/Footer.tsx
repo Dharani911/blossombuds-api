@@ -7,7 +7,7 @@ import Logo from "../assets/BB_logo.svg";
 async function fetchSettingValue(key: string): Promise<string> {
   try {
     const res = await fetch(apiUrl(`/api/settings/${encodeURIComponent(key)}`), {
-      credentials: "include",
+      //credentials: "include",
       headers: { Accept: "application/json" },
     });
     if (!res.ok) return "";

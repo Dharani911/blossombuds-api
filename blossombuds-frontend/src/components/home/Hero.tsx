@@ -33,7 +33,7 @@ export default function Hero() {
           apiUrl(ENDPOINT),
           {
             method: "GET",
-            credentials: "include",
+            //credentials: "include",
             headers: { Accept: "application/json" },
           }
         );

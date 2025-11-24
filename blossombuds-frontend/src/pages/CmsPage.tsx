@@ -5,7 +5,7 @@ import { useParams } from "react-router-dom";
 async function fetchSettingValue(key: string): Promise<string> {
   try {
     const res = await fetch(apiUrl(`/api/settings/${encodeURIComponent(key)}`), {
-      credentials: "include",
+      //credentials: "include",
       headers: { Accept: "application/json" },
     });
     if (!res.ok) return "";
