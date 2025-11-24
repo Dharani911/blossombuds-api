@@ -1,7 +1,7 @@
 // src/lib/whatsapp.ts
 // Self-contained: no imports from your api layer.
 // Fetches /api/settings/brand.whatsapp directly with credentials.
-
+import {apiUrl} from "../api/base"
 let cachedNumber: string | null = null;
 
 /** Normalize to WhatsApp digits-only (no spaces, dashes, or '+') */
