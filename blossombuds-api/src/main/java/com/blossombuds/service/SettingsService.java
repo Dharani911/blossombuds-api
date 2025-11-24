@@ -57,7 +57,7 @@ public class SettingsService {
         }
         Setting s = repo.findByKey(key)
                 .orElseThrow(() -> new IllegalArgumentException("Setting not found: " + key));
-        log.info("[SETTINGS][GET] key='{}' value='{}'", key, s.getValue());
+        log.info("[SETTINGS][GET] key='{}' valuePreview='{}'", key, previewValue(s.getValue()));
         return s;
     }
 
@@ -79,11 +79,20 @@ public class SettingsService {
     public String safeGet(String key) {
         try {
             String val = get(key).getValue();
-            log.info("[SETTINGS][SAFE_GET] key='{}' -> '{}'", key, val);
+            log.info("[SETTINGS][SAFE_GET] key='{}' -> '{}'", key,  previewValue(val));
             return val;
         } catch (Exception e) {
             log.warn("[SETTINGS][SAFE_GET] key='{}' not found (returning null)", key);
             return null;
         }
+    }
+    private String previewValue(String value) {
+        if (value == null) return "null";
+        int max = 120; // chars to show in logs
+        String trimmed = value.trim();
+        if (trimmed.length() <= max) {
+            return trimmed;
+        }
+        return trimmed.substring(0, max) + "... (len=" + trimmed.length() + ")";
     }
 }

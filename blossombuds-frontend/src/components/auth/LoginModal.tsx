@@ -4,6 +4,7 @@ import { customerLogin } from "../../api/auth";
 import { useAuth } from "../../app/AuthProvider";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import logo from "../../assets/BB_logo.svg";
+import {apiUrl} from "../api/base";
 
 export default function LoginModal() {
   const nav = useNavigate();
