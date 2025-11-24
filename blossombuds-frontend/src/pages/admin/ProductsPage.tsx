@@ -573,26 +573,49 @@ export function ImagesTab({ productId, onDone, onChanged, onNext, setToast }: Im
 
 
 
-  async function onUploadSelected(files: FileList | null) {
-    if (!files || files.length === 0) return;
+  async function onUploadSelected(filesList: FileList | null) {
+    if (!filesList || filesList.length === 0) return;
 
+    const all = Array.from(filesList);
     const existing = items?.length || 0;
     const alreadyQueued = queue.length;
 
-    // ✅ Use shared validator: enforces max files, size, and blocks HEIC
-    const { valid, errors } = validateImageFile(files, {
-      maxFiles: MAX,
-      existingCount: existing + alreadyQueued,
-    });
+    // Enforce total max images (existing + queued + new)
+    const remainingSlots = MAX - (existing + alreadyQueued);
+    if (remainingSlots <= 0) {
+      setToast({ kind: "bad", msg: `You already have the maximum of ${MAX} images.` });
+      return;
+    }
+
+    // Only consider up to remainingSlots files
+    const candidateFiles = all.slice(0, remainingSlots);
+
+    const valid: File[] = [];
+    const errors: string[] = [];
+
+    for (const f of candidateFiles) {
+      const err = validateImageFile(f, {
+        label: "product image",
+        // you can customize allowedExt / blockedExt / maxMb here if needed
+      });
+
+      if (err) {
+        errors.push(`“${f.name}”: ${err}`);
+      } else {
+        valid.push(f);
+      }
+    }
 
     if (errors.length > 0) {
-      // Show only the first error to keep toast clean
+      // Show just the first error to keep UI clean
       setToast({ kind: "bad", msg: errors[0] });
     }
 
-    if (!valid.length) return;
+    if (valid.length === 0) {
+      return; // nothing to upload
+    }
 
-    // Simple optimistic previews (HEIC will never be here now)
+    // Simple optimistic previews
     const optimistic = valid.map((f) => ({
       id: crypto.randomUUID(),
       name: f.name,
@@ -614,8 +637,8 @@ export function ImagesTab({ productId, onDone, onChanged, onNext, setToast }: Im
           await uploadProductImage(
             productId,
             f,
-            undefined,
-            sortBase++,
+            undefined,      // alt text (optional)
+            sortBase++,     // sort order
             (pct) => {
               setQueue((q) =>
                 q.map((x) =>
@@ -653,6 +676,7 @@ export function ImagesTab({ productId, onDone, onChanged, onNext, setToast }: Im
       setBusy(false);
     }
   }
+
 
 
   function moveUp(idx: number)  { if (!items || idx<=0) return; reorder(idx, idx-1); }
