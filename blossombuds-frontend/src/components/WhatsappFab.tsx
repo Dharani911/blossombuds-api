@@ -164,16 +164,22 @@ function GeneralView({ number }: { number: string }) {
   ];
 
   const message = `General query: ${query || "(no message entered)"}`;
+  const canSend = query.trim().length > 0;
+
 
   const send = () => {
+    if (!canSend) return;
     openWhatsAppPreferApp(number, message);
     setQuery(""); // clear after sending
   };
 
+
   const onSubmit: React.FormEventHandler = (e) => {
     e.preventDefault();
+    if (!canSend) return;
     send();
   };
+
 
   return (
     <>
@@ -200,9 +206,15 @@ function GeneralView({ number }: { number: string }) {
               placeholder="Type your question…"
               aria-label="Your general question"
             />
-            <button type="button" className="wa-btn green" onClick={send}>
+            <button
+              type="submit"
+              className="wa-btn green"
+              onClick={send}
+              disabled={!canSend}
+            >
               Chat on WhatsApp
             </button>
+
           </form>
         </div>
       </div>
@@ -213,16 +225,22 @@ function GeneralView({ number }: { number: string }) {
 function CustomView({ number }: { number: string }) {
   const [msg, setMsg] = useState("");
   const message = `Customization order: ${msg || "(no message entered)"}`;
+  const canSend = msg.trim().length > 0;
+
 
   const send = () => {
+    if (!canSend) return;
     openWhatsAppPreferApp(number, message);
     setMsg("");
   };
 
+
   const onSubmit: React.FormEventHandler = (e) => {
     e.preventDefault();
+    if (!canSend) return;
     send();
   };
+
 
   return (
     <>
@@ -245,9 +263,15 @@ function CustomView({ number }: { number: string }) {
               placeholder="e.g., Pastel bridal set for Oct 20, blush + ivory"
               aria-label="Describe your customization"
             />
-            <button type="button" className="wa-btn pink" onClick={send}>
+            <button
+              type="submit"
+              className="wa-btn pink"
+              onClick={send}
+              disabled={!canSend}
+            >
               Chat on WhatsApp
             </button>
+
           </form>
         </div>
       </div>
@@ -259,16 +283,22 @@ function TrackingView({ number }: { number: string }) {
   const [q, setQ] = useState("");
   const info = `Most ready-to-ship items dispatch the same day if ordered before 2pm IST. Custom orders typically dispatch within 5–7 working days. You’ll receive an email/SMS with your tracking link once the parcel is handed to the courier.`;
   const message = `Tracking query: ${q || "(no message entered)"}`;
+  const canSend = q.trim().length > 0;
+
 
   const send = () => {
+    if (!canSend) return;
     openWhatsAppPreferApp(number, message);
     setQ("");
   };
 
+
   const onSubmit: React.FormEventHandler = (e) => {
     e.preventDefault();
+    if (!canSend) return;
     send();
   };
+
 
   return (
     <>
@@ -291,9 +321,15 @@ function TrackingView({ number }: { number: string }) {
               placeholder="e.g., Can you expedite my order? Order #BB1234"
               aria-label="Your tracking question"
             />
-            <button type="button" className="wa-btn green" onClick={send}>
+            <button
+              type="submit"
+              className="wa-btn green"
+              onClick={send}
+              disabled={!canSend}
+            >
               Chat on WhatsApp
             </button>
+
           </form>
         </div>
       </div>
@@ -441,13 +477,37 @@ const styles = `
 .panel-sub{ margin:0; color: var(--bb-primary); font-weight:900; }
 .panel-copy{ margin:0; opacity:.92; color: var(--bb-primary); }
 
-.faq{ display:grid; gap:8px; }
-.faq-item{ border:1px solid rgba(0,0,0,.10); border-radius:12px; padding:8px 10px; }
-.faq-q{
-  display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:pointer; list-style:none;
+.faq{
+  display:grid;
+  gap:8px;
 }
+
+.faq-item{
+  border-radius:12px;
+  padding:10px 12px;
+  background: rgba(255,255,255,0.06);           /* softer card on dark bg */
+  border:1px solid rgba(255,255,255,0.14);
+}
+
+.faq-q{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  cursor:pointer;
+  list-style:none;
+  color: inherit;                               /* use your light text */
+  font-weight:600;
+}
+
 .faq-q::-webkit-details-marker{ display:none; }
-.faq-a{ margin-top:6px; opacity:.9; color: var(--bb-primary); }
+
+.faq-a{
+  margin-top:6px;
+  opacity:.85;
+  color: inherit;                               /* no forced dark color */
+  font-size:0.92rem;
+}
 
 /* Form */
 .wa-form{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }

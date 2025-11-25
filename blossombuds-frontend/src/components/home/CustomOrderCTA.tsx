@@ -43,19 +43,19 @@ function openWhatsAppPreferApp(phone: string, text: string) {
 export default function CustomOrderCTA() {
   const [waMsg, setWaMsg] = useState("");  // start empty
   const { number: waNumber } = useWhatsAppNumber();
+  const canSend = !!waNumber && waMsg.trim().length > 0;
+
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!waNumber || !waMsg.trim()) return;
+    if (!canSend) return;
 
     const fullMessage = `Customization order: ${waMsg.trim()}`;
 
-    // Send
-    openWhatsAppPreferApp(waNumber, fullMessage);
-
-    // Clear input immediately after sending
+    openWhatsAppPreferApp(waNumber!, fullMessage);
     setWaMsg("");
   };
+
 
   return (
     <section className="co" id="custom" aria-labelledby="custom-title">
@@ -79,9 +79,10 @@ export default function CustomOrderCTA() {
             aria-label="Describe your custom order"
           />
 
-          <button type="submit" className="btn">
+          <button type="submit" className="btn" disabled={!canSend}>
             Send on WhatsApp
           </button>
+
         </form>
       </div>
     </section>
@@ -215,5 +216,16 @@ const styles = `
     padding: 0 16px;
   }
 }
+.btn:disabled{
+  opacity: .5;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+.btn:disabled:hover{
+  box-shadow: none;
+  transform: none;
+}
+
 
 `;

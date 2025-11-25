@@ -5,9 +5,14 @@ import { Link } from "react-router-dom";
 
 /** Fallbacks if API returns nothing */
 const FALLBACK_IMAGES = [
-  "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=1600&q=70&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1526045478516-99145907023c?w=1600&q=70&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1528892952291-009c663ce843?w=1600&q=70&auto=format&fit=crop",
+  // Jasmine
+  "https://images.pexels.com/photos/220592/pexels-photo-220592.jpeg?auto=compress&cs=tinysrgb&w=1600",
+  // Chrysanthemum
+  "https://images.pexels.com/photos/56905/chrysanthemum-flower-blossom-bloom-56905.jpeg?auto=compress&cs=tinysrgb&w=1600",
+  // Lotus
+  "https://images.pexels.com/photos/158465/lily-lotus-water-flower-158465.jpeg?auto=compress&cs=tinysrgb&w=1600",
+  // Kanakambaram-style marigold/orange florals
+  "https://images.pexels.com/photos/7128763/pexels-photo-7128763.jpeg?auto=compress&cs=tinysrgb&w=1600",
 ];
 
 type FeatureImageDto = {
