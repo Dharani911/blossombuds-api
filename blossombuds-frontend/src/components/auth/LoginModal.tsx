@@ -125,7 +125,7 @@ export default function LoginModal() {
           {/* Only this area scrolls */}
           <div className="sheet-scroll">
             <div className="hero">
-              <h3>Welcome back</h3>
+              <h3>Welcome</h3>
               <p>Sign in to view your profile and orders.</p>
             </div>
 
