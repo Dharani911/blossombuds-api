@@ -6,11 +6,11 @@
 
     <!-- order_status_enum -->
     <changeSet id="0001-01-order-enum" author="dharani">
-        <preConditions onFail="MARK_RAN">
+        <!--<preConditions onFail="MARK_RAN">
             <sqlCheck expectedResult="0">
                 SELECT COUNT(*) FROM pg_type WHERE typname = 'order_status_enum'
             </sqlCheck>
-        </preConditions>
+        </preConditions>-->
         <sql>
             CREATE TYPE order_status_enum AS ENUM
             ('ORDERED','DISPATCHED','DELIVERED','CANCELLED','REFUNDED','RETURNED_REFUNDED');
@@ -19,11 +19,11 @@
 
     <!-- payment_status_enum -->
     <changeSet id="0001-02-payment-enum" author="dharani">
-        <preConditions onFail="MARK_RAN">
+        <!--<preConditions onFail="MARK_RAN">
             <sqlCheck expectedResult="0">
                 SELECT COUNT(*) FROM pg_type WHERE typname = 'payment_status_enum'
             </sqlCheck>
-        </preConditions>
+        </preConditions>-->
         <sql>
             CREATE TYPE payment_status_enum AS ENUM
             ('CREATED','AUTHORIZED','CAPTURED','FAILED','REFUNDED');

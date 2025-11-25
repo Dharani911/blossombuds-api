@@ -7,13 +7,13 @@
     https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.23.xsd">
 
     <!-- Ensure table exists (no schema specified) -->
-    <preConditions onFail="HALT" onError="HALT">
+    <!--<preConditions onFail="HALT" onError="HALT">
         <tableExists tableName="settings"/>
-    </preConditions>
+    </preConditions>-->
 
     <!-- (Optional) Make keys unique so future upserts are easy -->
     <changeSet id="1002-01-settings-unique-key" author="dharani">
-        <preConditions onFail="MARK_RAN">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
             <or>
                 <uniqueConstraintExists tableName="settings" columnNames="key"/>
                 <indexExists indexName="uq_settings_key"/>

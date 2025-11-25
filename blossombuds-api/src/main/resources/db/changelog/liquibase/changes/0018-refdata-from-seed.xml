@@ -8,7 +8,7 @@
 
     <!-- Seed countries (id,name) -->
     <changeSet id="0018-01-seed-countries" author="dharani" context="staging,prod,dev">
-        <preConditions onFail="HALT">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
             <tableExists tableName="countries"/>
         </preConditions>
 
@@ -24,7 +24,7 @@
 
     <!-- Seed states (id,country_id,name) -->
     <changeSet id="0018-02-seed-states" author="dharani" context="staging,prod,dev">
-        <preConditions onFail="HALT">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
             <tableExists tableName="states"/>
         </preConditions>
 
@@ -39,7 +39,7 @@
 
     <!-- Seed districts (id,state_id,name) -->
     <changeSet id="0018-03-seed-districts" author="dharani" context="staging,prod,dev">
-        <preConditions onFail="HALT">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
             <tableExists tableName="districts"/>
         </preConditions>
 

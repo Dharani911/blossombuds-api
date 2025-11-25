@@ -5,7 +5,7 @@
 
     <changeSet id="0019-01-customers-id-identity" author="dharani">
 
-        <preConditions onFail="MARK_RAN" onError="HALT">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
             <sqlCheck expectedResult="0">
                 SELECT COUNT(*)
                 FROM information_schema.columns
@@ -32,7 +32,7 @@
 
     <!-- 1) Add id column if missing -->
     <changeSet id="0019-02-settings-add-id-column" author="dharani">
-        <preConditions onFail="MARK_RAN" onError="HALT">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
             <not>
                 <columnExists tableName="settings" columnName="id"/>
             </not>
@@ -48,7 +48,7 @@
     </changeSet>
 
     <changeSet id="0019-03a-settings-seq-default-backfill" author="dharani" dbms="postgresql">
-        <preConditions onFail="MARK_RAN" onError="HALT">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
             <!-- Skip if id already identity or has nextval default -->
             <sqlCheck expectedResult="0"><![CDATA[
         SELECT COUNT(*)
@@ -95,7 +95,7 @@
 
     <!-- B) Partial unique index: one active row per key -->
     <changeSet id="0019-03b-settings-unique-active" author="dharani" dbms="postgresql">
-        <preConditions onFail="MARK_RAN" onError="HALT">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
             <not>
                 <indexExists indexName="uq_settings_key_active"/>
             </not>
@@ -114,7 +114,7 @@
         </rollback>
     </changeSet>
     <changeSet id="0019-04-add-min-items-to-coupons" author="dharani">
-        <preConditions onFail="MARK_RAN">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
             <not>
                 <columnExists tableName="coupons" columnName="min_items"/>
             </not>
