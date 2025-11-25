@@ -4,16 +4,7 @@ import { apiUrl } from "../../api/base";
 import { Link } from "react-router-dom";
 
 /** Fallbacks if API returns nothing */
-const FALLBACK_IMAGES = [
-  // Jasmine
-  "https://images.pexels.com/photos/220592/pexels-photo-220592.jpeg?auto=compress&cs=tinysrgb&w=1600",
-  // Chrysanthemum
-  "https://images.pexels.com/photos/56905/chrysanthemum-flower-blossom-bloom-56905.jpeg?auto=compress&cs=tinysrgb&w=1600",
-  // Lotus
-  "https://images.pexels.com/photos/158465/lily-lotus-water-flower-158465.jpeg?auto=compress&cs=tinysrgb&w=1600",
-  // Kanakambaram-style marigold/orange florals
-  "https://images.pexels.com/photos/7128763/pexels-photo-7128763.jpeg?auto=compress&cs=tinysrgb&w=1600",
-];
+const FALLBACK_IMAGES: string[] = [];
 
 type FeatureImageDto = {
   key: string;
@@ -75,21 +66,26 @@ export default function Hero() {
 
 
   // Crossfade every 6s
-  useEffect(() => {
-    const imgs =
-      slides && slides.length ? slides : FALLBACK_IMAGES.map((u) => ({ url: u, alt: "" }));
-    timer.current = window.setInterval(() => {
-      setIdx((i) => (i + 1) % imgs.length);
-    }, 6000);
-    return () => { if (timer.current) window.clearInterval(timer.current); };
-  }, [slides]);
+    useEffect(() => {
+      const imgs =
+        slides && slides.length
+          ? slides
+          : FALLBACK_IMAGES.map((u) => ({ url: u, alt: "" }));
 
-  const frames =
-    slides === null
-      ? FALLBACK_IMAGES.map((u) => ({ url: u, alt: "" }))
-      : slides.length
-      ? slides
-      : FALLBACK_IMAGES.map((u) => ({ url: u, alt: "" }));
+      if (!imgs.length) return; // no images → no timer / no modulo 0
+
+      timer.current = window.setInterval(() => {
+        setIdx((i) => (i + 1) % imgs.length);
+      }, 6000);
+      return () => { if (timer.current) window.clearInterval(timer.current); };
+    }, [slides]);
+
+
+    const frames =
+      slides && slides.length
+        ? slides
+        : FALLBACK_IMAGES.map((u) => ({ url: u, alt: "" }));
+
 
   const goto = (n: number) => setIdx(n % frames.length);
 
@@ -188,7 +184,8 @@ const styles = `
   border-radius: 14px;
   overflow: hidden;
   box-shadow: 0 12px 34px rgba(0,0,0,.12);
-  background: #111;
+  background: var(--bb-bg); /* #FAF7E7 ivory yellow from your theme */
+
 }
 @media (min-width: 920px){
   .stage{ border-radius: 16px; box-shadow: 0 16px 42px rgba(0,0,0,.12); }
@@ -299,4 +296,5 @@ const styles = `
 @media (prefers-reduced-motion: reduce){
   .slide{ transition: none; }
 }
+
 `;
