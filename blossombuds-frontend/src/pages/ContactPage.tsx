@@ -113,13 +113,11 @@ export default function Footer() {
           <div id="bbf-company-head" className="bbf-head">Company</div>
           <div className="bbf-links">
             <FooterLink to="/pages/about">About Us</FooterLink>
-            <FooterLink to="/contact">Contact</FooterLink>
             <FooterLink to="/policies">Policies</FooterLink>
             <FooterLink to="/pages/terms">Terms &amp; Conditions</FooterLink>
             <FooterLink to="/pages/disclaimer">Disclaimer</FooterLink>
           </div>
         </nav>
-
       </div>
 
       <div className="bbf-bottom">

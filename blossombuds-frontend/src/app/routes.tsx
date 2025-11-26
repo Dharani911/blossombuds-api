@@ -22,6 +22,7 @@ import PoliciesIndexPage from "../pages/PoliciesIndexPage";
 import PolicyPage from "../pages/PolicyPage";
 import ForgotPasswordPage from "../pages/ForgotPasswordPage";
 import ResetPasswordPage from "../pages/ResetPasswordPage";
+import ContactPage from "./pages/ContactPage";
 
 
 
@@ -62,7 +63,7 @@ export default function AppRoutes() {
           <Route path="/policies/:slug" element={<PolicyPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
-
+          <Route path="/contact" element={<ContactPage />} />
 
 
           {/* Email verification routes (support both forms if you use both) */}
