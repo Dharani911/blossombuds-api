@@ -154,14 +154,41 @@ function Menu({ onPick }: { onPick: (v: View) => void }) {
 function GeneralView({ number }: { number: string }) {
   const [query, setQuery] = useState("");
 
-  const faqs = [
-    { q: "What materials do you use?", a: "We use lightweight, skin-friendly materials with reinforced floral wiring for durability." },
-    { q: "Do you ship across India?", a: "Yes, we ship pan-India with tracking. Express options are available at checkout." },
-    { q: "How long does a custom order take?", a: "Most custom pieces take 5–7 working days depending on complexity and queue." },
-    { q: "Can you match outfit colors?", a: "Absolutely. Share references or photos, and we’ll match closely." },
-    { q: "Are the pieces heavy?", a: "We focus on all-day comfort with light builds and reinforced joinery." },
-    { q: "How do I care for them?", a: "Store flat, away from moisture. Wipe gently with a dry cloth after use." },
-  ];
+    const faqs = [
+      {
+        q: "What products do you offer?",
+        a: "We specialize in handcrafted artificial floral designs, including garlands, bridal flowers, décor pieces, accessories, and custom floral creations for events.",
+      },
+      {
+        q: "Are your flowers reusable?",
+        a: "Yes, all our artificial flowers are made with high-quality materials and are reusable, long-lasting, and easy to store.",
+      },
+      {
+        q: "Do the flowers look realistic?",
+        a: "Absolutely. Each petal and arrangement is carefully handcrafted to look as close to real flowers as possible.",
+      },
+      {
+        q: "Do you ship?",
+        a: "Yes, we ship across India. Shipping charges depend on your order size and location.",
+      },
+      {
+        q: "What is your return or exchange policy?",
+        a: "Since every item is handcrafted, we do not accept returns. However, if there is any damage during delivery, we’ll assist with repair or replacement based on proper proof.",
+      },
+      {
+        q: "How do I care for my artificial flowers?",
+        a: "Keep them away from direct heat, dust gently with a soft brush, and store them in a box to maintain shape. With proper care, the flowers last for years.",
+      },
+      {
+        q: "How do I place an order?",
+        a: "You can order via WhatsApp, Instagram DM, or our website contact form. Once your order details are confirmed, we’ll share payment information.",
+      },
+      {
+        q: "What payment methods do you accept?",
+        a: "We accept UPI, bank transfer, and other online payment options.",
+      },
+    ];
+
 
   const message = `General query: ${query || "(no message entered)"}`;
   const canSend = query.trim().length > 0;
@@ -223,6 +250,25 @@ function GeneralView({ number }: { number: string }) {
 }
 
 function CustomView({ number }: { number: string }) {
+  const faqs = [
+    {
+      q: "Can I customise my order?",
+      a: "Yes, we offer custom-made designs. Share your theme, colours, or reference photos — we create your flowers exactly the way you imagine.",
+    },
+    {
+      q: "How long will it take to make my order?",
+      a: "Same-day dispatch is possible for ready / available products. For customised designs, simple orders usually take 3–5 days and larger or more complex orders take around 5–7 days.",
+    },
+    {
+      q: "Do you accept urgent orders?",
+      a: "Yes, based on availability. Urgent orders may include an additional express charge.",
+    },
+    {
+      q: "Do you take bulk or event orders?",
+      a: "Yes, we handle bulk orders for weddings, décor, gifting, and events.",
+    },
+  ];
+
   const [msg, setMsg] = useState("");
   const message = `Customization order: ${msg || "(no message entered)"}`;
   const canSend = msg.trim().length > 0;
@@ -244,14 +290,21 @@ function CustomView({ number }: { number: string }) {
 
   return (
     <>
-      <div className="scroll-area">
-        <div className="panel fade-in">
-          <div className="section">
-            <h3 className="panel-title">Tell us about your custom</h3>
-            <p className="panel-copy">Share the occasion, colors, reference flowers, and need-by date.</p>
-          </div>
-        </div>
-      </div>
+            <div className="scroll-area">
+              <div className="panel fade-in">
+
+
+                <div className="section">
+                  <h3 className="panel-title">Custom &amp; bulk order FAQs</h3>
+                  <div className="faq">
+                    {faqs.map((f, i) => (
+                      <FaqItem key={i} q={f.q} a={f.a} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
 
       <div className="sticky-footer">
         <div className="footer-inner">
@@ -280,8 +333,42 @@ function CustomView({ number }: { number: string }) {
 }
 
 function TrackingView({ number }: { number: string }) {
+  const faqs = [
+    {
+      q: "How do I track my order?",
+      a: "Once your order is shipped, we share a tracking link and tracking ID via WhatsApp or email so you can check your delivery status anytime.",
+    },
+    {
+      q: "When will I receive my tracking ID?",
+      a: "Tracking details are shared within 24 hours of dispatch, once the courier partner updates it in their system.",
+    },
+    {
+      q: "My tracking link is not updating. What should I do?",
+      a: "Courier partners can take 12–24 hours to update the status. If it still doesn’t update after that, contact us and we’ll check it for you.",
+    },
+    {
+      q: "My order is marked 'Delivered' but I didn’t receive it. What should I do?",
+      a: "First check with neighbours or building security, then confirm your delivery address. If it’s still missing, contact us with your order ID and we’ll raise it with the courier.",
+    },
+    {
+      q: "Do you offer express or fast delivery?",
+      a: "Yes, express delivery is available for certain pin codes. Extra charges apply based on the service and location.",
+    },
+    {
+      q: "How long does delivery take?",
+      a: "Delivery timelines are typically 1–3 days within Tamil Nadu, 3–5 days across South India, and 4–7 days for the rest of India.",
+    },
+    {
+      q: "Can I change my address after shipping?",
+      a: "Once shipped, the address can’t be changed. For any changes, please contact us before dispatch.",
+    },
+    {
+      q: "What should I do if my parcel is damaged?",
+      a: "If the outer box or product is damaged, please share an unboxing video and clear photos. We’ll help with replacement or repair based on the situation.",
+    },
+  ];
+
   const [q, setQ] = useState("");
-  const info = `Most ready-to-ship items dispatch the same day if ordered before 2pm IST. Custom orders typically dispatch within 5–7 working days. You’ll receive an email/SMS with your tracking link once the parcel is handed to the courier.`;
   const message = `Tracking query: ${q || "(no message entered)"}`;
   const canSend = q.trim().length > 0;
 
@@ -302,14 +389,21 @@ function TrackingView({ number }: { number: string }) {
 
   return (
     <>
-      <div className="scroll-area">
-        <div className="panel fade-in">
-          <div className="section">
-            <h3 className="panel-title">Tracking & Dispatch</h3>
-            <p className="panel-copy">{info}</p>
-          </div>
-        </div>
-      </div>
+            <div className="scroll-area">
+              <div className="panel fade-in">
+
+
+                <div className="section">
+                  <h3 className="panel-title">Tracking &amp; delivery FAQs</h3>
+                  <div className="faq">
+                    {faqs.map((f, i) => (
+                      <FaqItem key={i} q={f.q} a={f.a} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
 
       <div className="sticky-footer">
         <div className="footer-inner">
@@ -482,11 +576,12 @@ const styles = `
   gap:8px;
 }
 
+/* Match Blossom Buds theme: soft ivory cards + dark text */
 .faq-item{
   border-radius:12px;
   padding:10px 12px;
-  background: rgba(255,255,255,0.06);           /* softer card on dark bg */
-  border:1px solid rgba(255,255,255,0.14);
+  background: var(--bb-bg, #FAF7E7);
+  border:1px solid rgba(0,0,0,.08);
 }
 
 .faq-q{
@@ -496,7 +591,7 @@ const styles = `
   gap:10px;
   cursor:pointer;
   list-style:none;
-  color: inherit;                               /* use your light text */
+  color: var(--bb-primary, #4A4F41);
   font-weight:600;
 }
 
@@ -504,10 +599,11 @@ const styles = `
 
 .faq-a{
   margin-top:6px;
-  opacity:.85;
-  color: inherit;                               /* no forced dark color */
+  opacity:.9;
+  color: var(--bb-primary, #4A4F41);
   font-size:0.92rem;
 }
+
 
 /* Form */
 .wa-form{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }

@@ -22,7 +22,7 @@ import PoliciesIndexPage from "../pages/PoliciesIndexPage";
 import PolicyPage from "../pages/PolicyPage";
 import ForgotPasswordPage from "../pages/ForgotPasswordPage";
 import ResetPasswordPage from "../pages/ResetPasswordPage";
-import ContactPage from "./pages/ContactPage";
+import ContactPage from "../pages/ContactPage";
 
 
 

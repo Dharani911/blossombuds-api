@@ -1,14 +1,11 @@
-// src/components/Footer.tsx
+// src/pages/ContactPage.tsx
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import Logo from "../assets/BB_logo.svg";
-import {apiUrl} from "../api/base";
+import { apiUrl } from "../api/base";
 
 /** Fetch a setting by key directly (robust to JSON or plain text) */
 async function fetchSettingValue(key: string): Promise<string> {
   try {
     const res = await fetch(apiUrl(`/api/settings/${encodeURIComponent(key)}`), {
-      //credentials: "include",
       headers: { Accept: "application/json" },
     });
     if (!res.ok) return "";
@@ -21,6 +18,7 @@ async function fetchSettingValue(key: string): Promise<string> {
       if (typeof (json as any)?.link === "string") return (json as any).link;
       return "";
     } catch {
+      // plain string
       return text;
     }
   } catch {
@@ -35,292 +33,314 @@ function normalizeUrl(u: string) {
   return `https://${u}`;
 }
 
-export default function Footer() {
-  const [ig, setIg] = useState<string>("");
+type ContactDetails = {
+  name: string | null;
+  address: string | null;
+  email: string | null;
+  instagram: string | null;
+  website: string | null;
+  whatsapp: string | null;
+};
+
+export default function ContactPage() {
+  const [contact, setContact] = useState<ContactDetails>({
+    name: null,
+    address: null,
+    email: null,
+    instagram: null,
+    website: null,
+    whatsapp: null,
+  });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      const envIg = (import.meta as any)?.env?.VITE_BRAND_INSTAGRAM || "";
-      const v = await fetchSettingValue("brand.instagram");
-      if (!alive) return;
-      setIg(normalizeUrl(v || envIg || ""));
+      try {
+        const envIg = (import.meta as any)?.env?.VITE_BRAND_INSTAGRAM || "";
+
+        const [name, address, email, insta, url, wa] = await Promise.all([
+          fetchSettingValue("brand.name"),
+          fetchSettingValue("brand.address"),
+          fetchSettingValue("brand.support_email"),
+          fetchSettingValue("brand.instagram"),
+          fetchSettingValue("brand.url"),
+          fetchSettingValue("brand.whatsapp"),
+        ]);
+
+        if (!alive) return;
+
+        const finalIg = normalizeUrl(insta || envIg || "");
+        setContact({
+          name: name || null,
+          address: address || null,
+          email: email || null,
+          instagram: finalIg || null,
+          website: url || null,
+          whatsapp: wa || null,
+        });
+      } catch (e) {
+        console.error("Failed to load contact settings", e);
+      } finally {
+        if (alive) setLoading(false);
+      }
     })();
-    return () => { alive = false; };
+
+    return () => {
+      alive = false;
+    };
   }, []);
 
-  const year = new Date().getFullYear();
+  const websiteHref = normalizeUrl(contact.website || "");
 
   return (
-    <footer className="bb-footer-classic" role="contentinfo">
+    <main className="contact-page" aria-labelledby="contact-heading">
       <style>{styles}</style>
 
-      <div className="bbf-wrap">
-        {/* Brand / Social (spans full width on mobile) */}
-        <section className="bbf-col brand" aria-labelledby="bbf-brand-head">
-          <h2 id="bbf-brand-head" className="sr-only">About Blossom Buds</h2>
-
-          <div className="bbf-brandRow">
-            <img src={Logo} alt="Blossom Buds logo" className="bbf-logo" />
-            <div className="bbf-brandText">
-              {/* single-line, single-style brand name */}
-              <div className="bbf-name">Blossom Buds Floral Artistry</div>
-            </div>
-          </div>
-
-          <p className="bbf-tag">
-            Handcrafted floral accessories for weddings, festivals, and everyday elegance.
+      <div className="cp-container">
+        <header className="cp-header">
+          <p className="cp-eyebrow">Contact</p>
+          <h1 id="contact-heading">We&apos;d love to hear from you</h1>
+          <p className="cp-lead">
+            Have a question about an order, customization, or shipping? Reach out using
+            any of the options below.
           </p>
+        </header>
 
-          {ig && (
-            <div className="bbf-socialRow">
-              <a
-                className="bbf-socBtn"
-                href={ig}
-                target="_blank"
-                rel="noreferrer"
-                aria-label="Open Instagram"
-                title="Open Instagram"
-              >
-                <InstagramIcon />
-              </a>
-              {/* separate text link; not inside the icon */}
-              <a
-                className="bbf-socLink"
-                href={ig}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Follow us on Instagram for more updates
-              </a>
-            </div>
-          )}
-        </section>
+        {loading ? (
+          <section aria-busy="true" className="cp-loading">
+            Loading contact details…
+          </section>
+        ) : (
+          <div className="cp-grid">
+            <section className="cp-card cp-info" aria-label="Contact details">
+              <div className="cp-card-head">
+                <h2>Reach us</h2>
+                {contact.name && <p className="cp-brand">{contact.name}</p>}
+                <p className="cp-small">
+                  For order queries, please include your name &amp; order ID when you contact us.
+                </p>
+              </div>
 
-        {/* Explore (left on mobile) */}
-        <nav className="bbf-col explore" aria-labelledby="bbf-explore-head">
-          <div id="bbf-explore-head" className="bbf-head">Explore</div>
-          <div className="bbf-links">
-            <FooterLink to="/">Home</FooterLink>
-            <FooterLink to="/featured">Featured</FooterLink>
-            <FooterLink to="/categories">Categories</FooterLink>
-            <FooterLink to="/reviews">Reviews</FooterLink>
+              <ul className="cp-list">
+                {contact.address && (
+                  <li className="cp-item">
+                    <span className="cp-icon" aria-hidden>
+                      📍
+                    </span>
+                    <div>
+                      <div className="cp-label">Studio address</div>
+                      <div className="cp-value">{contact.address}</div>
+                    </div>
+                  </li>
+                )}
+
+                {contact.email && (
+                  <li className="cp-item">
+                    <span className="cp-icon" aria-hidden>
+                      ✉️
+                    </span>
+                    <div>
+                      <div className="cp-label">Email</div>
+                      <a className="cp-value cp-link" href={`mailto:${contact.email}`}>
+                        {contact.email}
+                      </a>
+                    </div>
+                  </li>
+                )}
+
+                {contact.whatsapp && (
+                  <li className="cp-item">
+                    <span className="cp-icon" aria-hidden>
+                      💬
+                    </span>
+                    <div>
+                      <div className="cp-label">WhatsApp</div>
+                      <div className="cp-value">{contact.whatsapp}</div>
+                      <p className="cp-note">
+                        For fastest replies, message us on WhatsApp with your name &amp; query.
+                      </p>
+                    </div>
+                  </li>
+                )}
+
+                {contact.instagram && (
+                  <li className="cp-item">
+                    <span className="cp-icon" aria-hidden>
+                      📷
+                    </span>
+                    <div>
+                      <div className="cp-label">Instagram</div>
+                      <a
+                        className="cp-value cp-link"
+                        href={contact.instagram}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        @blossom_buds_floral_artistry
+                      </a>
+                    </div>
+                  </li>
+                )}
+
+                {websiteHref && (
+                  <li className="cp-item">
+                    <span className="cp-icon" aria-hidden>
+                      🌐
+                    </span>
+                    <div>
+                      <div className="cp-label">Website</div>
+                      <a
+                        className="cp-value cp-link"
+                        href={websiteHref}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {contact.website}
+                      </a>
+                    </div>
+                  </li>
+                )}
+              </ul>
+            </section>
           </div>
-        </nav>
-
-        {/* Company (right on mobile) */}
-        <nav className="bbf-col company" aria-labelledby="bbf-company-head">
-          <div id="bbf-company-head" className="bbf-head">Company</div>
-          <div className="bbf-links">
-            <FooterLink to="/pages/about">About Us</FooterLink>
-            <FooterLink to="/policies">Policies</FooterLink>
-            <FooterLink to="/pages/terms">Terms &amp; Conditions</FooterLink>
-            <FooterLink to="/pages/disclaimer">Disclaimer</FooterLink>
-          </div>
-        </nav>
+        )}
       </div>
-
-      <div className="bbf-bottom">
-        <div className="bbf-bottomWrap">
-          <div className="bbf-copy">© {year} Blossom Buds Floral Artistry</div>
-          <div className="bbf-bottomLinks">
-            <FooterLink to="/pages/privacy">Privacy</FooterLink>
-            <FooterLink to="/pages/terms">Terms</FooterLink>
-          </div>
-        </div>
-      </div>
-    </footer>
-  );
-}
-
-function FooterLink({ to, children }: { to: string; children: React.ReactNode }) {
-  return (
-    <Link to={to} className="bbf-link">
-      {children}
-    </Link>
-  );
-}
-
-function InstagramIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden>
-      <path
-        fill="currentColor"
-        d="M12 2.2c3.2 0 3.6 0 4.9.1 1.2.1 1.9.3 2.4.6.6.3 1 .6 1.5 1.1.5.5.8.9 1.1 1.5.3.5.5 1.2.6 2.4.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c-.1 1.2-.3 1.9-.6 2.4-.3.6-.6 1-1.1 1.5-.5.5-.9.8-1.5 1.1-.5.3-1.2.5-2.4.6-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2-.1-1.9-.3-2.4-.6-.6-.3-1-.6-1.5-1.1-.5-.5-.8-.9-1.1-1.5-.3-.5-.5-1.2-.6-2.4C2.2 15.6 2.2 15.2 2.2 12s0-3.6.1-4.9c.1-1.2.3-1.9.6-2.4.3-.6.6-1 1.1-1.5.5-.5.9-.8 1.5-1.1.5-.3 1.2-.5 2.4-.6C8.4 2.2 8.8 2.2 12 2.2m0-2.2C8.8 0 8.4 0 7 0 5.7.1 4.8.3 4 .7 3.1 1.2 2.4 1.9 1.9 2.8c-.4.8-.6 1.7-.7 3C1.1 7.1 1.1 7.5 1.1 12s0 4.9.1 6.2c.1 1.3.3 2.2.7 3 .5.9 1.2 1.6 2.1 2.1.8.4 1.7.6 3 .7 1.3.1 1.7.1 6.2.1s4.9 0 6.2-.1c1.3-.1 2.2-.3 3-.7.9-.5 1.6-1.2 2.1-2.1.4-.8.6-1.7.7-3 .1-1.3.1-1.7.1-6.2s0-4.9-.1-6.2c-.1-1.3-.3-2.2-.7-3-.5-.9-1.2-1.6-2.1-2.1-.8-.4-1.7-.6-3-.7C15.1.1 14.7 0 12 0z"
-      />
-      <path
-        fill="currentColor"
-        d="M12 5.8A6.2 6.2 0 1 0 12 18.2 6.2 6.2 0 1 0 12 5.8m0 10.2A4 4 0 1 1 12 8a4 4 0 0 1 0 8zM18.4 4.9a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 1 0 0-2.8z"
-      />
-    </svg>
+    </main>
   );
 }
 
 const styles = `
-:root{
-  --bb-pink:#F05D8B;
-  --bb-gold:#F6C320;
-  --bb-ink:rgba(0,0,0,.08);
-  --bb-text:#4A4F41;
+.contact-page{
+  background: var(--bb-bg, #FAF7E7);
+  min-height: calc(100vh - 200px); /* leaves room for header/footer */
+  padding: clamp(24px, 5vw, 40px) 0;
 }
 
-/* Visually-hidden utility for accessible headings */
-.sr-only{
-  position:absolute !important;
-  width:1px; height:1px; padding:0; margin:-1px;
-  overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
-}
-
-/* Links */
-.bbf-link{
-  color: var(--bb-text);
-  text-decoration: none;
-  opacity:.95;
-  outline: none;
-}
-.bbf-link:hover{ text-decoration: underline; }
-.bbf-link:focus-visible{
-  outline: 2px solid color-mix(in oklab, var(--bb-gold), #000 20%);
-  outline-offset: 2px;
-  border-radius: 6px;
-}
-
-/* --- Classic footer skeleton --- */
-.bb-footer-classic{
-  color: var(--bb-text);
-  background: #F7F2E2;                   /* soft parchment */
-  border-top: 1px solid var(--bb-ink);
-  font-size: clamp(13px, 3.2vw, 14px);
-  width: 100%;
-  overflow: clip;                         /* prevent bleed on small screens */
-}
-
-/* Top grid */
-.bbf-wrap{
-  max-width: 1200px;
+.cp-container{
+  max-width: 900px;
   margin: 0 auto;
-  padding: 18px max(16px, env(safe-area-inset-left, 0px))
-           18px max(16px, env(safe-area-inset-right, 0px));
-  display: grid;
-  gap: 12px 24px;
-  grid-template-columns: 1.6fr 1fr 1fr;  /* Desktop: Brand / Explore / Company */
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 
-/* Section heads */
-.bbf-col .bbf-head{
+/* Header */
+.cp-header{
+  text-align: left;
+  margin-bottom: clamp(18px, 4vw, 24px);
+}
+.cp-eyebrow{
+  margin:0 0 4px;
+  text-transform: uppercase;
+  letter-spacing: .16em;
+  font-size: 11px;
+  color: rgba(0,0,0,.6);
+}
+.cp-header h1{
+  margin: 0 0 6px;
+  font-size: clamp(24px, 4.4vw, 32px);
   font-weight: 900;
-  font-size: 13px;
-  letter-spacing:.2px;
-  margin: 2px 0 8px;
-  color: #2c2c2c;
+  color: var(--bb-primary, #4A4F41);
+}
+.cp-lead{
+  margin:0;
+  max-width: 55ch;
+  color: var(--bb-primary, #4A4F41);
+  opacity:.9;
 }
 
-/* Brand block */
-.bbf-brandRow{
-  display:flex; align-items:center; gap:10px; min-width:0;
-}
-.bbf-logo{ width:36px; height:36px; object-fit:contain; flex:0 0 auto; }
-.bbf-brandText{ line-height:1.05; min-width:0; }
-.bbf-name{
-  font-weight:900; font-size:16px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; /* single line */
+/* Layout wrapper */
+.cp-grid{
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.bbf-tag{
-  margin: 8px 0 10px;
-  opacity: .92;
-  max-width: 52ch;
-  line-height: 1.45;
+/* Card */
+.cp-card{
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid rgba(0,0,0,.06);
+  box-shadow: 0 14px 32px rgba(0,0,0,.08);
+  padding: 18px 18px 16px;
+}
+.cp-card-head{
+  margin-bottom: 10px;
+}
+.cp-card h2{
+  margin:0 0 4px;
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--bb-primary, #4A4F41);
+}
+.cp-brand{
+  margin:0;
+  font-weight: 700;
+  color: var(--bb-primary, #4A4F41);
+}
+.cp-small{
+  margin-top: 6px;
+  font-size: 12px;
+  opacity:.75;
 }
 
-/* Social row: icon + separate text link (both visible on all sizes) */
-.bbf-socialRow{
-  display:flex; align-items:center; gap:10px; flex-wrap: wrap;
+/* Info list */
+.cp-list{
+  list-style:none;
+  padding:0;
+  margin: 10px 0 0;
+  display:grid;
+  gap: 10px;
 }
-.bbf-socBtn{
-  width:44px; height:44px; border-radius:12px;
+.cp-item{
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+}
+.cp-icon{
+  width:26px; height:26px;
+  border-radius:999px;
   display:grid; place-items:center;
-  color:#fff; text-decoration:none;
-  background: radial-gradient(120% 140% at 30% 0%, var(--bb-pink), var(--bb-gold));
-  box-shadow: 0 6px 16px rgba(240,93,139,.18);
-  outline: none;
+  background: rgba(0,0,0,.03);
+  font-size:14px;
 }
-.bbf-socBtn:hover{ transform: translateY(-1px); box-shadow: 0 8px 20px rgba(240,93,139,.24); }
-.bbf-socBtn:focus-visible{
-  outline: 2px solid color-mix(in oklab, var(--bb-pink), #000 25%);
-  outline-offset: 2px;
+.cp-label{
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  color: rgba(0,0,0,.55);
+  margin-bottom: 2px;
 }
-.bbf-socLink{
-  font-weight:900;
-  letter-spacing:.2px;
-  color: var(--bb-text);
-  text-decoration: none;
+.cp-value{
+  font-size: 14px;
+  color: var(--bb-primary, #4A4F41);
 }
-.bbf-socLink:hover{ text-decoration: underline; }
+.cp-note{
+  margin: 4px 0 0;
+  font-size: 12px;
+  opacity:.8;
+}
+.cp-link{
+  text-decoration:none;
+  font-weight:600;
+}
+.cp-link:hover{ text-decoration:underline; }
 
-/* Links list */
-.bbf-links{ display:grid; gap:8px; }
-
-/* Bottom bar */
-.bbf-bottom{
-  border-top: 1px solid var(--bb-ink);
-  background: #F3ECD4;
-}
-.bbf-bottomWrap{
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 10px max(16px, env(safe-area-inset-left, 0px))
-           max(10px, calc(10px + env(safe-area-inset-bottom, 0px)))
-           max(16px, env(safe-area-inset-right, 0px));
-  display:flex; align-items:center; justify-content:space-between; gap:10px;
-  font-size: 13px;
-}
-.bbf-bottomLinks{ display:flex; gap:12px; flex-wrap: wrap; }
-.bbf-copy{ opacity:.95; }
-
-/* Tablet */
-@media (max-width: 960px){
-  .bbf-wrap{ grid-template-columns: 1fr 1fr; }
-  .bbf-col.brand{ grid-column: 1 / -1; }
+.cp-loading{
+  margin-top: 32px;
+  font-size: 14px;
+  color: rgba(0,0,0,.65);
 }
 
-/* Mobile: Brand (full width) above Explore + Company side-by-side */
+/* Responsive */
 @media (max-width: 560px){
-  .bbf-wrap{
-    grid-template-columns: 1fr 1fr;   /* two columns on mobile */
-    gap: 16px 16px;
+  .cp-card{
+    border-radius: 14px;
+    box-shadow: 0 10px 26px rgba(0,0,0,.08);
+    padding: 16px 14px 14px;
   }
-  .bbf-col.brand{
-    grid-column: 1 / -1;              /* brand spans both columns */
-    text-align: center;
+  .cp-item{
+    align-items:flex-start;
   }
-  .bbf-brandRow{
-    justify-content: center;
-    gap: 12px;
-  }
-  .bbf-logo{
-    width:48px; height:48px;
-  }
-  .bbf-name{ font-size:18px; }
-
-  /* keep Explore (left) & Company (right) */
-  .bbf-col.explore{ grid-column: 1 / 2; }
-  .bbf-col.company{ grid-column: 2 / 3; }
-
-  /* center their headings + links for balance */
-  .bbf-col:not(.brand) .bbf-head{ text-align:center; }
-  .bbf-links{ justify-items:center; }
-
-  .bbf-bottomWrap{
-    flex-direction: column;
-    align-items: center;
-    gap:8px;
-    text-align: center;
-  }
-}
-
-/* Motion preferences */
-@media (prefers-reduced-motion: reduce){
-  .bbf-socBtn:hover{ transform:none; }
 }
 `;
