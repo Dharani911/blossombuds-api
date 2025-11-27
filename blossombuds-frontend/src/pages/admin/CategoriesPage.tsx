@@ -1,3 +1,4 @@
+// src/pages/admin/CategoriesPage.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   listAllCategories,
@@ -234,6 +235,9 @@ export default function CategoriesPage() {
     cleanupGhost();
 
     if (!productId) return;
+
+    // 👉 When dropped, make this category the selected one
+    setSelectedCatId(catId);
 
     // optimistic add if dropping into the currently selected category
     if (selectedCatId === catId) {
@@ -565,12 +569,28 @@ function slugify(s: string) {
 }
 
 const css = `
-.cat-wrap{ padding: 12px; color:${PRIMARY}; }
-.hd{ display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-bottom:12px; }
-.hd h2{ margin:0; font-family: "DM Serif Display", Georgia, serif; }
+.cat-wrap{
+  padding: 12px;
+  color:${PRIMARY};
+}
+
+/* Header */
+.hd{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:12px;
+}
+.hd h2{
+  margin:0;
+  font-family: "DM Serif Display", Georgia, serif;
+}
 .muted{ opacity:.75; font-size:12px; }
 .tiny{ font-size:11px; }
 .actions{ display:flex; gap:10px; align-items:center; }
+
+/* Search */
 .search{ display:flex; align-items:center; gap:8px; }
 .search .box{ position:relative; flex:1 1 260px; }
 .search input{
@@ -578,15 +598,55 @@ const css = `
   border:1px solid ${INK};
   border-radius:12px; padding:0 36px 0 12px; outline:none; background:#fff;
 }
-.search svg{ position:absolute; right:10px; top:50%; transform: translateY(-50%); opacity:.7; pointer-events:none; }
+.search svg{
+  position:absolute; right:10px; top:50%;
+  transform: translateY(-50%);
+  opacity:.7; pointer-events:none;
+}
 
-.layout{ display:grid; grid-template-columns: 320px 1fr; gap:12px; }
-.card{ border:1px solid ${INK}; border-radius:14px; background:#fff; box-shadow:0 12px 36px rgba(0,0,0,.08); overflow:hidden; }
-.left-hd, .tabs{ padding:10px 12px; border-bottom:1px solid ${INK}; background:linear-gradient(180deg, rgba(246,195,32,.10), rgba(255,255,255,.92)); }
+/* Layout: use flex so left/right heights are independent */
+.layout{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+}
+
+/* Cards */
+.card{
+  border:1px solid ${INK};
+  border-radius:14px;
+  background:#fff;
+  box-shadow:0 12px 36px rgba(0,0,0,.08);
+  overflow:hidden;
+}
+
+/* Left column (categories) */
+.left{
+  flex:0 0 320px;
+  display:flex;
+  flex-direction:column;
+  max-height: calc(100vh - 210px);
+  min-height: 260px;
+}
+
+.left-hd, .tabs{
+  padding:10px 12px;
+  border-bottom:1px solid ${INK};
+  background:linear-gradient(180deg, rgba(246,195,32,.10), rgba(255,255,255,.92));
+}
+
 .pad{ padding:12px; }
 
-/* Categories */
-.clist{ display:grid; }
+/* Make category list scroll inside the left card */
+.clist{
+  display:flex;
+  flex-direction:column;
+  flex:1 1 auto;
+  min-height:0;
+  overflow:auto;
+}
+
+/* Category rows */
 .crow{
   display:flex; align-items:center; justify-content:space-between; gap:8px;
   padding:10px 12px; border-bottom:1px solid ${INK}; cursor:pointer;
@@ -594,7 +654,10 @@ const css = `
 }
 .crow:last-child{ border-bottom:none; }
 .crow:hover{ background:#fafafa; }
-.crow.sel{ background:rgba(246,195,32,.12); border-left:3px solid ${GOLD}; }
+.crow.sel{
+  background:rgba(246,195,32,.12);
+  border-left:3px solid ${GOLD};
+}
 .crow.dragover{
   background: rgba(240,93,139,.06);
   outline: 2px dashed ${ACCENT};
@@ -604,34 +667,93 @@ const css = `
 .cname{ font-weight:800; }
 .row-actions{ display:flex; gap:6px; }
 
-/* Products panes */
-.tabs{ display:flex; align-items:center; justify-content:space-between; }
-.split{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; padding:10px; }
-.pane{ border:1px dashed ${INK}; border-radius:12px; overflow:hidden; }
-.pane-hd{ padding:8px 10px; font-weight:800; background:#fff; border-bottom:1px solid ${INK}; }
-.plist{ display:grid; gap:8px; padding:10px; }
+/* Right column */
+.right{
+  flex:1 1 auto;
+  display:flex;
+  flex-direction:column;
+  max-height: calc(100vh - 210px);
+  min-height: 260px;
+}
+
+/* Tabs row at top of right card */
+.tabs{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+
+/* Split panes inside right card
+   – this area scrolls internally, left/right panes share height */
+.split{
+  flex:1 1 auto;
+  min-height:0;
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:10px;
+  padding:10px;
+  overflow:hidden;
+}
+
+/* Each pane is flex column with its own scrollable plist */
+.pane{
+  border:1px dashed ${INK};
+  border-radius:12px;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+.pane-hd{
+  padding:8px 10px;
+  font-weight:800;
+  background:#fff;
+  border-bottom:1px solid ${INK};
+}
+
+/* Scrollable product lists */
+.plist{
+  display:grid;
+  gap:8px;
+  padding:10px;
+  flex:1 1 auto;
+  min-height:0;
+  overflow:auto;
+}
 
 /* Product item (compact) */
 .pitem{
-  border:1px solid ${INK}; border-radius:10px; background:#fff;
+  border:1px solid ${INK};
+  border-radius:10px;
+  background:#fff;
   box-shadow:0 8px 20px rgba(0,0,0,.06);
 }
 .pitem.compact{
   padding:8px 10px;
-  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
   cursor:grab;
 }
 .pitem.compact:active{ cursor:grabbing; }
 .pitem.dragging{
   filter: blur(2px);
   opacity:.6;
-  transform:none; /* no tilt */
+  transform:none;
 }
 .pname{
   font-weight:800;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
-.pright{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.pright{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-shrink:0;
+}
 .pid{
   font-size:12px; line-height:1;
   padding:3px 6px; border-radius:8px;
@@ -647,7 +769,10 @@ const css = `
 
 /* Assigned list row layout */
 .pitem-row{
-  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
   padding:10px;
 }
 .pmeta{ min-width:0; display:grid; gap:2px; }
@@ -668,16 +793,37 @@ const css = `
 
 /* Buttons */
 .btn{
-  height:38px;width: wrap; padding:0 14px; border:none; border-radius:12px; cursor:pointer;
-  background:${ACCENT}; color:#fff; font-weight:900;
+  height:38px;
+  width: auto;
+  padding:0 14px;
+  border:none;
+  border-radius:12px;
+  cursor:pointer;
+  background:${ACCENT};
+  color:#fff;
+  font-weight:900;
   box-shadow: 0 10px 28px rgba(240,93,139,.35);
 }
 .ghost{
-  height:32px;width:wrap; padding:0 10px; border-radius:10px; border:1px solid ${INK};
-  background:#fff; color:${PRIMARY}; cursor:pointer;
+  height:32px;
+  width:auto;
+  padding:0 10px;
+  border-radius:10px;
+  border:1px solid ${INK};
+  background:#fff;
+  color:${PRIMARY};
+  cursor:pointer;
 }
-.ghost.bad{ border-color: rgba(240,93,139,.5); color:#b0003a; }
-.ghost.sm, .btn.sm{ height:28px; padding: 0 10px; border-radius:8px; font-size:12.5px; }
+.ghost.bad{
+  border-color: rgba(240,93,139,.5);
+  color:#b0003a;
+}
+.ghost.sm, .btn.sm{
+  height:28px;
+  padding: 0 10px;
+  border-radius:8px;
+  font-size:12.5px;
+}
 
 /* modal */
 .modal-wrap{
@@ -693,13 +839,39 @@ const css = `
   border:1px solid ${INK}; border-radius:16px; background:#fff;
   box-shadow:0 24px 80px rgba(0,0,0,.22);
 }
-.modal-hd{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px; border-bottom:1px solid ${INK}; }
-.modal-bd{ padding:12px; overflow:auto; flex:1 1 auto; display:grid; gap:10px; }
-.modal-ft{ padding:10px 12px; border-top:1px solid ${INK}; display:flex; gap:10px; justify-content:flex-end; }
-.x{ background:#fff; border:1px solid ${INK}; border-radius:8px; width:32px; height:32px; font-size:18px; cursor:pointer; }
+.modal-hd{
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:12px; border-bottom:1px solid ${INK};
+}
+.modal-bd{
+  padding:12px;
+  overflow:auto;
+  flex:1 1 auto;
+  display:grid;
+  gap:10px;
+}
+.modal-ft{
+  padding:10px 12px;
+  border-top:1px solid ${INK};
+  display:flex; gap:10px; justify-content:flex-end;
+}
+.x{
+  background:#fff;
+  border:1px solid ${INK};
+  border-radius:8px;
+  width:32px; height:32px;
+  font-size:18px;
+  cursor:pointer;
+}
 .grid2{ display:grid; gap:10px; grid-template-columns: 1fr 1fr; }
 .grid2 label, .modal-bd label{ display:grid; gap:6px; }
-input, textarea, select{ width:100%; box-sizing:border-box; border:1px solid ${INK}; border-radius:10px; padding:10px; }
+input, textarea, select{
+  width:100%;
+  box-sizing:border-box;
+  border:1px solid ${INK};
+  border-radius:10px;
+  padding:10px;
+}
 .check{ display:flex; gap:8px; align-items:center; }
 
 /* toast */
@@ -710,4 +882,16 @@ input, textarea, select{ width:100%; box-sizing:border-box; border:1px solid ${I
 .toast.ok{ background: #4caf50; }
 .toast.bad{ background: #d32f2f; }
 @keyframes toast{ from{ transform: translateY(8px); opacity:0 } to{ transform:none; opacity:1 } }
+
+/* Responsive: stack columns on narrow screens */
+@media (max-width: 900px){
+  .layout{
+    flex-direction:column;
+  }
+  .left,
+  .right{
+    max-height:none;
+  }
+}
 `;
+
