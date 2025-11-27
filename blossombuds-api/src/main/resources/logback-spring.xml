@@ -2,15 +2,15 @@
 <configuration scan="true">
 
     <!-- Default (when no profile active) -->
-    <property name="LOG_DIR" value="logs"/>
+    <property name="LOG_DIR" value="${LOG_FILE_DIR:-logs}"/>
 
     <!-- Profile-specific overrides -->
     <springProfile name="prod">
-        <property name="LOG_DIR" value="/tmp/logs"/>
+        <property name="LOG_DIR" value="${LOG_FILE_DIR:-/tmp/logs}"/>
     </springProfile>
 
     <springProfile name="local,staging">
-        <property name="LOG_DIR" value="logs"/>
+        <property name="LOG_DIR" value="${LOG_FILE_DIR:-logs}"/>
     </springProfile>
 
     <!-- Log file & pattern -->

@@ -15,10 +15,17 @@ public class LogDirectoryInitializer {
 
     @PostConstruct
     public void createLogDirectory() {
-        String logPath = switch (profile) {
-            case "prod" -> "/tmp/logs";
-            default -> "logs";
-        };
+        String envLogDir = System.getenv("LOG_FILE_DIR");
+        String logPath;
+        
+        if (envLogDir != null && !envLogDir.isBlank()) {
+            logPath = envLogDir;
+        } else {
+            logPath = switch (profile) {
+                case "prod" -> "/tmp/logs";
+                default -> "logs";
+            };
+        }
 
         File dir = new File(logPath);
         if (!dir.exists()) {
