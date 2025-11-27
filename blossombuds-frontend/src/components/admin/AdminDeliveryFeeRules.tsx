@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import {
   listRules,
   saveRule,
+  updateRule,
   deleteRule,
   type DeliveryFeeRule,
   type RuleScope,
@@ -157,8 +158,7 @@ export default function AdminDeliveryFeeRules() {
     }
     try {
       setSavingIds((m) => ({ ...m, [Number(r.id)]: true }));
-      const saved = await saveRule({
-        id: r.id,
+      const saved = await updateRule(Number(r.id), {
         scope: (String(r.scope) || "DEFAULT").toUpperCase() as RuleScope,
         scopeId: (String(r.scope) || "").toUpperCase() === "DEFAULT" ? null : Number(r.scopeId),
         feeAmount: fee,
@@ -194,7 +194,7 @@ export default function AdminDeliveryFeeRules() {
     <section id="delivery-fee-rules" className="block">
       <style>{css}</style>
       {toast && (
-        <div className={"toast " + toast.kind} onAnimationEnd={() => setToast(null)} style={{ position:"static", marginBottom:8 }}>
+        <div className={"toast " + toast.kind} onAnimationEnd={() => setToast(null)} style={{ position: "static", marginBottom: 8 }}>
           {toast.msg}
         </div>
       )}
@@ -225,12 +225,12 @@ export default function AdminDeliveryFeeRules() {
             {draftScope === "DEFAULT" ? (
               <input className="in" disabled value="Not applicable" />
             ) : draftScope === "STATE" ? (
-              <select className="in" value={draftScopeId} onChange={(e)=>setDraftScopeId(e.target.value ? Number(e.target.value) : "")}>
+              <select className="in" value={draftScopeId} onChange={(e) => setDraftScopeId(e.target.value ? Number(e.target.value) : "")}>
                 <option value="">Select state…</option>
                 {states.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             ) : (
-              <select className="in" value={draftScopeId} onChange={(e)=>setDraftScopeId(e.target.value ? Number(e.target.value) : "")}>
+              <select className="in" value={draftScopeId} onChange={(e) => setDraftScopeId(e.target.value ? Number(e.target.value) : "")}>
                 <option value="">Select district…</option>
                 {districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
@@ -241,16 +241,16 @@ export default function AdminDeliveryFeeRules() {
           </div>
           <div className="cell">
             <label className="lbl">Fee (₹)</label>
-            <input className="in" inputMode="decimal" value={draftFee} onChange={(e)=>setDraftFee(e.target.value)} />
+            <input className="in" inputMode="decimal" value={draftFee} onChange={(e) => setDraftFee(e.target.value)} />
           </div>
           <div className="cell">
             <label className="lbl">Active</label>
-            <label style={{ display:"inline-flex", alignItems:"center", gap:8 }}>
-              <input type="checkbox" checked={draftActive} onChange={(e)=>setDraftActive(e.target.checked)} />
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <input type="checkbox" checked={draftActive} onChange={(e) => setDraftActive(e.target.checked)} />
               <span className="muted">{draftActive ? "Enabled" : "Disabled"}</span>
             </label>
           </div>
-          <div className="cell" style={{ justifySelf:"end" }}>
+          <div className="cell" style={{ justifySelf: "end" }}>
             <button className="ghost sm ok" onClick={saveNew} disabled={!!savingIds["new"]}>
               {savingIds["new"] ? "Saving…" : "Add rule"}
             </button>
@@ -263,12 +263,12 @@ export default function AdminDeliveryFeeRules() {
           <div>Target</div>
           <div>Fee (₹)</div>
           <div>Status</div>
-          <div style={{ justifySelf:"end" }}>Actions</div>
+          <div style={{ justifySelf: "end" }}>Actions</div>
         </div>
 
         {/* Existing rules */}
         {loading && <div className="trow"><div className="cell">Loading…</div></div>}
-        {!loading && err && <div className="trow"><div className="cell" style={{ color:"#b0003a" }}>{err}</div></div>}
+        {!loading && err && <div className="trow"><div className="cell" style={{ color: "#b0003a" }}>{err}</div></div>}
         {!loading && !err && rules.length === 0 && <div className="trow"><div className="cell">No rules yet.</div></div>}
 
         {!loading && !err && rules.map((r) => {
@@ -304,7 +304,7 @@ export default function AdminDeliveryFeeRules() {
                 {!editing ? (
                   <div className="val">{scopeLabel(r.scope)}</div>
                 ) : (
-                  <select className="in" value={workingScope} onChange={(e)=>{ update("_scope", e.target.value as RuleScope); update("_scopeId",""); }}>
+                  <select className="in" value={workingScope} onChange={(e) => { update("_scope", e.target.value as RuleScope); update("_scopeId", ""); }}>
                     <option value="DEFAULT">Default</option>
                     <option value="STATE">State</option>
                     <option value="DISTRICT">District</option>
@@ -316,20 +316,20 @@ export default function AdminDeliveryFeeRules() {
                   <div className="val">
                     {(String(r.scope) || "").toUpperCase() === "DEFAULT" ? "—" :
                       (String(r.scope) || "").toUpperCase() === "STATE" ? (stateName(r.scopeId) || `State #${r.scopeId}`) :
-                      (districtName(r.scopeId) || `District #${r.scopeId}`)}
+                        (districtName(r.scopeId) || `District #${r.scopeId}`)}
                   </div>
                 ) : workingScope === "DEFAULT" ? (
                   <input className="in" disabled value="Not applicable" />
                 ) : workingScope === "STATE" ? (
                   <>
-                    <select className="in" value={workingScopeId ?? ""} onChange={(e)=>update("_scopeId", e.target.value ? Number(e.target.value) : "")}>
+                    <select className="in" value={workingScopeId ?? ""} onChange={(e) => update("_scopeId", e.target.value ? Number(e.target.value) : "")}>
                       <option value="">Select state…</option>
                       {states.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                     {statesNote && <div className="muted" style={{ marginTop: 4 }}>{statesNote}</div>}
                   </>
                 ) : (
-                  <select className="in" value={workingScopeId ?? ""} onChange={(e)=>update("_scopeId", e.target.value ? Number(e.target.value) : "")}>
+                  <select className="in" value={workingScopeId ?? ""} onChange={(e) => update("_scopeId", e.target.value ? Number(e.target.value) : "")}>
                     <option value="">Select district…</option>
                     {districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
@@ -339,24 +339,24 @@ export default function AdminDeliveryFeeRules() {
                 {!editing ? (
                   <div className="val">₹{asNumber(r.feeAmount).toFixed(2)}</div>
                 ) : (
-                  <input className="in" inputMode="decimal" value={String(workingFee)} onChange={(e)=>update("_feeAmount", e.target.value)} />
+                  <input className="in" inputMode="decimal" value={String(workingFee)} onChange={(e) => update("_feeAmount", e.target.value)} />
                 )}
               </div>
               <div className="cell">
                 {!editing ? (
                   <span className="val" title={r.active ? "Enabled" : "Disabled"}>{r.active ? "Enabled" : "Disabled"}</span>
                 ) : (
-                  <label style={{ display:"inline-flex", alignItems:"center", gap:8 }}>
-                    <input type="checkbox" checked={!!workingActive} onChange={(e)=>update("_active", e.target.checked)} />
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                    <input type="checkbox" checked={!!workingActive} onChange={(e) => update("_active", e.target.checked)} />
                     <span className="muted">{workingActive ? "Enabled" : "Disabled"}</span>
                   </label>
                 )}
               </div>
-              <div className="cell" style={{ justifySelf:"end", display:"flex", gap:8 }}>
+              <div className="cell" style={{ justifySelf: "end", display: "flex", gap: 8 }}>
                 {!editing ? (
                   <>
-                    <button className="ghost sm" onClick={()=>setEdit(true)}>Edit</button>
-                    <button className="ghost sm bad" onClick={()=>del(Number(r.id))} disabled={!!savingIds[Number(r.id)]}>
+                    <button className="ghost sm" onClick={() => setEdit(true)}>Edit</button>
+                    <button className="ghost sm bad" onClick={() => del(Number(r.id))} disabled={!!savingIds[Number(r.id)]}>
                       {savingIds[Number(r.id)] ? "…" : "Delete"}
                     </button>
                   </>
@@ -365,7 +365,7 @@ export default function AdminDeliveryFeeRules() {
                     <button className="ghost sm ok" onClick={save} disabled={!!savingIds[Number(r.id)]}>
                       {savingIds[Number(r.id)] ? "Saving…" : "Save"}
                     </button>
-                    <button className="ghost sm" onClick={()=>setEdit(false)}>Cancel</button>
+                    <button className="ghost sm" onClick={() => setEdit(false)}>Cancel</button>
                   </>
                 )}
               </div>

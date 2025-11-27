@@ -5,7 +5,7 @@ import {
   deleteSetting,
   type SettingView,
 } from "../../api/adminSettings";
-import AdminFeatureImagesSetting  from "../../components/admin/AdminFeatureImagesSetting";
+import AdminFeatureImagesSetting from "../../components/admin/AdminFeatureImagesSetting";
 import AdminCoupons from "../../components/admin/AdminCoupons";
 import AdminDeliveryPartners from "../../components/admin/AdminDeliveryPartners";
 import AdminDeliveryFeeRules from "../../components/admin/AdminDeliveryFeeRules";
@@ -34,7 +34,9 @@ type Section = {
 
 export default function SettingsPage() {
   const [allRows, setAllRows] = useState<Row[]>([]);
-  const [sections, setSections] = useState<Section[]>([]);
+  // UI state for sections: open/closed, and draft row state
+  const [sectionUi, setSectionUi] = useState<Record<string, { open: boolean; draft: { keyPart: string; value: string } | null }>>({});
+
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: "ok" | "bad"; msg: string } | null>(null);
@@ -59,6 +61,19 @@ export default function SettingsPage() {
           .sort((a, b) => a.key.localeCompare(b.key))
           .map((s) => ({ key: s.key, value: s.value ?? "", mode: "view" }));
         setAllRows(rows);
+
+        // Initialize UI state for sections found
+        const initialUi: Record<string, any> = {};
+        const seen = new Set<string>();
+        for (const r of rows) {
+          const sec = sectionNameOf(r.key);
+          if (!seen.has(sec)) {
+            seen.add(sec);
+            initialUi[sec] = { open: true, draft: null };
+          }
+        }
+        setSectionUi(initialUi);
+
       } catch (e: any) {
         if (!live) return;
         setErr(e?.message || "Failed to load settings.");
@@ -85,24 +100,33 @@ export default function SettingsPage() {
     );
   }, [allRows, q]);
 
-  // build sections from rows
-  useEffect(() => {
+  // Derived sections from filteredRows + sectionUi
+  const sections = useMemo(() => {
     const map = new Map<string, Row[]>();
+    // Group rows
     for (const r of filteredRows) {
       const sec = sectionNameOf(r.key);
       if (!map.has(sec)) map.set(sec, []);
       map.get(sec)!.push(r);
     }
-    const next: Section[] = Array.from(map.entries())
+
+    // Also ensure we show sections that might have a draft but no rows (if we supported that, but currently drafts are attached to existing sections)
+    // Actually, if we add a new key to a section that has no rows yet (via "New section" button), it appears in allRows.
+    // So iterating filteredRows is sufficient.
+
+    const list: Section[] = Array.from(map.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([name, rows]) => ({
-        name,
-        open: true,
-        rows,
-        draft: null,
-      }));
-    setSections(next);
-  }, [filteredRows]);
+      .map(([name, rows]) => {
+        const ui = sectionUi[name] || { open: true, draft: null };
+        return {
+          name,
+          open: ui.open,
+          rows,
+          draft: ui.draft,
+        };
+      });
+    return list;
+  }, [filteredRows, sectionUi]);
 
   /* ---------- row actions ---------- */
   function startEdit(fullKey: string) {
@@ -145,29 +169,36 @@ export default function SettingsPage() {
   }
 
   /* ---------- section-level add key ---------- */
+  /* ---------- section-level add key ---------- */
+  function setSecUi(name: string, patch: Partial<{ open: boolean; draft: any }>) {
+    setSectionUi(prev => {
+      const existing = prev[name] || { open: true, draft: null };
+      return { ...prev, [name]: { ...existing, ...patch } };
+    });
+  }
+
   function addDraftRow(sectionName: string) {
-    setSections((secs) =>
-      secs.map((s) =>
-        s.name === sectionName
-          ? { ...s, open: true, draft: { keyPart: "", value: "" } }
-          : s
-      )
-    );
+    setSecUi(sectionName, { open: true, draft: { keyPart: "", value: "" } });
   }
+
   function updateDraft(sectionName: string, field: "keyPart" | "value", v: string) {
-    setSections((secs) =>
-      secs.map((s) =>
-        s.name === sectionName && s.draft
-          ? { ...s, draft: { ...s.draft, [field]: v } }
-          : s
-      )
-    );
+    setSectionUi(prev => {
+      const existing = prev[sectionName];
+      if (!existing || !existing.draft) return prev;
+      return {
+        ...prev,
+        [sectionName]: { ...existing, draft: { ...existing.draft, [field]: v } }
+      };
+    });
   }
+
   async function saveDraft(sectionName: string) {
-    const sec = sections.find((s) => s.name === sectionName);
-    if (!sec || !sec.draft) return;
-    const keyPart = sec.draft.keyPart.trim();
-    const value = (sec.draft.value ?? "").trim();
+    const ui = sectionUi[sectionName];
+    if (!ui || !ui.draft) return;
+
+    const keyPart = ui.draft.keyPart.trim();
+    const value = (ui.draft.value ?? "").trim();
+
     if (!keyPart) {
       setToast({ kind: "bad", msg: "Key is required." });
       return;
@@ -179,23 +210,18 @@ export default function SettingsPage() {
         const exists = rs.some((r) => r.key === fullKey);
         const next = exists
           ? rs.map((r) => (r.key === fullKey ? { ...r, value } : r))
-          : [...rs, { key: fullKey, value, mode: "view" }];
+          : [...rs, { key: fullKey, value, mode: "view" as RowMode }];
         return next.sort((a, b) => a.key.localeCompare(b.key));
       });
-      setSections((secs) =>
-        secs.map((s) =>
-          s.name === sectionName ? { ...s, draft: null } : s
-        )
-      );
+      setSecUi(sectionName, { draft: null });
       setToast({ kind: "ok", msg: "Saved." });
     } catch (e: any) {
       setToast({ kind: "bad", msg: e?.message || "Save failed." });
     }
   }
+
   function cancelDraft(sectionName: string) {
-    setSections((secs) =>
-      secs.map((s) => (s.name === sectionName ? { ...s, draft: null } : s))
-    );
+    setSecUi(sectionName, { draft: null });
   }
 
   /* ---------- top-level: new section ---------- */
@@ -216,7 +242,7 @@ export default function SettingsPage() {
     try {
       await upsertSetting(fullKey, newSecValue ?? "");
       setAllRows((rs) =>
-        [...rs, { key: fullKey, value: newSecValue ?? "", mode: "view" }].sort((a, b) =>
+        [...rs, { key: fullKey, value: newSecValue ?? "", mode: "view" as RowMode }].sort((a, b) =>
           a.key.localeCompare(b.key)
         )
       );
@@ -309,7 +335,7 @@ export default function SettingsPage() {
         </div>
         <div className="block-body card">
           <div className="block-inner">
-            <AdminFeatureImagesSetting  />
+            <AdminFeatureImagesSetting />
           </div>
         </div>
       </section>
@@ -359,9 +385,7 @@ export default function SettingsPage() {
           <div
             className="sec-hd"
             onClick={() =>
-              setSections((secs) =>
-                secs.map((s) => (s.name === sec.name ? { ...s, open: !s.open } : s))
-              )
+              setSecUi(sec.name, { open: !sec.open })
             }
           >
             <div className="sec-title">
