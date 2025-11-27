@@ -19,12 +19,32 @@ const styles = `
   font-weight:900; cursor:pointer; background: var(--accent); color:#fff; box-shadow:0 12px 26px rgba(240,93,139,.28); text-decoration:none; }
 .cta:hover{ transform: translateY(-1px); box-shadow:0 16px 36px rgba(240,93,139,.36); }
 
-.grid{ display:grid; grid-template-columns: 1.6fr 0.9fr; gap:14px; }
+.grid{ display:grid; grid-template-columns: 1.6fr 0.9fr; gap:14px;align-items: flex-start;  }
 @media (max-width: 980px){ .grid{ grid-template-columns: 1fr; } }
 
 .card{ background:#fff; border:1px solid var(--ink); border-radius:16px; box-shadow:0 12px 36px rgba(0,0,0,.08); overflow:hidden; }
 
 .items{ padding:8px; }
+.items-list{
+  display:block;
+}
+@media (min-width: 981px){
+  .items{
+    padding:8px;
+    display:flex;
+    flex-direction:column;
+    max-height: 460px;          /* ✅ limit how tall the items section can grow */
+  }
+
+  .items-head{
+    flex:0 0 auto;
+  }
+
+  .items-list{
+    flex:1 1 auto;
+    overflow:auto;              /* ✅ internal scroll when many items */
+  }
+}
 
 /* ---------- DESKTOP ROW ---------- */
 .row {
@@ -121,85 +141,84 @@ const styles = `
 /* ---------- MOBILE VIEW ---------- */
 @media (max-width: 768px) {
   .row {
-    display: grid;
-    grid-template-columns: 60px 1fr auto auto;
-    grid-template-rows: auto auto;
-    gap: 6px;
-    padding: 10px 6px;
-    align-items: center;
-    border-bottom: 1px dashed var(--ink);
-  }
+      display: grid;
+      grid-template-columns: 60px 1fr auto auto;
+      grid-template-rows: auto auto;
+      gap: 6px;
+      padding: 10px 6px;
+      align-items: center;
+      border-bottom: 1px dashed var(--ink);
+    }
 
-  .thumb {
-    grid-row: 1 / span 2;
-    width: 60px;
-    height: 60px;
-    border-radius: 8px;
-    overflow: hidden;
-    background: #f5f5f5;
-    display: grid;
-    place-items: center;
-  }
+   .thumb {
+      grid-row: 1 / span 2;
+      width: 60px;
+      height: 60px;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #f5f5f5;
+      display: grid;
+      place-items: center;
+    }
 
   .meta {
-    grid-column: 2;
-    grid-row: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-  }
+      grid-column: 2;
+      grid-row: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
 
- .qty-mini {
-   grid-column: 2;
-   grid-row: 2;
-   display: inline-flex;
-   align-items: center;
-   gap: 4px;
-   padding: 2px 6px;
-   border: 1px solid var(--ink);
-   border-radius: 8px;
-   background: #fff;
-   font-size: 12px;
-   margin-top:2px;
-   font-weight: 700;
-   width: max-content; /* ✅ prevents it from stretching */
-   justify-self: start; /* ✅ aligns left within the grid cell */
- }
+  .qty-mini {
+      grid-column: 3;
+      grid-row: 2;
+      justify-self: end;          /* ✅ vertical line with price */
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--ink);
+      background: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      box-shadow: 0 4px 10px rgba(0,0,0,.06);
+    }
 
 
   .qty-mini button {
-    width: 20px;
-    height: 20px;
-    font-size: 13px;
-    border-radius: 4px;
-  }
+      width: 22px;
+      height: 22px;
+      font-size: 14px;
+      font-weight: 800;
+      border-radius: 999px;
+      border: 1px solid var(--ink);
+      background: #f8f8f8;
+      display: grid;
+      place-items: center;
+      padding: 0;
+      line-height: 1;
+    }
 
   .qty-mini span {
-    min-width: 16px;
+    min-width: 18px;
     text-align: center;
   }
 
-  .line {
-    grid-column: 3;
-    grid-row: 1;
-    font-size: 13px;
-    font-weight: 800;
-    color: var(--accent);
-    text-align: right;
-  }
 
   .rm {
-    grid-column: 4;
-    grid-row: 1;
-    font-size: 16px;
-    width: 24px;
-    height: 24px;
-    color: var(--danger);
-    display: grid;
-    place-items: center;
-    cursor: pointer;
-  }
+      grid-column: 4;
+      grid-row: 1 / span 2;   /* ✅ spans price + qty rows */
+      align-self: center;      /* ✅ vertically centered */
+      font-size: 16px;
+      width: 26px;
+      height: 26px;
+      color: var(--danger);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+    }
 
   .name {
     font-size: 13px;
@@ -387,29 +406,31 @@ export default function CartPage(){
           <section className="card items">
             <div className="items-head">Items</div>
 
-            {items.map(it=>(
-              <div className="row" key={it.id}>
-                <Thumb productId={it.productId} src={it.image} alt={it.name} />
-                <div className="meta">
-                  <div className="name">{it.name}</div>
-                  {it.variant && <div className="variant" title={it.variant}>{it.variant}</div>}
-                  <span className="small">{inr(it.price)} each</span>
-                </div>
+            <div className="items-list">
+              {items.map(it=>(
+                <div className="row" key={it.id}>
+                  <Thumb productId={it.productId} src={it.image} alt={it.name} />
+                  <div className="meta">
+                    <div className="name">{it.name}</div>
+                    {it.variant && <div className="variant" title={it.variant}>{it.variant}</div>}
+                    <span className="small">{inr(it.price)} each</span>
+                  </div>
 
-                <div className="qty-mini">
-                  <button onClick={() => setQty(it.id, Math.max(1, it.qty - 1))}>−</button>
-                  <span>{it.qty}</span>
-                  <button onClick={() => setQty(it.id, it.qty + 1)}>+</button>
-                </div>
+                  <div className="qty-mini">
+                    <button onClick={() => setQty(it.id, Math.max(1, it.qty - 1))}>−</button>
+                    <span>{it.qty}</span>
+                    <button onClick={() => setQty(it.id, it.qty + 1)}>+</button>
+                  </div>
 
-                <div className="price-remove-wrap">
-                  <div className="line">{inr(it.price * it.qty)}</div>
-                  <button className="rm" onClick={() => remove(it.id)}>✕</button>
+                  <div className="price-remove-wrap">
+                    <div className="line">{inr(it.price * it.qty)}</div>
+                    <button className="rm" onClick={() => remove(it.id)}>✕</button>
+                  </div>
                 </div>
-              </div>
-
-            ))}
+              ))}
+            </div>
           </section>
+
 
           {/* RIGHT: summary */}
           <aside className="card sum">
