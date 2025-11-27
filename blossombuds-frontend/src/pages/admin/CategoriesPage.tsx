@@ -16,9 +16,9 @@ import {
 
 /* Theme */
 const PRIMARY = "#4A4F41";
-const ACCENT  = "#F05D8B";
-const GOLD    = "#F6C320";
-const INK     = "rgba(0,0,0,.08)";
+const ACCENT = "#F05D8B";
+const GOLD = "#F6C320";
+const INK = "rgba(0,0,0,.08)";
 
 export default function CategoriesPage() {
   // categories
@@ -28,6 +28,11 @@ export default function CategoriesPage() {
 
   // selection
   const [selectedCatId, setSelectedCatId] = useState<number | null>(null);
+  const selectedCatIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    selectedCatIdRef.current = selectedCatId;
+  }, [selectedCatId]);
 
   // products
   const [allProducts, setAllProducts] = useState<Product[]>([]);
@@ -236,28 +241,20 @@ export default function CategoriesPage() {
 
     if (!productId) return;
 
-    // 👉 When dropped, make this category the selected one
+    // 👉 When dropped, make this category the selected one immediately
     setSelectedCatId(catId);
 
-    // optimistic add if dropping into the currently selected category
-    if (selectedCatId === catId) {
-      const p = allProducts.find(x => x.id === productId);
-      if (p && !catProducts.some(x => x.id === p.id)) {
-        setCatProducts(prev => [p, ...prev]);
-      }
-    }
     try {
       await linkProductToCategoryApi(productId, catId);
       setToast({ kind: "ok", msg: "Product linked" });
-      if (selectedCatId === catId) {
+
+      // If we are still on the same category, refresh the list to show the new product
+      if (selectedCatIdRef.current === catId) {
         const prods = await listProductsByCategory(catId, 0, 300);
         setCatProducts(prods);
       }
     } catch (e: any) {
       setToast({ kind: "bad", msg: e?.response?.data?.message || "Link failed" });
-      if (selectedCatId === catId) {
-        setCatProducts(prev => prev.filter(x => x.id !== productId));
-      }
     } finally {
       setDraggingPid(null);
     }
@@ -481,8 +478,7 @@ function CategoryModal({
   const [slug, setSlug] = useState(initial?.slug || "");
   const [description, setDescription] = useState(initial?.description || "");
   const [active, setActive] = useState(initial?.active ?? true);
-  // @ts-expect-error parentId may exist in your DTO; harmless if backend ignores it
-  const [parentId, setParentId] = useState<number | "">( (initial as any)?.parentId ?? (defaultParentId ?? "") );
+  const [parentId, setParentId] = useState<number | "">((initial as any)?.parentId ?? (defaultParentId ?? ""));
 
   useEffect(() => {
     if (!initial && mode === "create") setSlug(slugify(name));
@@ -545,7 +541,7 @@ function CategoryModal({
                 slug: slug.trim(),
                 description: description.trim(),
                 active,
-                // @ts-expect-error backend may accept it; if not, it’s ignored
+                // backend may accept it; if not, it’s ignored
                 parentId: parentId === "" ? null : parentId,
               })
             }
@@ -714,6 +710,8 @@ const css = `
 /* Scrollable product lists */
 .plist{
   display:grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
   gap:8px;
   padding:10px;
   flex:1 1 auto;
@@ -744,9 +742,9 @@ const css = `
 }
 .pname{
   font-weight:800;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
+  white-space:normal;
+  flex: 1;
+  min-width: 0;
 }
 .pright{
   display:flex;
