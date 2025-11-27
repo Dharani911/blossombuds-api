@@ -44,7 +44,7 @@ export default function AppLayout() {
       {/* Global toast mount (no logic; safe place for 2–3s toasts) */}
       <div id="bb-toaster-root" aria-live="polite" aria-atomic="true"></div>
 
-      <style>{css}</style>
+     {/*  <style>{css}</style> */}
     </div>
   );
 }
@@ -60,6 +60,7 @@ const css = `
   --ink: rgba(0,0,0,.06);
   --shadow: var(--bb-shadow, 0 10px 24px rgba(0,0,0,.08));
   background: var(--bb-bg, #FAF7E7);
+  min-height: 100vh;
   min-height: 100dvh;
   width: 100%;                 /* ✅ ensure root can’t exceed viewport */
   overflow-x: hidden;          /* ✅ hard-stop horizontal leaks */
@@ -133,25 +134,7 @@ const css = `
 }
 #bb-toaster-root .bb-toast.good{ border-color: rgba(19,111,42,.25); background:#f0fff3; }
 #bb-toaster-root .bb-toast.bad{  border-color: rgba(176,0,58,.25); background:#fff3f5; }
-.scroll-top-btn {
-  position: fixed;
-  right: 16px;                 /* ✅ Match WhatsApp FAB's right spacing */
-  bottom: 84px;                /* ✅ Stacks above WhatsApp (which is bottom: 24px) */
-  z-index: 999;
-  width: 44px;
-  height: 44px;
-  background: var(--bb-accent);
-  color: #fff;
-  font-size: 24px;
-  border: none;
-  border-radius: 50%;
-  box-shadow: var(--bb-shadow);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.2s ease, transform 0.2s ease;
-}
+
 .scroll-top-btn:hover {
   background: #e94c7a;
   transform: translateY(-2px);
@@ -189,9 +172,10 @@ const css = `
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1;
+  z-index: 999;                          /* ← change this */
   transition: background 0.2s ease, transform 0.2s ease;
 }
+
 
 
 .scroll-top-btn i,
@@ -202,38 +186,7 @@ const css = `
 /* ─────────────────────────────────────────────── */
 /* DESKTOP FIX — perfectly vertically align FABs   */
 /* ─────────────────────────────────────────────── */
-@media (min-width: 768px) {
-  .whatsapp-fab,
-  .scroll-top-btn {
-    right: 24px !important;  /* same anchor point */
-    width: 60px !important;
-    height: 60px !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    padding: 0 !important;    /* prevent shifting */
-    border-radius: 50% !important;
-  }
 
-  .whatsapp-fab {
-    bottom: 28px !important;
-  }
-
-  .scroll-top-btn {
-    bottom: calc(28px + 60px + 10px) !important;
-  }
-
-  /* Ensure icons inside are centered properly */
-  .whatsapp-fab i,
-  .scroll-top-btn i {
-    display: block !important;
-    line-height: 1 !important;
-    font-size: 26px !important;
-    text-align: center !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-}
 @media (min-width: 768px) {
   .whatsapp-fab,
   .scroll-top-btn {
@@ -255,7 +208,7 @@ const css = `
     bottom: calc(28px + 56px + 10px) !important;
     font-size: 22px !important;
     line-height: 1 !important;
-    margin:2 px;
+    /* remove margin:2 px; */
   }
 
   /* ensure icons are properly centered */
@@ -270,7 +223,5 @@ const css = `
     font-size: 22px !important;
   }
 }
-
-
 
 `;

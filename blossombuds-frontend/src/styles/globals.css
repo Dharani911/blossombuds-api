@@ -26,6 +26,7 @@ body {
   color: #2b2b2b;
   background: var(--bb-bg);
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, "Montserrat", "Lato", sans-serif;
+  min-height: 100vh;
   min-height: 100dvh;
 }
 a {
@@ -74,10 +75,26 @@ h1, h2, h3, h4, h5 {
 }
 
 .btn-secondary {
-  composes: btn-primary;
-  background: var(--bb-accent-2);
-  color: #2b2b2b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: .75rem 1.25rem;
+  border-radius: 999px;
+  border: none;
+  background: var(--bb-accent-2);  /* 👈 changed */
+  color: #2b2b2b;                  /* 👈 changed */
+  font-weight: 700;
+  letter-spacing: .3px;
+  transition: transform .15s ease, box-shadow .15s ease;
+  box-shadow: var(--bb-shadow);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
+.btn-secondary:hover {
+  transform: translateY(-1px);
+}
+
 
 /* GHOST Buttons */
 .btn-ghost, .ghost {
@@ -102,7 +119,7 @@ h1, h2, h3, h4, h5 {
 
 /* ---------- Inputs ---------- */
 input, select, textarea {
-  width: 90%;
+  width: 100%;
   min-height: 30px;
   font-size: 14px;
   border: 1px solid rgba(0, 0, 0, .15);

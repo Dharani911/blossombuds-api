@@ -2,7 +2,8 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 export type CartItem = {
-  id: string;          // unique per product+variant (e.g., "prod_123|v:45,67")
+  id: string;
+  productId: number; // unique per product+variant (e.g., "prod_123|v:45,67")
   name: string;
   price: number;       // unit price actually charged
   qty: number;

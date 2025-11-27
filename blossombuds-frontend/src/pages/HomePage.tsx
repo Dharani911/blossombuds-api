@@ -5,7 +5,7 @@ import ProductShowcase from "../components/home/ProductShowCase";
 import Testimonials from "../components/home/Testimonials";
 import CustomOrderCTA from "../components/home/CustomOrderCTA";
 // Note: HomeCarousel import kept (unused) to avoid logic changes
-import HomeCarousel from "../components/home/HomeCarousel";
+
 
 export default function HomePage() {
   return (
