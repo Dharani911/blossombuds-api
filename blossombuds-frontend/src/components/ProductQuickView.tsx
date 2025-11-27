@@ -137,18 +137,23 @@ export default function ProductQuickView({ productId, onClose }: Props) {
     setAdding(true);
     add({
       id: `${p.id}:${Object.values(sel).sort().join(",") || "base"}`,
+      productId: p.id,   // ✅ NEW
       name: p.name,
       price: unitPrice,
       qty: Math.max(1, qty|0),
       image: images[0]?.url || p.primaryImageUrl || "",
-      variant: opts.map(o => {
-        const v = o.values.find(x => x.id === sel[o.id]);
-        return v ? `${o.name}: ${v.valueLabel}` : "";
-      }).filter(Boolean).join(" / "),
+      variant: opts
+        .map(o => {
+          const v = o.values.find(x => x.id === sel[o.id]);
+          return v ? `${o.name}: ${v.valueLabel}` : "";
+        })
+        .filter(Boolean)
+        .join(" / "),
     });
     setQty(1);
     setTimeout(() => setAdding(false), 650);
   }
+
 
   const hero = images[cur]?.url || p?.primaryImageUrl || "";
   const hasNav = images.length > 1;
