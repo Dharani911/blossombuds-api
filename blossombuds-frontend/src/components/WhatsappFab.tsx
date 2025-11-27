@@ -54,12 +54,25 @@ export default function WhatsappFab() {
   }, []);
 
   // Lock background scroll when the sheet is open
+  // Ensure body/html can scroll when the WhatsApp sheet is open
   useEffect(() => {
     if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
+
+    const body = document.body;
+    const html = document.documentElement;
+
+    const prevBodyOverflow = body.style.overflow;
+    const prevHtmlOverflow = html.style.overflow;
+
+    body.style.overflow = "visible";
+    html.style.overflow = "visible";
+
+    return () => {
+      body.style.overflow = prevBodyOverflow;
+      html.style.overflow = prevHtmlOverflow;
+    };
   }, [open]);
+
 
   const close = () => {
     setOpen(false);
@@ -116,7 +129,7 @@ function Menu({ onPick }: { onPick: (v: View) => void }) {
   return (
     <>
       <div className="scroll-area">
-        <div className="menu fade-in">
+        <div className="wa-menu-list fade-in">
           <button className="menu-item" onClick={() => onPick("general")}>
             <span className="mi-ic">💬</span>
             <div className="mi-text">
@@ -154,40 +167,40 @@ function Menu({ onPick }: { onPick: (v: View) => void }) {
 function GeneralView({ number }: { number: string }) {
   const [query, setQuery] = useState("");
 
-    const faqs = [
-      {
-        q: "What products do you offer?",
-        a: "We specialize in handcrafted artificial floral designs, including garlands, bridal flowers, décor pieces, accessories, and custom floral creations for events.",
-      },
-      {
-        q: "Are your flowers reusable?",
-        a: "Yes, all our artificial flowers are made with high-quality materials and are reusable, long-lasting, and easy to store.",
-      },
-      {
-        q: "Do the flowers look realistic?",
-        a: "Absolutely. Each petal and arrangement is carefully handcrafted to look as close to real flowers as possible.",
-      },
-      {
-        q: "Do you ship?",
-        a: "Yes, we ship across India. Shipping charges depend on your order size and location.",
-      },
-      {
-        q: "What is your return or exchange policy?",
-        a: "Since every item is handcrafted, we do not accept returns. However, if there is any damage during delivery, we’ll assist with repair or replacement based on proper proof.",
-      },
-      {
-        q: "How do I care for my artificial flowers?",
-        a: "Keep them away from direct heat, dust gently with a soft brush, and store them in a box to maintain shape. With proper care, the flowers last for years.",
-      },
-      {
-        q: "How do I place an order?",
-        a: "You can order via WhatsApp, Instagram DM, or our website contact form. Once your order details are confirmed, we’ll share payment information.",
-      },
-      {
-        q: "What payment methods do you accept?",
-        a: "We accept UPI, bank transfer, and other online payment options.",
-      },
-    ];
+  const faqs = [
+    {
+      q: "What products do you offer?",
+      a: "We specialize in handcrafted artificial floral designs, including garlands, bridal flowers, décor pieces, accessories, and custom floral creations for events.",
+    },
+    {
+      q: "Are your flowers reusable?",
+      a: "Yes, all our artificial flowers are made with high-quality materials and are reusable, long-lasting, and easy to store.",
+    },
+    {
+      q: "Do the flowers look realistic?",
+      a: "Absolutely. Each petal and arrangement is carefully handcrafted to look as close to real flowers as possible.",
+    },
+    {
+      q: "Do you ship?",
+      a: "Yes, we ship across India. Shipping charges depend on your order size and location.",
+    },
+    {
+      q: "What is your return or exchange policy?",
+      a: "Since every item is handcrafted, we do not accept returns. However, if there is any damage during delivery, we’ll assist with repair or replacement based on proper proof.",
+    },
+    {
+      q: "How do I care for my artificial flowers?",
+      a: "Keep them away from direct heat, dust gently with a soft brush, and store them in a box to maintain shape. With proper care, the flowers last for years.",
+    },
+    {
+      q: "How do I place an order?",
+      a: "You can order via WhatsApp, Instagram DM, or our website contact form. Once your order details are confirmed, we’ll share payment information.",
+    },
+    {
+      q: "What payment methods do you accept?",
+      a: "We accept UPI, bank transfer, and other online payment options.",
+    },
+  ];
 
 
   const message = `General query: ${query || "(no message entered)"}`;
@@ -229,7 +242,7 @@ function GeneralView({ number }: { number: string }) {
             <input
               className="wa-input"
               value={query}
-              onChange={e=>setQuery(e.target.value)}
+              onChange={e => setQuery(e.target.value)}
               placeholder="Type your question…"
               aria-label="Your general question"
             />
@@ -290,20 +303,20 @@ function CustomView({ number }: { number: string }) {
 
   return (
     <>
-            <div className="scroll-area">
-              <div className="panel fade-in">
+      <div className="scroll-area">
+        <div className="panel fade-in">
 
 
-                <div className="section">
-                  <h3 className="panel-title">Custom &amp; bulk order FAQs</h3>
-                  <div className="faq">
-                    {faqs.map((f, i) => (
-                      <FaqItem key={i} q={f.q} a={f.a} />
-                    ))}
-                  </div>
-                </div>
-              </div>
+          <div className="section">
+            <h3 className="panel-title">Custom &amp; bulk order FAQs</h3>
+            <div className="faq">
+              {faqs.map((f, i) => (
+                <FaqItem key={i} q={f.q} a={f.a} />
+              ))}
             </div>
+          </div>
+        </div>
+      </div>
 
 
       <div className="sticky-footer">
@@ -312,7 +325,7 @@ function CustomView({ number }: { number: string }) {
             <input
               className="wa-input"
               value={msg}
-              onChange={e=>setMsg(e.target.value)}
+              onChange={e => setMsg(e.target.value)}
               placeholder="e.g., Pastel bridal set for Oct 20, blush + ivory"
               aria-label="Describe your customization"
             />
@@ -389,20 +402,20 @@ function TrackingView({ number }: { number: string }) {
 
   return (
     <>
-            <div className="scroll-area">
-              <div className="panel fade-in">
+      <div className="scroll-area">
+        <div className="panel fade-in">
 
 
-                <div className="section">
-                  <h3 className="panel-title">Tracking &amp; delivery FAQs</h3>
-                  <div className="faq">
-                    {faqs.map((f, i) => (
-                      <FaqItem key={i} q={f.q} a={f.a} />
-                    ))}
-                  </div>
-                </div>
-              </div>
+          <div className="section">
+            <h3 className="panel-title">Tracking &amp; delivery FAQs</h3>
+            <div className="faq">
+              {faqs.map((f, i) => (
+                <FaqItem key={i} q={f.q} a={f.a} />
+              ))}
             </div>
+          </div>
+        </div>
+      </div>
 
 
       <div className="sticky-footer">
@@ -411,7 +424,7 @@ function TrackingView({ number }: { number: string }) {
             <input
               className="wa-input"
               value={q}
-              onChange={e=>setQ(e.target.value)}
+              onChange={e => setQ(e.target.value)}
               placeholder="e.g., Can you expedite my order? Order #BB1234"
               aria-label="Your tracking question"
             />
@@ -435,7 +448,7 @@ function TrackingView({ number }: { number: string }) {
 function FaqItem({ q, a }: { q: string; a: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <details className="faq-item" open={open} onToggle={e=>setOpen((e.target as HTMLDetailsElement).open)}>
+    <details className="faq-item" open={open} onToggle={e => setOpen((e.target as HTMLDetailsElement).open)}>
       <summary className="faq-q">
         <span>{q}</span>
         <span className="faq-icon">{open ? "−" : "+"}</span>
@@ -448,28 +461,28 @@ function FaqItem({ q, a }: { q: string; a: string }) {
 function WaIcon() {
   return (
     <svg viewBox="0 0 32 32" width="22" height="22" aria-hidden>
-      <path fill="#fff" d="M16 3a13 13 0 0 0-11.2 19.6L3 29l6.6-1.7A13 13 0 1 0 16 3zm7.4 18.6c-.3.8-1.7 1.5-2.3 1.6-.6.1-1.3.2-2.1-.1-.5-.1-1.1-.4-1.9-.7-3.4-1.5-5.6-4.8-5.8-5-.2-.2-1.4-1.8-1.4-3.5 0-1.6.8-2.4 1.1-2.8.3-.4.8-.6 1-.6h.7c.2 0 .5.1.7.6.3.8.9 2.6 1 2.8.1.2.1.4 0 .6-.1.2-.2.3-.4.5l-.4.4c-.1.1-.3.3-.1.6.2.3.8 1.3 1.7 2.1 1.2 1.1 2.1 1.4 2.4 1.6.2.1.5.1.6 0 .2-.1 1.5-.7 1.7-.8.2-.1.3-.1.5 0s1.6.8 1.9 1c.3.2.5.3.5.5 0 .3.1 1-.2 1.8z"/>
+      <path fill="#fff" d="M16 3a13 13 0 0 0-11.2 19.6L3 29l6.6-1.7A13 13 0 1 0 16 3zm7.4 18.6c-.3.8-1.7 1.5-2.3 1.6-.6.1-1.3.2-2.1-.1-.5-.1-1.1-.4-1.9-.7-3.4-1.5-5.6-4.8-5.8-5-.2-.2-1.4-1.8-1.4-3.5 0-1.6.8-2.4 1.1-2.8.3-.4.8-.6 1-.6h.7c.2 0 .5.1.7.6.3.8.9 2.6 1 2.8.1.2.1.4 0 .6-.1.2-.2.3-.4.5l-.4.4c-.1.1-.3.3-.1.6.2.3.8 1.3 1.7 2.1 1.2 1.1 2.1 1.4 2.4 1.6.2.1.5.1.6 0 .2-.1 1.5-.7 1.7-.8.2-.1.3-.1.5 0s1.6.8 1.9 1c.3.2.5.3.5.5 0 .3.1 1-.2 1.8z" />
     </svg>
   );
 }
-function ArrowLeftIcon(){
+function ArrowLeftIcon() {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
-      <path d="M15 18l-6-6 6-6" fill="none" stroke="var(--bb-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M15 18l-6-6 6-6" fill="none" stroke="var(--bb-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
-function ArrowRightIcon(){
+function ArrowRightIcon() {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
-      <path d="M9 6l6 6-6 6" fill="none" stroke="var(--bb-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M9 6l6 6-6 6" fill="none" stroke="var(--bb-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
-function CloseIcon(){
+function CloseIcon() {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
-      <path d="M18 6L6 18M6 6l12 12" fill="none" stroke="var(--bb-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M18 6L6 18M6 6l12 12" fill="none" stroke="var(--bb-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -488,13 +501,13 @@ const styles = `
   width: 56px; height: 56px; border-radius: 999px; border: none;
   background: #25D366; color: #fff; display: grid; place-items: center; cursor: pointer;
   box-shadow: 0 14px 36px rgba(0,0,0,.18);
-  z-index: 90;
+  z-index: 10000; /* ⬆ above everything */
 }
 
 /* Backdrop */
 .wa-scrim{
   position: fixed; inset: 0; background: rgba(0,0,0,.25); backdrop-filter: blur(2px);
-  z-index: 89; animation: fade .18s ease;
+  z-index: 10001; animation: fade .18s ease;
 }
 
 /* Panel (sheet) */
@@ -503,13 +516,19 @@ const styles = `
   right: clamp(12px, 2.4vw, 22px);
   bottom: calc(clamp(12px, 2.4vw, 22px) + 64px);
   width: min(var(--wa-maxw), calc(100vw - 24px));
-  max-height: min(68vh, 700px);
-  background: #fff; border-radius: 16px; border: 1px solid rgba(0,0,0,.08);
+  max-height: min(80vh, 700px);
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid rgba(0,0,0,.08);
   box-shadow: 0 20px 54px rgba(0,0,0,.20);
-  z-index: 91; overflow: hidden; display: grid; grid-template-rows: auto 1fr;
+  z-index: 10002;
+  overflow: hidden;
+  display: flex;              /* ✅ flex instead of grid */
+  flex-direction: column;     /* header + content column */
   transform-origin: 100% 100%;
   animation: pop-in .22s cubic-bezier(.2,.8,.2,1);
 }
+
 @media (min-width: 900px){ :root{ --wa-maxw: 500px; } }
 @media (min-width: 1400px){ :root{ --wa-maxw: 520px; } }
 
@@ -526,34 +545,38 @@ const styles = `
 
 /* Interior grid: 1fr scrollable + auto footer */
 .wa-view{
-  display: grid;
-  grid-template-rows: 1fr auto;
-  min-height: 0;              /* required for nested scrolling */
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-/* The only scrollable area (hide scrollbars) */
-.scroll-area{
-  overflow: auto;
+/* Scrollable content area (scoped) */
+.wa-view .scroll-area{
+  flex: 1 1 auto;
+  overflow-y: auto;
   padding: 10px 12px;
-  min-height: 0;              /* allow it to shrink and scroll */
-  -ms-overflow-style: none;   /* IE/Edge */
-  scrollbar-width: none;      /* Firefox */
+  min-height: 0;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
-.scroll-area::-webkit-scrollbar{ display: none; } /* Chrome/Safari */
+.wa-view .scroll-area::-webkit-scrollbar{
+  display: none;
+}
 
-/* Sticky footer (fixed INSIDE the sheet) */
-.sticky-footer{
-  position: sticky; bottom: 0; background: #fff;
+/* Footer pinned inside the sheet (scoped) */
+.wa-view .sticky-footer{
+  flex: 0 0 auto;
+  background: #fff;
   border-top: 1px solid rgba(0,0,0,.06);
 }
-.footer-inner{
+.wa-view .footer-inner{
   padding: 10px 12px;
   max-width: calc(var(--wa-maxw) - 24px);
   margin: 0 auto;
 }
-
 /* Content blocks */
-.menu{ display:grid; gap:10px; }
+.wa-menu-list{ display:grid; gap:10px; }
 .menu-item{
   display:flex; align-items:center; gap:12px; padding:12px;
   border-radius:14px; border:1px solid rgba(0,0,0,.10); background:#fff; cursor:pointer;

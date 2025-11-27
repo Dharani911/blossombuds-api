@@ -122,7 +122,7 @@ export default function CategoryListingPage() {
   const hasChildren = children.length > 0;
 
   return (
-    <div className="catlist-wrap">
+    <main id="main" className="catlist-wrap" role="main">
       <Seo title={`${cat?.name || "Category"} • Blossom & Buds`} />
       <style>{css}</style>
 
@@ -179,12 +179,21 @@ export default function CategoryListingPage() {
         {!loading &&
           products.map((p) => <ExpandableProductCard key={p.id} p={p} />)}
       </main>
-    </div>
+    </main>
   );
 }
 
 const css = `
-.catlist-wrap{ background: var(--bb-bg); color: var(--bb-primary); min-height:60vh; }
+.catlist-wrap{
+  background: var(--bb-bg);
+  color: var(--bb-primary);
+  min-height: 100dvh;     /* full height so it scrolls nicely on mobile */
+  width: 100%;
+  overflow-x: hidden;
+  padding-bottom: 72px;   /* so WhatsApp FAB doesn’t cover last cards */
+  box-sizing: border-box;
+}
+
 .crumbs{ max-width:1200px; margin:14px auto 0; padding:0 16px; display:flex; align-items:center; gap:8px; opacity:.85; }
 .crumbs a{ color: var(--bb-primary); text-decoration:none; font-weight:700; }
 .crumbs .cur{ font-weight:800; }

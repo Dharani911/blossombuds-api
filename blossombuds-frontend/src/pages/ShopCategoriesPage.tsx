@@ -82,6 +82,7 @@ export default function ShopCategoriesPage() {
   // mobile drawer state
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+
   // maps for hierarchical rendering
   const [childrenMap, setChildrenMap] = useState<Record<number, Category[]>>({});
   const [productsMap, setProductsMap] = useState<Record<number, Product[]>>({});
@@ -366,14 +367,13 @@ export default function ShopCategoriesPage() {
         <main className="content">
           {/* Mobile: trigger drawer + quick chips */}
           <div className="cat-mobilebar">
-           <button className="drawer-btn" onClick={() => {
-             document.body.classList.add("drawer-open");
-             setDrawerOpen(true);
-           }} type="button">
-
-              ☰ All Categories
-            </button>
-
+           <button
+             className="drawer-btn"
+             onClick={() => setDrawerOpen(true)}
+             type="button"
+           >
+             ☰ All Categories
+           </button>
           </div>
 
           {err && <div className="alert">{err}</div>}
@@ -892,10 +892,7 @@ const css = `
   background: rgba(246,195,32,.18);
 }
 
-body.drawer-open {
-  overflow: hidden;
-  touch-action: none;
-}
+
 .aside-item {
   display: flex;
   align-items: center;
