@@ -23,7 +23,7 @@ export default function AppLayout() {
 
   return (
     <div className="app-wrap">
-      <a href="#app-main" className="skip">Skip to content</a>
+
 
       <TopBanner />
       <Header />
