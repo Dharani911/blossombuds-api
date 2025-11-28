@@ -73,7 +73,7 @@ export default function ProductQuickView({ productId, onClose }: Props) {
         setP(prod || null);
         const sortedImgs = (imgs || [])
           .filter(im => im?.url)
-          .sort((a,b)=>(a.sortOrder ?? 0)-(b.sortOrder ?? 0));
+          .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
         setImages(sortedImgs);
 
         const visibleOptions = (options || []).filter(o => (o as any)?.visible !== false);
@@ -85,7 +85,7 @@ export default function ProductQuickView({ productId, onClose }: Props) {
 
         setOpts(visibleOptions);
         setSel(s);
-      } catch (e:any) {
+      } catch (e: any) {
         if (!live) return;
         setErr(e?.response?.data?.message || "Could not load product.");
       } finally {
@@ -140,7 +140,7 @@ export default function ProductQuickView({ productId, onClose }: Props) {
       productId: p.id,   // ✅ NEW
       name: p.name,
       price: unitPrice,
-      qty: Math.max(1, qty|0),
+      qty: Math.max(1, qty | 0),
       image: images[0]?.url || p.primaryImageUrl || "",
       variant: opts
         .map(o => {
@@ -180,7 +180,7 @@ export default function ProductQuickView({ productId, onClose }: Props) {
       className="pqv-modal"
       role="dialog"
       aria-modal="true"
-      onClick={(e)=>{ if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="pqv-panel" role="document">
         <button className="pqv-close" aria-label="Close" onClick={onClose}>✕</button>
@@ -188,7 +188,7 @@ export default function ProductQuickView({ productId, onClose }: Props) {
         {/* floating cart pill */}
         <div className={"pqv-cartpill" + (cartPop ? " pop" : "")} title="Cart">
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden>
-            <path d="M6 6h14l-1.6 8H8.4L7 4H3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            <path d="M6 6h14l-1.6 8H8.4L7 4H3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             <circle cx="9" cy="20" r="1.6" />
             <circle cx="18" cy="20" r="1.6" />
           </svg>
@@ -201,7 +201,7 @@ export default function ProductQuickView({ productId, onClose }: Props) {
         {!loading && p && (
           <div className="pqv-grid">
             {/* GALLERY */}
-            <div className="pqv-gallery" onMouseEnter={()=>onHover(true)} onMouseLeave={()=>onHover(false)}>
+            <div className="pqv-gallery" onMouseEnter={() => onHover(true)} onMouseLeave={() => onHover(false)}>
               <div className="pqv-hero">
                 {hero ? <img src={hero} alt={p.name} /> : <div className="pqv-blank" />}
                 {hasNav && (
@@ -218,9 +218,9 @@ export default function ProductQuickView({ productId, onClose }: Props) {
                   {images.map((im, i) => (
                     <li key={im.id ?? i}>
                       <button
-                        className={`pqv-thumb ${i===cur ? "on":""}`}
+                        className={`pqv-thumb ${i === cur ? "on" : ""}`}
                         onClick={() => goto(i)}
-                        aria-label={`Image ${i+1}`}
+                        aria-label={`Image ${i + 1}`}
                       >
                         <img src={im.url} alt={im.altText || p.name} />
                       </button>
@@ -240,13 +240,13 @@ export default function ProductQuickView({ productId, onClose }: Props) {
                 if (act.length === 0) return null;
                 const currentVal = sel[o.id] ?? act[0]?.id ?? undefined;
                 return (
-                  <div key={o.id} className={"pqv-opt" + (idx>0 ? " subtle": "")}>
+                  <div key={o.id} className={"pqv-opt" + (idx > 0 ? " subtle" : "")}>
                     <div className="pqv-optlabel">{o.name}{o.required ? " *" : ""}</div>
                     <div className="pqv-pills" role="radiogroup" aria-label={o.name}>
                       {act.map(v => (
                         <button
                           key={v.id}
-                          className={"pill" + (currentVal === v.id ? " on": "")}
+                          className={"pill" + (currentVal === v.id ? " on" : "")}
                           onClick={() => pick(o.id, v.id)}
                           role="radio"
                           aria-checked={currentVal === v.id}
@@ -510,7 +510,7 @@ const styles = `
 .pill.on{ border-color: var(--bb-accent); box-shadow: 0 6px 16px rgba(240,93,139,.16); }
 
 /* Qty + steppers */
-.pqv-qty{ display:inline-flex; gap:10px; align-items:fit; margin:12px 0 8px; width:10vw; height:7vh; }
+.pqv-qty{ display:inline-flex; gap:10px; align-items:center; margin:12px 0 8px; width:auto; height:auto; }
 .qty-label{ font-size:13px; font-weight:800; color: var(--bb-primary); }
 .qty-wrap{
   display:inline-flex; align-items:center; gap:6px;
@@ -560,5 +560,13 @@ const styles = `
 .pqv-btn:disabled{ opacity:.7; cursor:not-allowed; }
 .secondary{ background: var(--bb-accent-2); color:#2b2b2b; box-shadow: 0 10px 24px rgba(246,195,32,.2); }
 
-.pqv-desc{ margin-top:10px; line-height:1.5; opacity:.95; font-size:14px; color:#333; }
+.pqv-desc{
+  margin-top:10px;
+  line-height:1.5;
+  opacity:.95;
+  font-size:14px;
+  color:#333;
+  white-space: pre-wrap;  /* 👈 preserve spaces + line breaks */
+}
+
 `;
