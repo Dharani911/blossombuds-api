@@ -260,7 +260,17 @@ public class CatalogService {
         log.info("[PRODUCT][CREATE] name='{}' slug='{}'", (dto!=null?dto.getName():null), (dto!=null?dto.getSlug():null));
         if (dto == null) throw new IllegalArgumentException("ProductDto is required");
         Product p = new Product();
-        p.setSlug(dto.getSlug());
+        // slug generation with uniqueness check
+        String baseSlug = (dto.getSlug() != null && !dto.getSlug().isBlank())
+                ? slugify(dto.getSlug())
+                : slugify(dto.getName());
+
+        String candidate = baseSlug;
+        int i = 2;
+        while (productRepo.existsBySlugNative(candidate)) {
+            candidate = baseSlug + "-" + i++;
+        }
+        p.setSlug(candidate);
         p.setName(dto.getName());
         p.setDescription(dto.getDescription());
         p.setPrice(dto.getPrice());
@@ -301,7 +311,24 @@ public class CatalogService {
         if (id == null) throw new IllegalArgumentException("Product id is required");
         if (dto == null) throw new IllegalArgumentException("ProductDto is required");
         Product p = getProduct(id);
-        if (dto.getSlug() != null) p.setSlug(dto.getSlug());
+        if (dto.getSlug() != null) {
+            String normalized = slugify(dto.getSlug());
+            if (!normalized.equalsIgnoreCase(p.getSlug())) {
+                // check uniqueness if changing
+                String candidate = normalized;
+                int i = 2;
+                while (productRepo.existsBySlugNative(candidate)) {
+                    // if collision, check if it's NOT this product (though native query doesn't easily exclude self without ID param)
+                    // For update, we want to allow keeping own slug, but here we are changing it.
+                    // If candidate exists and it's NOT self, we must increment.
+                    // Since native query is simple existence, we might collide with self if we don't exclude self.
+                    // BUT, we are only entering here if normalized != p.getSlug().
+                    // So we are changing to a NEW slug. If that new slug exists, it's a collision.
+                    candidate = normalized + "-" + i++;
+                }
+                p.setSlug(candidate);
+            }
+        }
         if (dto.getName() != null) p.setName(dto.getName());
         if (dto.getDescription() != null) p.setDescription(dto.getDescription());
         if (dto.getPrice() != null) p.setPrice(dto.getPrice());
