@@ -418,7 +418,7 @@ const styles = `
 }
 @media (max-width: 980px){
   .pqv-grid{
-    grid-template-columns: 1fr;
+    display: block;
     padding: 56px 10px 10px;
     gap: 10px;
     overflow:auto;
