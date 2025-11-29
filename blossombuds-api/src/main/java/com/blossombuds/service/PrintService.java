@@ -803,17 +803,28 @@ public class PrintService {
         }
     }
     
+    
     /** Extract R2 object key from full URL. */
     private String extractR2ObjectKey(String urlString) {
-        // URL examples:
-        // https://44df320f0940989c39a311ab3ce6dac1.r2.cloudflarestorage.com/product-images/products/uuid.jpg
-        // We need to extract "product-images/products/uuid.jpg"
+        // URL formats:
+        // 1. https://{accountId}.r2.cloudflarestorage.com/product-images/products/uuid.jpg (no bucket in path)
+        // 2. https://{endpoint}/{bucket}/product-images/products/uuid.jpg (with bucket in path, from ReviewService pattern)
         
         try {
             java.net.URL url = new java.net.URL(urlString);
             String path = url.getPath();
             // Remove leading slash
-            return path.startsWith("/") ? path.substring(1) : path;
+            if (path.startsWith("/")) {
+                path = path.substring(1);
+            }
+            
+            // Check if path starts with bucket name and strip it if present
+            if (path.startsWith(r2BucketName + "/")) {
+                path = path.substring(r2BucketName.length() + 1);
+            }
+            
+            log.debug("[PRINT][R2] Extracted object key '{}' from URL '{}'", path, urlString);
+            return path;
         } catch (Exception e) {
             log.error("[PRINT][R2] Failed to parse URL: {}", urlString, e);
             throw new IllegalArgumentException("Invalid R2 URL: " + urlString, e);
