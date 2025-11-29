@@ -5,6 +5,8 @@ import com.blossombuds.domain.OrderItem;
 import com.blossombuds.domain.Setting;
 import com.blossombuds.repository.OrderItemRepository;
 import com.blossombuds.repository.OrderRepository;
+import com.blossombuds.repository.ProductImageRepository;
+import com.blossombuds.domain.ProductImage;
 import com.lowagie.text.*;
 import com.lowagie.text.pdf.*;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +33,7 @@ public class PrintService {
 
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
+    private final ProductImageRepository productImageRepository;
     private final SettingsService settingsService;
 
     @Value("${app.mail.logo.png:static/BB_logo.png}")
@@ -508,16 +511,69 @@ public class PrintService {
 
             for (int i = start; i < end; i++) {
                 OrderItem it = items.get(i);
+
+                // Create a small table for the item: [Image] [Text]
+                PdfPTable itemTbl = new PdfPTable(new float[]{1f, 4f}); // 1 part image, 4 parts text
+                itemTbl.setWidthPercentage(100);
+                itemTbl.getDefaultCell().setBorder(Rectangle.NO_BORDER);
+                itemTbl.getDefaultCell().setVerticalAlignment(Element.ALIGN_TOP);
+
+                // 1. Image Cell
+                PdfPCell imgCell = new PdfPCell();
+                imgCell.setBorder(Rectangle.NO_BORDER);
+                imgCell.setPaddingRight(4f);
+
+                try {
+                    if (it.getProductId() != null) {
+                        ProductImage pImg = productImageRepository.findFirstByProduct_IdAndActiveTrueOrderBySortOrderAscIdAsc(it.getProductId()).orElse(null);
+                        if (pImg != null) {
+                            String imgUrl = pImg.getUrl();
+                            if (imgUrl == null || imgUrl.isBlank()) {
+                                imgUrl = pImg.getWatermarkVariantUrl();
+                            }
+
+                            if (imgUrl != null && !imgUrl.isBlank()) {
+                                log.info("[PRINT][PACKING_SLIP] Loading image for item {} from: {}", it.getProductName(), imgUrl);
+                                try {
+                                    Image img = Image.getInstance(imgUrl);
+                                    img.scaleToFit(32f, 32f); // Thumbnail size
+                                    imgCell.addElement(img);
+                                } catch (Exception e) {
+                                    log.error("[PRINT][PACKING_SLIP] Failed to load image from URL: {}", imgUrl, e);
+                                }
+                            } else {
+                                log.warn("[PRINT][PACKING_SLIP] Found image record but no URL for product {}", it.getProductName());
+                            }
+                        } else {
+                            log.info("[PRINT][PACKING_SLIP] No active image found for product {}", it.getProductName());
+                        }
+                    }
+                } catch (Exception e) {
+                    log.error("[PRINT][PACKING_SLIP] Error fetching image for productId={}", it.getProductId(), e);
+                }
+                itemTbl.addCell(imgCell);
+
+                // 2. Text Cell
+                PdfPCell textCell = new PdfPCell();
+                textCell.setBorder(Rectangle.NO_BORDER);
+                
                 Paragraph li = new Paragraph("[ ]  " + nvl(it.getQuantity()) + " × " + safe(it.getProductName()), fItem);
                 li.setSpacingAfter(2f);
-                col.addElement(li);
+                textCell.addElement(li);
 
                 if (it.getOptionsText() != null && !it.getOptionsText().isBlank()) {
                     Paragraph vi = new Paragraph("Variants: " + it.getOptionsText(), fVar);
-                    vi.setIndentationLeft(16f);
+                    vi.setIndentationLeft(0f); // Reset indentation as it's inside a cell
                     vi.setSpacingAfter(3f);
-                    col.addElement(vi);
+                    textCell.addElement(vi);
                 }
+                itemTbl.addCell(textCell);
+                itemTbl.setKeepTogether(true);
+
+                col.addElement(itemTbl);
+                // Add a little spacing between items
+                Paragraph spacer = new Paragraph("", new Font(Font.HELVETICA, 4, Font.NORMAL));
+                col.addElement(spacer);
             }
             col.go();
         }
