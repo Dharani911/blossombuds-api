@@ -1,5 +1,7 @@
 package com.blossombuds.service;
 
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.model.S3Object;
 import com.blossombuds.domain.Order;
 import com.blossombuds.domain.OrderItem;
 import com.blossombuds.domain.Setting;
@@ -35,12 +37,16 @@ public class PrintService {
     private final OrderItemRepository orderItemRepository;
     private final ProductImageRepository productImageRepository;
     private final SettingsService settingsService;
+    private final AmazonS3 r2Client;
 
     @Value("${app.mail.logo.png:static/BB_logo.png}")
     private String logoPngPath;
 
     @Value("${app.mail.logo.svg:static/BB_logo.svg}")
     private String logoSvgPath;
+
+    @Value("${cloudflare.r2.bucket}")
+    private String r2BucketName;
 
     /** Generates invoice PDF bytes for a given order id. */
     @Transactional(readOnly = true, propagation = Propagation.NOT_SUPPORTED)
@@ -779,37 +785,38 @@ public class PrintService {
         return logoUrl;
     }
 
-    /** Helper to download image bytes with a User-Agent to avoid 400/403 errors. */
+    /** Helper to download image bytes from private R2 bucket using authenticated S3 client. */
     private byte[] downloadImageBytes(String urlString) throws Exception {
-        java.net.URL url = new java.net.URL(urlString);
-        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+        // Extract object key from R2 URL
+        // URL format: https://{accountId}.r2.cloudflarestorage.com/{bucket}/{key}
+        // or custom domain: https://{domain}/{key}
+        String objectKey = extractR2ObjectKey(urlString);
         
-        // Mimic a real browser request
-        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-        conn.setRequestProperty("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8");
-        conn.setRequestProperty("Accept-Language", "en-US,en;q=0.9");
-        conn.setRequestProperty("Connection", "keep-alive");
-        conn.setRequestProperty("Sec-Fetch-Dest", "image");
-        conn.setRequestProperty("Sec-Fetch-Mode", "no-cors");
-        conn.setRequestProperty("Sec-Fetch-Site", "cross-site");
+        log.info("[PRINT][R2] Downloading object: bucket={}, key={}", r2BucketName, objectKey);
         
-        conn.setConnectTimeout(5000);
-        conn.setReadTimeout(10000);
-        
-        int status = conn.getResponseCode();
-        if (status >= 400) {
-            // Read error stream if available for debugging
-            try (java.io.InputStream err = conn.getErrorStream()) {
-                if (err != null) {
-                    String errBody = new String(err.readAllBytes());
-                    log.warn("[PRINT][IMG_ERR] Server returned {}: {}", status, errBody);
-                }
-            }
-            throw new java.io.IOException("Server returned HTTP response code: " + status + " for URL: " + urlString);
-        }
-
-        try (java.io.InputStream in = conn.getInputStream()) {
+        try (S3Object s3Object = r2Client.getObject(r2BucketName, objectKey);
+             java.io.InputStream in = s3Object.getObjectContent()) {
             return in.readAllBytes();
+        } catch (Exception e) {
+            log.error("[PRINT][R2] Failed to download from R2: bucket={}, key={}", r2BucketName, objectKey, e);
+            throw e;
+        }
+    }
+    
+    /** Extract R2 object key from full URL. */
+    private String extractR2ObjectKey(String urlString) {
+        // URL examples:
+        // https://44df320f0940989c39a311ab3ce6dac1.r2.cloudflarestorage.com/product-images/products/uuid.jpg
+        // We need to extract "product-images/products/uuid.jpg"
+        
+        try {
+            java.net.URL url = new java.net.URL(urlString);
+            String path = url.getPath();
+            // Remove leading slash
+            return path.startsWith("/") ? path.substring(1) : path;
+        } catch (Exception e) {
+            log.error("[PRINT][R2] Failed to parse URL: {}", urlString, e);
+            throw new IllegalArgumentException("Invalid R2 URL: " + urlString, e);
         }
     }
 
