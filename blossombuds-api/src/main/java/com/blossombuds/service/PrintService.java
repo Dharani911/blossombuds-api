@@ -290,7 +290,7 @@ public class PrintService {
                     textCell.setBorder(Rectangle.NO_BORDER);
                     textCell.setPaddingLeft(2f);
                     
-                    Paragraph li = new Paragraph("[ ]    " + nvl(it.getQuantity()) + " × " + safe(it.getProductName()), fItem);
+                    Paragraph li = new Paragraph("[ ]  " + nvl(it.getQuantity()) + " × " + safe(it.getProductName()), fItem);
                     li.setSpacingAfter(2f);
                     textCell.addElement(li);
 
@@ -568,7 +568,7 @@ public class PrintService {
                 OrderItem it = items.get(i);
 
                 // Create a small table for the item: [Image] [Text]
-                PdfPTable itemTbl = new PdfPTable(new float[]{1.2f, 4f}); // Slightly wider image column
+                PdfPTable itemTbl = new PdfPTable(new float[]{0.6f, 5.4f}); // Slightly wider image column
                 itemTbl.setWidthPercentage(100);
                 itemTbl.getDefaultCell().setBorder(Rectangle.NO_BORDER);
                 itemTbl.getDefaultCell().setVerticalAlignment(Element.ALIGN_TOP);
@@ -576,7 +576,8 @@ public class PrintService {
                 // 1. Image Cell
                 PdfPCell imgCell = new PdfPCell();
                 imgCell.setBorder(Rectangle.NO_BORDER);
-                imgCell.setPaddingRight(4f);
+                imgCell.setPadding(0f);
+                imgCell.setPaddingRight(2f);
 
                 try {
                     if (it.getProductId() != null) {
@@ -613,9 +614,9 @@ public class PrintService {
                 // 2. Text Cell
                 PdfPCell textCell = new PdfPCell();
                 textCell.setBorder(Rectangle.NO_BORDER);
-                textCell.setPaddingLeft(2f);
+                textCell.setPaddingLeft(0f);
                 
-                Paragraph li = new Paragraph("[ ]    " + nvl(it.getQuantity()) + " × " + safe(it.getProductName()), fItem);
+                Paragraph li = new Paragraph("[ ]  " + nvl(it.getQuantity()) + " × " + safe(it.getProductName()), fItem);
                 li.setSpacingAfter(2f);
                 textCell.addElement(li);
 
