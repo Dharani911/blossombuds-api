@@ -535,7 +535,9 @@ public class PrintService {
                             if (imgUrl != null && !imgUrl.isBlank()) {
                                 log.info("[PRINT][PACKING_SLIP] Loading image for item {} from: {}", it.getProductName(), imgUrl);
                                 try {
-                                    Image img = Image.getInstance(imgUrl);
+                                    // Use helper to download with User-Agent to avoid 400/403 from some CDNs
+                                    byte[] imgBytes = downloadImageBytes(imgUrl);
+                                    Image img = Image.getInstance(imgBytes);
                                     img.scaleToFit(32f, 32f); // Thumbnail size
                                     imgCell.addElement(img);
                                 } catch (Exception e) {
@@ -775,6 +777,24 @@ public class PrintService {
         String logoUrl = safe(setting("brand.logo_url", ""));
         log.debug("[PRINT][LOGO] Resolved logo URL: {}", logoUrl);
         return logoUrl;
+    }
+
+    /** Helper to download image bytes with a User-Agent to avoid 400/403 errors. */
+    private byte[] downloadImageBytes(String urlString) throws Exception {
+        java.net.URL url = new java.net.URL(urlString);
+        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
+        conn.setConnectTimeout(5000);
+        conn.setReadTimeout(10000);
+        
+        int status = conn.getResponseCode();
+        if (status >= 400) {
+            throw new java.io.IOException("Server returned HTTP response code: " + status + " for URL: " + urlString);
+        }
+
+        try (java.io.InputStream in = conn.getInputStream()) {
+            return in.readAllBytes();
+        }
     }
 
     /** Max logo height in points (PDF units). Optional (defaults to ~10mm). */

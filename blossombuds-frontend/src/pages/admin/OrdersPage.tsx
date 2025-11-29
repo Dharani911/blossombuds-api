@@ -23,10 +23,10 @@ import {
 
 /* Brand palette */
 const PRIMARY = "#4A4F41";
-const ACCENT  = "#F05D8B";
-const GOLD    = "#F6C320";
-const BG      = "#FAF7E7";
-const INK     = "rgba(0,0,0,.08)";
+const ACCENT = "#F05D8B";
+const GOLD = "#F6C320";
+const BG = "#FAF7E7";
+const INK = "rgba(0,0,0,.08)";
 
 /* Status helpers */
 const STATUS_LABEL: Record<string, string> = {
@@ -71,7 +71,7 @@ function getStatus(o: any): string {
 
   if (typeof raw === "string") {
     const t = raw.trim();
-   	return t ? t.toUpperCase() : "ORDERED";
+    return t ? t.toUpperCase() : "ORDERED";
   }
   if (typeof raw === "number") {
     return (STATUS_BY_INDEX[raw] as string) || "ORDERED";
@@ -134,7 +134,7 @@ export default function OrdersPage() {
   const [statusOpen, setStatusOpen] = useState(false);
   const [isFiltered, setIsFiltered] = useState(false);
   const [fromDT, setFromDT] = useState<string>(""); // assuming you already have these
-  const [toDT, setToDT]     = useState<string>("");
+  const [toDT, setToDT] = useState<string>("");
   const [showFilters, setShowFilters] = useState(false);
 
   // data
@@ -181,16 +181,16 @@ export default function OrdersPage() {
       const useFilter = force?.useFilter ?? isFiltered;
 
       const fromIso = force?.from ?? (fromDT ? new Date(fromDT).toISOString() : undefined);
-      const toIso   = force?.to   ?? (toDT   ? new Date(toDT).toISOString()   : undefined);
+      const toIso = force?.to ?? (toDT ? new Date(toDT).toISOString() : undefined);
 
       // Normalize status: either from force override or current state
       const statusParam = (force?.status ?? statusFilter);
-      const haveStatus  = Array.isArray(statusParam) && statusParam.length > 0;
+      const haveStatus = Array.isArray(statusParam) && statusParam.length > 0;
 
       const resp = await listAllOrders({
         page, size, sort, dir,
         from: useFilter ? fromIso : undefined,
-        to:   useFilter ? toIso   : undefined,
+        to: useFilter ? toIso : undefined,
         status: useFilter && haveStatus ? statusParam : undefined, // NEW
       });
 
@@ -218,27 +218,28 @@ export default function OrdersPage() {
     void loadAll({
       useFilter: !!(statusFilter.length || fromDT || toDT),
       from: fromDT ? new Date(fromDT).toISOString() : undefined,
-      to:   toDT   ? new Date(toDT).toISOString()   : undefined,
+      to: toDT ? new Date(toDT).toISOString() : undefined,
     });
-    setFiltersOpen(false);}
-    function setToday() {
-      const now = new Date();
-      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      setFromDT(start.toISOString().slice(0,16));
-      setToDT(""); setIsFiltered(true);
-    }
-    function setLast7() {
-      const now = new Date();
-      const start = new Date(now.getTime() - 7*24*60*60*1000);
-      setFromDT(start.toISOString().slice(0,16));
-      setToDT(""); setIsFiltered(true);
-    }
-    function setThisMonth() {
-      const now = new Date();
-      const start = new Date(now.getFullYear(), now.getMonth(), 1);
-      setFromDT(start.toISOString().slice(0,16));
-      setToDT(""); setIsFiltered(true);
-    }
+    setFiltersOpen(false);
+  }
+  function setToday() {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    setFromDT(start.toISOString().slice(0, 16));
+    setToDT(""); setIsFiltered(true);
+  }
+  function setLast7() {
+    const now = new Date();
+    const start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    setFromDT(start.toISOString().slice(0, 16));
+    setToDT(""); setIsFiltered(true);
+  }
+  function setThisMonth() {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    setFromDT(start.toISOString().slice(0, 16));
+    setToDT(""); setIsFiltered(true);
+  }
 
 
   function applyDateFilter() {
@@ -247,7 +248,7 @@ export default function OrdersPage() {
     const haveAny = haveDate || haveStatus;
 
     const fromIso = fromDT ? new Date(fromDT).toISOString() : undefined;
-    const toIso   = toDT   ? new Date(toDT).toISOString()   : undefined;
+    const toIso = toDT ? new Date(toDT).toISOString() : undefined;
 
     setIsFiltered(haveAny);
     setPage(0);
@@ -272,27 +273,27 @@ export default function OrdersPage() {
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
-function applyPreset(kind: "today" | "7d" | "month") {
-  let from: Date, to: Date;
-  if (kind === "today") {
-    from = startOfToday(); to = endOfToday();
-  } else if (kind === "7d") {
-    from = daysAgo(6); from.setHours(0,0,0,0); to = endOfToday();
-  } else {
-    from = startOfMonth(); to = endOfMonth();
+  function applyPreset(kind: "today" | "7d" | "month") {
+    let from: Date, to: Date;
+    if (kind === "today") {
+      from = startOfToday(); to = endOfToday();
+    } else if (kind === "7d") {
+      from = daysAgo(6); from.setHours(0, 0, 0, 0); to = endOfToday();
+    } else {
+      from = startOfMonth(); to = endOfMonth();
+    }
+    setFromDT(formatLocalDTForInput(from));
+    setToDT(formatLocalDTForInput(to));
+    // also set filtered + load
+    setIsFiltered(true);
+    setPage(0);
+    void loadAll({
+      useFilter: true,
+      from: from.toISOString(),
+      to: to.toISOString(),
+      status: statusFilter
+    });
   }
-  setFromDT(formatLocalDTForInput(from));
-  setToDT(formatLocalDTForInput(to));
-  // also set filtered + load
-  setIsFiltered(true);
-  setPage(0);
-  void loadAll({
-    useFilter: true,
-    from: from.toISOString(),
-    to: to.toISOString(),
-    status: statusFilter
-  });
-}
   function clearDateFilter() {
     setFromDT("");
     setToDT("");
@@ -301,41 +302,41 @@ function applyPreset(kind: "today" | "7d" | "month") {
     setPage(0);
     void loadAll({ useFilter: false, status: [] }); // NEW
   }
-// ── NEW: UI helpers ───────────────────────────────────────────────
-type StatusKey = keyof typeof STATUS_LABEL;
+  // ── NEW: UI helpers ───────────────────────────────────────────────
+  type StatusKey = keyof typeof STATUS_LABEL;
 
-function formatLocalDTForInput(d: Date) {
-  // "YYYY-MM-DDTHH:mm" for <input type=datetime-local>
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const y = d.getFullYear();
-  const m = pad(d.getMonth() + 1);
-  const day = pad(d.getDate());
-  const hh = pad(d.getHours());
-  const mm = pad(d.getMinutes());
-  return `${y}-${m}-${day}T${hh}:${mm}`;
-}
+  function formatLocalDTForInput(d: Date) {
+    // "YYYY-MM-DDTHH:mm" for <input type=datetime-local>
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const y = d.getFullYear();
+    const m = pad(d.getMonth() + 1);
+    const day = pad(d.getDate());
+    const hh = pad(d.getHours());
+    const mm = pad(d.getMinutes());
+    return `${y}-${m}-${day}T${hh}:${mm}`;
+  }
 
-function startOfToday() {
-  const d = new Date();
-  d.setHours(0,0,0,0);
-  return d;
-}
-function endOfToday() {
-  const d = new Date();
-  d.setHours(23,59,59,999);
-  return d;
-}
-function daysAgo(n: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d;
-}
-function startOfMonth(date = new Date()) {
-  return new Date(date.getFullYear(), date.getMonth(), 1, 0,0,0,0);
-}
-function endOfMonth(date = new Date()) {
-  return new Date(date.getFullYear(), date.getMonth()+1, 0, 23,59,59,999);
-}
+  function startOfToday() {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+  function endOfToday() {
+    const d = new Date();
+    d.setHours(23, 59, 59, 999);
+    return d;
+  }
+  function daysAgo(n: number) {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return d;
+  }
+  function startOfMonth(date = new Date()) {
+    return new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
+  }
+  function endOfMonth(date = new Date()) {
+    return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+  }
 
 
 
@@ -417,13 +418,16 @@ function endOfMonth(date = new Date()) {
           <p className="muted">Browse all orders or search by public code / customer ID.</p>
         </div>
 
-        <div className="searchbar" onKeyDown={(e)=>{ if(e.key==='Enter') search(); }}>
+        <div className="searchbar" onKeyDown={(e) => { if (e.key === 'Enter') search(); }}>
           <div className="box">
             <input
               placeholder="Public code (e.g. BBAB12)"
               value={code}
               onChange={(e) => setCode(e.target.value)}
             />
+            {code && (
+              <button className="clear-btn" onClick={() => { setCode(""); if (!custId) { setPage(0); void loadAll(); } }}>×</button>
+            )}
           </div>
           <div className="sep">or</div>
           <div className="box">
@@ -432,6 +436,9 @@ function endOfMonth(date = new Date()) {
               value={custId}
               onChange={(e) => setCustId(e.target.value.replace(/\D/g, ""))}
             />
+            {custId && (
+              <button className="clear-btn" onClick={() => { setCustId(""); if (!code) { setPage(0); void loadAll(); } }}>×</button>
+            )}
           </div>
           <button type="button" className="btn" onClick={search} disabled={loading}>
             {loading ? "Searching…" : "Search"}
@@ -442,7 +449,7 @@ function endOfMonth(date = new Date()) {
             </button>
           )}
           <div className="spacer" />
-          <button type="button" className="btn" onClick={()=>nav("/admin/orders/new")} title="Create a new order">
+          <button type="button" className="btn" onClick={() => nav("/admin/orders/new")} title="Create a new order">
             New Order
           </button>
         </div>
@@ -734,11 +741,11 @@ function OrderDrawer({
   const [partnerUrlTemplate, setPartnerUrlTemplate] = useState<string>("");
   const [hasPartner, setHasPartner] = useState<boolean>(false);
   const [lockUrl, setLockUrl] = useState<boolean>(false); // lock URL input if partner controls it
-const notes =
+  const notes =
     ((order as any)?.orderNotes ??
-     (order as any)?.notes ??
-     (order as any)?.note ??
-     "").toString().trim();
+      (order as any)?.notes ??
+      (order as any)?.note ??
+      "").toString().trim();
   useEffect(() => {
     if (!open || !order) return;
     let live = true;
@@ -937,7 +944,7 @@ const notes =
       iframe.src = url;
       const cleanup = () => {
         setTimeout(() => {
-          try { URL.revokeObjectURL(url); iframe.parentNode?.removeChild(iframe); } catch {}
+          try { URL.revokeObjectURL(url); iframe.parentNode?.removeChild(iframe); } catch { }
         }, 1500);
       };
       iframe.onload = () => {
@@ -997,7 +1004,7 @@ const notes =
 
               <div className="drawer-body">
                 <section className="facts">
-                  <div><span className="lbl">Customer</span><span>{(order as any).customerId ?? "—"}</span></div>
+                  <div><span className="lbl">Customer</span><span>{(order as any).shipName || (order as any).customerName || (order as any).customerId || "—"}</span></div>
                   <div><span className="lbl">Total</span><span>{fmtMoneyINR((order as any).grandTotal ?? 0)}</span></div>
                   <div><span className="lbl">Shipping</span><span>{fmtMoneyINR((order as any).shippingFee ?? 0)}</span></div>
                   <div><span className="lbl">Discount</span><span>{fmtMoneyINR((order as any).discountTotal ?? 0)}</span></div>
@@ -1005,84 +1012,84 @@ const notes =
                   <div className="full"><span className="lbl">Ship to</span><span>{shipAddress || "—"}</span></div>
                 </section>
 
-                 <section className="block actions-wrap">
-                                  {/* Row 1: never moves */}
-                                  <div className="bar">
-                                    <div className="bar-cell">
-                                      <label className="lbl small">Status</label>
-                                      <select
-                                        className="control"
-                                        disabled={updBusy}
-                                        value={selStatus}
-                                        onChange={(e) => setSelStatus(e.target.value as OrderStatus)}
-                                        title="Change status"
-                                      >
-                                        {statuses.map((s) => (
-                                          <option key={s} value={s}>{STATUS_LABEL[s] || s}</option>
-                                        ))}
-                                      </select>
-                                    </div>
+                <section className="block actions-wrap">
+                  {/* Row 1: never moves */}
+                  <div className="bar">
+                    <div className="bar-cell">
+                      <label className="lbl small">Status</label>
+                      <select
+                        className="control"
+                        disabled={updBusy}
+                        value={selStatus}
+                        onChange={(e) => setSelStatus(e.target.value as OrderStatus)}
+                        title="Change status"
+                      >
+                        {statuses.map((s) => (
+                          <option key={s} value={s}>{STATUS_LABEL[s] || s}</option>
+                        ))}
+                      </select>
+                    </div>
 
-                                    <div className="bar-cell grow">
-                                      <label className="lbl small">Add note (optional)</label>
-                                      <input
-                                        className="control"
-                                        placeholder="(optional) note to timeline…"
-                                        value={statusNote}
-                                        onChange={(e) => setStatusNote(e.target.value)}
-                                      />
-                                    </div>
+                    <div className="bar-cell grow">
+                      <label className="lbl small">Add note (optional)</label>
+                      <input
+                        className="control"
+                        placeholder="(optional) note to timeline…"
+                        value={statusNote}
+                        onChange={(e) => setStatusNote(e.target.value)}
+                      />
+                    </div>
 
-                                    <div className="bar-cell">
-                                      <label className="lbl small">&nbsp;</label>
-                                      <button type="button" className="btn sm" disabled={updBusy} onClick={applyStatus}>
-                                        {updBusy ? "Updating…" : "Apply"}
-                                      </button>
-                                    </div>
-                                  </div>
+                    <div className="bar-cell">
+                      <label className="lbl small">&nbsp;</label>
+                      <button type="button" className="btn sm" disabled={updBusy} onClick={applyStatus}>
+                        {updBusy ? "Updating…" : "Apply"}
+                      </button>
+                    </div>
+                  </div>
 
-                                  {/* Row 2: appears only for DISPATCHED */}
-                                 {/* Row 2: appears only for DISPATCHED */}
-                                 {selStatus === "DISPATCHED" && (
-                                   <div className="trk-row" role="group" aria-label="Tracking details">
-                                     {/* Tracking Number */}
-                                     <label htmlFor="trkNo" className="l1 lbl">
-                                       Tracking Number <span className="req">*</span>
-                                     </label>
-                                     <input
-                                       id="trkNo"
-                                       className="c1 control mono slim"
-                                       placeholder="e.g., AWB123456789"
-                                       value={trackingNo}
-                                       onChange={(e) => setTrackingNo(e.target.value)}
-                                     />
+                  {/* Row 2: appears only for DISPATCHED */}
+                  {/* Row 2: appears only for DISPATCHED */}
+                  {selStatus === "DISPATCHED" && (
+                    <div className="trk-row" role="group" aria-label="Tracking details">
+                      {/* Tracking Number */}
+                      <label htmlFor="trkNo" className="l1 lbl">
+                        Tracking Number <span className="req">*</span>
+                      </label>
+                      <input
+                        id="trkNo"
+                        className="c1 control mono slim"
+                        placeholder="e.g., AWB123456789"
+                        value={trackingNo}
+                        onChange={(e) => setTrackingNo(e.target.value)}
+                      />
 
 
-                                     {/* Tracking URL */}
-                                     <label htmlFor="trkUrl" className="l2 lbl">
-                                       Tracking URL {(!hasPartner || !lockUrl) && <span className="req">*</span>}
-                                       {hasPartner && lockUrl && <span className="pill">from partner</span>}
-                                     </label>
-                                     <input
-                                       id="trkUrl"
-                                       className={`c2 control ${lockUrl ? "readonly" : ""}`}
-                                       placeholder={hasPartner ? "Auto from delivery partner" : "https://…"}
-                                       value={trackingUrl}
-                                       onChange={(e) => !lockUrl && setTrackingUrl(e.target.value)}
-                                       readOnly={lockUrl}
-                                       title={lockUrl ? "Controlled by delivery partner" : "Enter a full tracking URL"}
-                                     />
-                                     {hasPartner && partnerUrlTemplate && (
-                                       <div className="h2 hint">
-                                         Using partner template: <code>{partnerUrlTemplate}</code>
-                                       </div>
-                                     )}
-                                     <div className="h1 hint">Shown in customer email/timeline.</div>
-                                   </div>
+                      {/* Tracking URL */}
+                      <label htmlFor="trkUrl" className="l2 lbl">
+                        Tracking URL {(!hasPartner || !lockUrl) && <span className="req">*</span>}
+                        {hasPartner && lockUrl && <span className="pill">from partner</span>}
+                      </label>
+                      <input
+                        id="trkUrl"
+                        className={`c2 control ${lockUrl ? "readonly" : ""}`}
+                        placeholder={hasPartner ? "Auto from delivery partner" : "https://…"}
+                        value={trackingUrl}
+                        onChange={(e) => !lockUrl && setTrackingUrl(e.target.value)}
+                        readOnly={lockUrl}
+                        title={lockUrl ? "Controlled by delivery partner" : "Enter a full tracking URL"}
+                      />
+                      {hasPartner && partnerUrlTemplate && (
+                        <div className="h2 hint">
+                          Using partner template: <code>{partnerUrlTemplate}</code>
+                        </div>
+                      )}
+                      <div className="h1 hint">Shown in customer email/timeline.</div>
+                    </div>
 
-                                 )}
+                  )}
 
-                                </section>
+                </section>
 
                 <section className="block">
                   <h4>Items</h4>
@@ -1117,8 +1124,8 @@ const notes =
                   <div className="ord-notes">
                     {notes
                       ? notes.split(/\r?\n/).map((line, i) => (
-                          <p key={i} className="ord-note-line">{line}</p>
-                        ))
+                        <p key={i} className="ord-note-line">{line}</p>
+                      ))
                       : <div className="muted">No notes added by the customer.</div>}
                   </div>
                 </section>
@@ -1205,9 +1212,15 @@ const css = `
 .searchbar{ display:flex; align-items:center; gap:8px; width:100%; }
 .searchbar .box{ position:relative; }
 .searchbar input{
-  height:38px; border:1px solid ${INK}; border-radius:12px; padding:0 12px; background:#fff; outline:none;
+  height:38px; border:1px solid ${INK}; border-radius:12px; padding:0 12px; background:#fff; outline:none; padding-right: 30px;
 }
 .searchbar input:focus-visible{ box-shadow:0 0 0 3px rgba(240,93,139,.18); }
+.clear-btn {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; font-size: 18px; color: #999; cursor: pointer;
+  padding: 0; line-height: 1;
+}
+.clear-btn:hover { color: #333; }
 .sep{ opacity:.7; font-weight:800; }
 .spacer{ flex:1; }
 
