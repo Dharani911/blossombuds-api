@@ -256,7 +256,7 @@ public class PrintService {
                     // 1. Image Cell
                     PdfPCell imgCell = new PdfPCell();
                     imgCell.setBorder(Rectangle.NO_BORDER);
-                    imgCell.setPaddingRight(8f); // More space between image and text
+                    imgCell.setPaddingRight(4f);
 
                     try {
                         if (it.getProductId() != null) {
@@ -288,7 +288,7 @@ public class PrintService {
                     // 2. Text Cell
                     PdfPCell textCell = new PdfPCell();
                     textCell.setBorder(Rectangle.NO_BORDER);
-                    textCell.setPaddingLeft(4f); // Add left padding for spacing from image
+                    textCell.setPaddingLeft(2f);
                     
                     Paragraph li = new Paragraph("[ ]    " + nvl(it.getQuantity()) + " × " + safe(it.getProductName()), fItem);
                     li.setSpacingAfter(2f);
@@ -576,7 +576,7 @@ public class PrintService {
                 // 1. Image Cell
                 PdfPCell imgCell = new PdfPCell();
                 imgCell.setBorder(Rectangle.NO_BORDER);
-                imgCell.setPaddingRight(8f); // More space between image and text
+                imgCell.setPaddingRight(4f);
 
                 try {
                     if (it.getProductId() != null) {
@@ -613,7 +613,7 @@ public class PrintService {
                 // 2. Text Cell
                 PdfPCell textCell = new PdfPCell();
                 textCell.setBorder(Rectangle.NO_BORDER);
-                textCell.setPaddingLeft(4f); // Add left padding for spacing from image
+                textCell.setPaddingLeft(2f);
                 
                 Paragraph li = new Paragraph("[ ]    " + nvl(it.getQuantity()) + " × " + safe(it.getProductName()), fItem);
                 li.setSpacingAfter(2f);
