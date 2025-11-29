@@ -105,9 +105,84 @@ function getCreatedISO(o: any) {
 }
 
 const statusClass = (s: string) => `bb-badge ${"bb-" + (s || "ORDERED").toLowerCase()}`;
+type StatusKey = keyof typeof STATUS_LABEL;
 const fmtMoneyINR = (n: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2 }).format(n || 0);
 const fmtDT = (d?: string | number | Date) => (d ? new Date(d).toLocaleString() : "—");
+
+// ── NEW: UI helpers ───────────────────────────────────────────────
+function formatLocalDTForInput(d: Date) {
+  // "YYYY-MM-DDTHH:mm" for <input type=datetime-local>
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const y = d.getFullYear();
+  const m = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  const hh = pad(d.getHours());
+  const mm = pad(d.getMinutes());
+  return `${y}-${m}-${day}T${hh}:${mm}`;
+}
+
+function startOfToday() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+function endOfToday() {
+  const d = new Date();
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+function daysAgo(n: number) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d;
+}
+function startOfMonth(date = new Date()) {
+  return new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
+}
+function endOfMonth(date = new Date()) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+}
+
+function printBlob(blob: Blob, fail: (msg?: string) => void) {
+  const url = URL.createObjectURL(blob);
+  const iframe = document.createElement("iframe");
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  iframe.src = url;
+  const cleanup = () => {
+    setTimeout(() => {
+      try { URL.revokeObjectURL(url); iframe.parentNode?.removeChild(iframe); } catch { }
+    }, 1500);
+  };
+  iframe.onload = () => {
+    try {
+      setTimeout(() => {
+        try { iframe.contentWindow?.focus(); iframe.contentWindow?.print(); cleanup(); }
+        catch { const w = window.open(url, "_blank"); if (!w) fail("Popup blocked. Allow popups to print."); cleanup(); }
+      }, 250);
+    } catch {
+      const w = window.open(url, "_blank");
+      if (!w) fail("Popup blocked. Allow popups to print.");
+      cleanup();
+    }
+  };
+  document.body.appendChild(iframe);
+}
+
+function openPdfBlob(blob: Blob, filename = "packing-slips.pdf") {
+  // Fallback if print fails or user wants to download
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
 
 /** ────────────────────────── Main Page ────────────────────────── **/
 export default function OrdersPage() {
@@ -222,121 +297,6 @@ export default function OrdersPage() {
     });
     setFiltersOpen(false);
   }
-  function setToday() {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    setFromDT(start.toISOString().slice(0, 16));
-    setToDT(""); setIsFiltered(true);
-  }
-  function setLast7() {
-    const now = new Date();
-    const start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    setFromDT(start.toISOString().slice(0, 16));
-    setToDT(""); setIsFiltered(true);
-  }
-  function setThisMonth() {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    setFromDT(start.toISOString().slice(0, 16));
-    setToDT(""); setIsFiltered(true);
-  }
-
-
-  function applyDateFilter() {
-    const haveDate = !!fromDT || !!toDT;
-    const haveStatus = statusFilter.length > 0;
-    const haveAny = haveDate || haveStatus;
-
-    const fromIso = fromDT ? new Date(fromDT).toISOString() : undefined;
-    const toIso = toDT ? new Date(toDT).toISOString() : undefined;
-
-    setIsFiltered(haveAny);
-    setPage(0);
-
-    void loadAll({
-      useFilter: haveAny,
-      from: fromIso,
-      to: toIso,
-      status: statusFilter, // NEW
-    });
-  }
-  function openPdfBlob(blob: Blob, filename = "packing-slips.pdf") {
-    const url = URL.createObjectURL(blob);
-    const w = window.open(url, "_blank");
-    if (!w) {
-      // popup blocked → force download
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      a.click();
-    }
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  }
-
-  function applyPreset(kind: "today" | "7d" | "month") {
-    let from: Date, to: Date;
-    if (kind === "today") {
-      from = startOfToday(); to = endOfToday();
-    } else if (kind === "7d") {
-      from = daysAgo(6); from.setHours(0, 0, 0, 0); to = endOfToday();
-    } else {
-      from = startOfMonth(); to = endOfMonth();
-    }
-    setFromDT(formatLocalDTForInput(from));
-    setToDT(formatLocalDTForInput(to));
-    // also set filtered + load
-    setIsFiltered(true);
-    setPage(0);
-    void loadAll({
-      useFilter: true,
-      from: from.toISOString(),
-      to: to.toISOString(),
-      status: statusFilter
-    });
-  }
-  function clearDateFilter() {
-    setFromDT("");
-    setToDT("");
-    setStatusFilter([]); // NEW
-    setIsFiltered(false);
-    setPage(0);
-    void loadAll({ useFilter: false, status: [] }); // NEW
-  }
-  // ── NEW: UI helpers ───────────────────────────────────────────────
-  type StatusKey = keyof typeof STATUS_LABEL;
-
-  function formatLocalDTForInput(d: Date) {
-    // "YYYY-MM-DDTHH:mm" for <input type=datetime-local>
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const y = d.getFullYear();
-    const m = pad(d.getMonth() + 1);
-    const day = pad(d.getDate());
-    const hh = pad(d.getHours());
-    const mm = pad(d.getMinutes());
-    return `${y}-${m}-${day}T${hh}:${mm}`;
-  }
-
-  function startOfToday() {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }
-  function endOfToday() {
-    const d = new Date();
-    d.setHours(23, 59, 59, 999);
-    return d;
-  }
-  function daysAgo(n: number) {
-    const d = new Date();
-    d.setDate(d.getDate() - n);
-    return d;
-  }
-  function startOfMonth(date = new Date()) {
-    return new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
-  }
-  function endOfMonth(date = new Date()) {
-    return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
-  }
 
 
 
@@ -353,7 +313,7 @@ export default function OrdersPage() {
       setToast({ kind: "ok", msg: `Generating ${ids.length} packing slip(s)…` });
 
       const pdfBlob = await fetchPackingSlipsBulk(ids);
-      openPdfBlob(pdfBlob, `packing-slips-${ids.length}.pdf`);
+      printBlob(pdfBlob, (msg) => setToast({ kind: "bad", msg: msg || "Print failed" }));
     } catch (e: any) {
       const msg = e?.response?.data?.message || "Failed to generate packing slips";
       setToast({ kind: "bad", msg });
@@ -933,33 +893,7 @@ function OrderDrawer({
       setToast({ kind: "bad", msg: msg || "Could not open printer dialog." });
     try {
       const blob = kind === "invoice" ? await fetchInvoicePdf(order.id) : await fetchPackingSlipPdf(order.id);
-      const url = URL.createObjectURL(blob);
-      const iframe = document.createElement("iframe");
-      iframe.style.position = "fixed";
-      iframe.style.right = "0";
-      iframe.style.bottom = "0";
-      iframe.style.width = "0";
-      iframe.style.height = "0";
-      iframe.style.border = "0";
-      iframe.src = url;
-      const cleanup = () => {
-        setTimeout(() => {
-          try { URL.revokeObjectURL(url); iframe.parentNode?.removeChild(iframe); } catch { }
-        }, 1500);
-      };
-      iframe.onload = () => {
-        try {
-          setTimeout(() => {
-            try { iframe.contentWindow?.focus(); iframe.contentWindow?.print(); cleanup(); }
-            catch { const w = window.open(url, "_blank"); if (!w) fail("Popup blocked. Allow popups to print."); cleanup(); }
-          }, 250);
-        } catch {
-          const w = window.open(url, "_blank");
-          if (!w) fail("Popup blocked. Allow popups to print.");
-          cleanup();
-        }
-      };
-      document.body.appendChild(iframe);
+      printBlob(blob, fail);
     } catch (e: any) { fail(e?.message); }
   }
 
