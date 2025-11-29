@@ -783,12 +783,28 @@ public class PrintService {
     private byte[] downloadImageBytes(String urlString) throws Exception {
         java.net.URL url = new java.net.URL(urlString);
         java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
+        
+        // Mimic a real browser request
+        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+        conn.setRequestProperty("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8");
+        conn.setRequestProperty("Accept-Language", "en-US,en;q=0.9");
+        conn.setRequestProperty("Connection", "keep-alive");
+        conn.setRequestProperty("Sec-Fetch-Dest", "image");
+        conn.setRequestProperty("Sec-Fetch-Mode", "no-cors");
+        conn.setRequestProperty("Sec-Fetch-Site", "cross-site");
+        
         conn.setConnectTimeout(5000);
         conn.setReadTimeout(10000);
         
         int status = conn.getResponseCode();
         if (status >= 400) {
+            // Read error stream if available for debugging
+            try (java.io.InputStream err = conn.getErrorStream()) {
+                if (err != null) {
+                    String errBody = new String(err.readAllBytes());
+                    log.warn("[PRINT][IMG_ERR] Server returned {}: {}", status, errBody);
+                }
+            }
             throw new java.io.IOException("Server returned HTTP response code: " + status + " for URL: " + urlString);
         }
 
