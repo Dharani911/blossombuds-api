@@ -701,7 +701,6 @@ function OrderDrawer({
   const [partnerUrlTemplate, setPartnerUrlTemplate] = useState<string>("");
   const [hasPartner, setHasPartner] = useState<boolean>(false);
   const [lockUrl, setLockUrl] = useState<boolean>(false); // lock URL input if partner controls it
-  const [pdfLoading, setPdfLoading] = useState(false);
   const notes =
     ((order as any)?.orderNotes ??
       (order as any)?.notes ??
@@ -892,16 +891,10 @@ function OrderDrawer({
     if (!order) return;
     const fail = (msg?: string) =>
       setToast({ kind: "bad", msg: msg || "Could not open printer dialog." });
-
-    setPdfLoading(true);
     try {
       const blob = kind === "invoice" ? await fetchInvoicePdf(order.id) : await fetchPackingSlipPdf(order.id);
       printBlob(blob, fail);
-    } catch (e: any) {
-      fail(e?.message);
-    } finally {
-      setPdfLoading(false);
-    }
+    } catch (e: any) { fail(e?.message); }
   }
 
   const shipAddress = useMemo(() => {
