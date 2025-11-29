@@ -519,7 +519,7 @@ public class PrintService {
                 OrderItem it = items.get(i);
 
                 // Create a small table for the item: [Image] [Text]
-                PdfPTable itemTbl = new PdfPTable(new float[]{1f, 4f}); // 1 part image, 4 parts text
+                PdfPTable itemTbl = new PdfPTable(new float[]{1.2f, 4f}); // Slightly wider image column
                 itemTbl.setWidthPercentage(100);
                 itemTbl.getDefaultCell().setBorder(Rectangle.NO_BORDER);
                 itemTbl.getDefaultCell().setVerticalAlignment(Element.ALIGN_TOP);
@@ -527,7 +527,7 @@ public class PrintService {
                 // 1. Image Cell
                 PdfPCell imgCell = new PdfPCell();
                 imgCell.setBorder(Rectangle.NO_BORDER);
-                imgCell.setPaddingRight(4f);
+                imgCell.setPaddingRight(8f); // More space between image and text
 
                 try {
                     if (it.getProductId() != null) {
@@ -544,7 +544,7 @@ public class PrintService {
                                     // Use helper to download with User-Agent to avoid 400/403 from some CDNs
                                     byte[] imgBytes = downloadImageBytes(imgUrl);
                                     Image img = Image.getInstance(imgBytes);
-                                    img.scaleToFit(32f, 32f); // Thumbnail size
+                                    img.scaleToFit(56f, 56f); // Larger thumbnail
                                     imgCell.addElement(img);
                                 } catch (Exception e) {
                                     log.error("[PRINT][PACKING_SLIP] Failed to load image from URL: {}", imgUrl, e);
@@ -564,8 +564,9 @@ public class PrintService {
                 // 2. Text Cell
                 PdfPCell textCell = new PdfPCell();
                 textCell.setBorder(Rectangle.NO_BORDER);
+                textCell.setPaddingLeft(4f); // Add left padding for spacing from image
                 
-                Paragraph li = new Paragraph("[ ]  " + nvl(it.getQuantity()) + " × " + safe(it.getProductName()), fItem);
+                Paragraph li = new Paragraph("[ ]    " + nvl(it.getQuantity()) + " × " + safe(it.getProductName()), fItem);
                 li.setSpacingAfter(2f);
                 textCell.addElement(li);
 
