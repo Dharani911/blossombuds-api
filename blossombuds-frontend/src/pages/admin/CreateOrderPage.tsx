@@ -409,18 +409,9 @@ export default function CreateOrderPage() {
     if (!q) { setProdSuggests(null); setProdOpen(false); return; }
     const t = setTimeout(async () => {
       try {
-        const list = await searchProductsLite(q);
+        const list = await searchProductsLite(q); // already filtered
         if (!live) return;
-        const mapped = (list || []).map(p => ({
-          id: p.id,
-          name: p.name,
-          price: Number((p as any).price ?? 0),
-        }));
-        const needle = q.toLowerCase();
-        const filtered = mapped.filter(p =>
-          String(p.id).includes(needle) || p.name.toLowerCase().includes(needle)
-        );
-        setProdSuggests(filtered);
+        setProdSuggests(list || []);
         setProdOpen(true);
       } catch {
         setProdSuggests([]);
@@ -914,13 +905,13 @@ function clearCoupon() {
             />
             {prodOpen && prodSuggests && prodSuggests.length>0 && (
               <div className="dropdown pretty">
-                {prodSuggests.map(s=>{
+                {prodSuggests?.map(s => {
                   const base = resolveBasePrice(s);
                   return (
                     <button
                       type="button"
                       key={s.id}
-                      onClick={()=>{ addProduct(s); setQry(""); setProdSuggests(null); setProdOpen(false); }}
+                      onClick={() => { addProduct(s); setQry(""); setProdSuggests(null); setProdOpen(false); }}
                       className="dd-item"
                     >
                       <div className="dd-line">{s.name}</div>
@@ -928,6 +919,7 @@ function clearCoupon() {
                     </button>
                   );
                 })}
+
               </div>
             )}
           </div>
