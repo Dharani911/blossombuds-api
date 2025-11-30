@@ -325,6 +325,76 @@ const [printingBulk, setPrintingBulk] = useState(false); // 🔹 NEW
     setFiltersOpen(false);
   }
 
+  // Quick date filter actions
+  function setToday() {
+    const from = startOfToday();
+    const to = endOfToday();
+
+    const fromStr = formatLocalDTForInput(from);
+    const toStr = formatLocalDTForInput(to);
+
+    setFromDT(fromStr);
+    setToDT(toStr);
+    setIsFiltered(true);
+    setPage(0);
+
+    void loadAll({
+      useFilter: true,
+      from: from.toISOString(),
+      to: to.toISOString(),
+    });
+  }
+
+  function setLast7() {
+    const from = startOfToday();
+    from.setDate(from.getDate() - 6); // today + previous 6 days = 7
+
+    const to = endOfToday();
+
+    const fromStr = formatLocalDTForInput(from);
+    const toStr = formatLocalDTForInput(to);
+
+    setFromDT(fromStr);
+    setToDT(toStr);
+    setIsFiltered(true);
+    setPage(0);
+
+    void loadAll({
+      useFilter: true,
+      from: from.toISOString(),
+      to: to.toISOString(),
+    });
+  }
+
+  function setThisMonth() {
+    const from = startOfMonth();
+    const to = endOfMonth();
+
+    const fromStr = formatLocalDTForInput(from);
+    const toStr = formatLocalDTForInput(to);
+
+    setFromDT(fromStr);
+    setToDT(toStr);
+    setIsFiltered(true);
+    setPage(0);
+
+    void loadAll({
+      useFilter: true,
+      from: from.toISOString(),
+      to: to.toISOString(),
+    });
+  }
+
+  function clearDateFilter() {
+    setFromDT("");
+    setToDT("");
+    setStatusFilter([]);
+    setIsFiltered(false);
+    setPage(0);
+
+    // reload without filters
+    void loadAll({ useFilter: false });
+  }
 
 
 
