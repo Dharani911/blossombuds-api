@@ -12,6 +12,8 @@ import {
   searchProductsLite,
   getProductOptionsLite,
   resolveBasePrice,
+  listProducts,
+  type Product,
 } from "../../api/adminCatalog";
 
 import {
@@ -40,13 +42,13 @@ type DestinationMode = "DOMESTIC" | "INTERNATIONAL";
 type Currency = "INR";
 
 type CustomerPick = { id: number; name?: string; fullName?: string; email?: string; phone?: string };
-type CustomerDto   = { id?: number; fullName: string; email?: string; phone?: string; active?: boolean };
+type CustomerDto = { id?: number; fullName: string; email?: string; phone?: string; active?: boolean };
 
 type ProductPick = { id: number; name: string; price: number };
 
-type OptionValueLite   = { id:number; valueLabel:string; priceDelta?:number|null };
-type ProductOptionLite = { id:number; name:string; values: OptionValueLite[] };
-type SelectedValue     = { optionId:number; value:OptionValueLite };
+type OptionValueLite = { id: number; valueLabel: string; priceDelta?: number | null };
+type ProductOptionLite = { id: number; name: string; values: OptionValueLite[] };
+type SelectedValue = { optionId: number; value: OptionValueLite };
 
 type CartLine = {
   key: string;
@@ -64,17 +66,17 @@ type CartLine = {
 type DeliveryPartnerLite = { id: number; name?: string | null; code?: string | null; active?: boolean | null };
 
 const PRIMARY = "#4A4F41";
-const ACCENT  = "#F05D8B";
-const GOLD    = "#F6C320";
-const BG      = "#FAF7E7";
-const INK     = "rgba(0,0,0,.08)";
+const ACCENT = "#F05D8B";
+const GOLD = "#F6C320";
+const BG = "#FAF7E7";
+const INK = "rgba(0,0,0,.08)";
 
-const fmtCurrency = (amount:number, _code:Currency="INR") => {
-  try { return new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR"}).format(Number(amount||0)); }
-  catch { return `₹${Number(amount||0).toFixed(2)}`; }
+const fmtCurrency = (amount: number, _code: Currency = "INR") => {
+  try { return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(Number(amount || 0)); }
+  catch { return `₹${Number(amount || 0).toFixed(2)}`; }
 };
 
-function deriveUnitPrice(basePrice:number, selected?: SelectedValue[] | null): number {
+function deriveUnitPrice(basePrice: number, selected?: SelectedValue[] | null): number {
   const deltas = (selected || [])
     .map(s => s?.value?.priceDelta)
     .filter((d): d is number => typeof d === "number" && Number.isFinite(d) && d > 0);
@@ -94,12 +96,12 @@ async function listActivePartners(): Promise<DeliveryPartnerLite[]> {
 async function previewCouponAdmin(code: string, payload: { customerId: number; orderTotal: number; itemsCount?: number }) {
   const res = await authFetch(`/api/promotions/coupons/${encodeURIComponent(code)}/preview`, {
     method: "POST",
-    headers: { "Content-Type":"application/json" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
     let msg = await res.text();
-    try { const j = JSON.parse(msg); msg = j?.message || msg; } catch {}
+    try { const j = JSON.parse(msg); msg = j?.message || msg; } catch { }
     throw new Error(msg);
   }
   return res.json() as Promise<{ discount: number; couponId?: number }>;
@@ -111,7 +113,7 @@ async function previewCouponAdmin(code: string, payload: { customerId: number; o
 export default function CreateOrderPage() {
   const nav = useNavigate();
 
-  const [toast, setToast] = useState<{ kind:"ok"|"bad"; msg:string }|null>(null);
+  const [toast, setToast] = useState<{ kind: "ok" | "bad"; msg: string } | null>(null);
 
   const [dest, setDest] = useState<DestinationMode>("DOMESTIC");
   const isIntl = dest === "INTERNATIONAL";
@@ -125,7 +127,7 @@ export default function CreateOrderPage() {
   const [newCustOpen, setNewCustOpen] = useState(false);
   const [couponId, setCouponId] = useState<number | null>(null);
 
-  const [newCust, setNewCust] = useState<CustomerDto>({ fullName:"", email:"", phone:"", active:true });
+  const [newCust, setNewCust] = useState<CustomerDto>({ fullName: "", email: "", phone: "", active: true });
 
   useEffect(() => {
     let live = true;
@@ -153,8 +155,8 @@ export default function CreateOrderPage() {
   }
 
   async function createNewCustomer() {
-    if (!newCust.fullName?.trim()) { setToast({kind:"bad", msg:"Enter full name"}); return; }
-    if (!newCust.email && !newCust.phone) { setToast({kind:"bad", msg:"Provide email or phone"}); return; }
+    if (!newCust.fullName?.trim()) { setToast({ kind: "bad", msg: "Enter full name" }); return; }
+    if (!newCust.email && !newCust.phone) { setToast({ kind: "bad", msg: "Provide email or phone" }); return; }
     try {
       const saved = await adminCreateCustomer({
         fullName: newCust.fullName.trim(),
@@ -165,11 +167,11 @@ export default function CreateOrderPage() {
       setCustomer(saved);
       setCustQuery(`${saved.id} — ${saved.fullName || "Customer"}`);
       setNewCustOpen(false);
-      setToast({kind:"ok", msg:"Customer created"});
+      setToast({ kind: "ok", msg: "Customer created" });
       setAddrList([]);
       setSelectedAddrId(null);
-    } catch (e:any) {
-      setToast({kind:"bad", msg: e?.message || "Could not create customer"});
+    } catch (e: any) {
+      setToast({ kind: "bad", msg: e?.message || "Could not create customer" });
     }
   }
 
@@ -207,7 +209,7 @@ export default function CreateOrderPage() {
             cs.find(c => /india/i.test(c.name || ""));
           if (found?.id) setINDIA_ID(found.id);
         }
-      } catch {}
+      } catch { }
 
       try {
         const sid = INDIA_ID || Number(import.meta.env.VITE_COUNTRY_ID_INDIA) || 0;
@@ -222,7 +224,7 @@ export default function CreateOrderPage() {
         (allDists || []).forEach(d => { if (d?.id != null) dm[d.id] = d.name || String(d.id); });
         setStateMap(sm);
         setDistrictMap(dm);
-      } catch {}
+      } catch { }
     })();
     return () => { alive = false; };
   }, [INDIA_ID]);
@@ -403,23 +405,41 @@ export default function CreateOrderPage() {
   const [prodOpen, setProdOpen] = useState(false);
   const [cart, setCart] = useState<CartLine[]>([]);
 
+  // NEW: Load all products for client-side filtering (like CategoriesPage)
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+
   useEffect(() => {
     let live = true;
-    const q = qry.trim();
-    if (!q) { setProdSuggests(null); setProdOpen(false); return; }
-    const t = setTimeout(async () => {
+    (async () => {
       try {
-        const list = await searchProductsLite(q); // already filtered
-        if (!live) return;
-        setProdSuggests(list || []);
-        setProdOpen(true);
+        // Load a large batch (1000) to cover most catalogs
+        const page = await listProducts(0, 1000);
+        if (live) setAllProducts(page.content || []);
       } catch {
-        setProdSuggests([]);
-        setProdOpen(false);
+        // ignore or log
       }
-    }, 220);
-    return () => { live = false; clearTimeout(t); };
-  }, [qry]);
+    })();
+    return () => { live = false; };
+  }, []);
+
+  useEffect(() => {
+    const q = qry.trim().toLowerCase();
+    if (!q) { setProdSuggests(null); setProdOpen(false); return; }
+
+    // Client-side filter
+    const filtered = allProducts.filter(p =>
+      String(p.id).includes(q) || p.name.toLowerCase().includes(q)
+    );
+
+    const mapped: ProductPick[] = filtered.map(p => ({
+      id: p.id,
+      name: p.name,
+      price: Number(p.price ?? 0),
+    }));
+
+    setProdSuggests(mapped);
+    setProdOpen(true);
+  }, [qry, allProducts]);
 
   function lineSignature(p: ProductPick, selected?: SelectedValue[] | null) {
     const base = `p:${p.id}`;
@@ -466,8 +486,8 @@ export default function CreateOrderPage() {
         }
         return [...prev, line];
       });
-    } catch (e:any) {
-      setToast({ kind:"bad", msg: e?.message || "Could not load product options" });
+    } catch (e: any) {
+      setToast({ kind: "bad", msg: e?.message || "Could not load product options" });
     }
   }
 
@@ -494,7 +514,7 @@ export default function CreateOrderPage() {
     setCart(prev => prev.filter(x => x.key !== k));
   }
 
-  function onPickOptionValue(lineKey:string, optionId:number, valueId:number) {
+  function onPickOptionValue(lineKey: string, optionId: number, valueId: number) {
     setCart(prev => {
       const idx = prev.findIndex(x => x.key === lineKey);
       if (idx < 0) return prev;
@@ -514,7 +534,7 @@ export default function CreateOrderPage() {
 
       const newSig = lineSignature(ln.product, selected);
       const otherIndex = prev.findIndex(
-        (x,i) => i!==idx && lineSignature(x.product, x.options?.selected || null) === newSig
+        (x, i) => i !== idx && lineSignature(x.product, x.options?.selected || null) === newSig
       );
       if (otherIndex >= 0) {
         const merged = prev.slice();
@@ -541,7 +561,7 @@ export default function CreateOrderPage() {
     if (!customer?.id) { setCouponErr("Choose a customer first."); return; }
 
     try {
-      const subtotal = cart.reduce((s,l)=> s + (l.quantity*(l.unitPrice||0)), 0);
+      const subtotal = cart.reduce((s, l) => s + (l.quantity * (l.unitPrice || 0)), 0);
       const res = await previewCouponAdmin(code, { customerId: Number(customer.id), orderTotal: subtotal });
       const off = Number(res?.discount || 0);
       if (off > 0) {
@@ -550,14 +570,14 @@ export default function CreateOrderPage() {
       } else {
         setCouponErr("Coupon not applicable.");
       }
-    } catch (e:any) {
+    } catch (e: any) {
       const msg = (e?.message || "Coupon validation failed.").toString();
       setCouponErr(msg);
     }
   }
-function clearCoupon() {
-  setCoupon(""); setCouponErr(null); setCouponAmt(0); setCouponId(null);
-}
+  function clearCoupon() {
+    setCoupon(""); setCouponErr(null); setCouponAmt(0); setCouponId(null);
+  }
 
 
   // Partners + shipping
@@ -573,7 +593,7 @@ function clearCoupon() {
   useEffect(() => {
     let live = true;
     (async () => {
-      try { const p = await listActivePartners(); if (live) setPartners(p || []); } catch {}
+      try { const p = await listActivePartners(); if (live) setPartners(p || []); } catch { }
     })();
     return () => { live = false; };
   }, []);
@@ -591,14 +611,14 @@ function clearCoupon() {
     setShippingLoading(true);
     setShippingErr(null);
     try {
-      const subtotal = cart.reduce((s,l)=> s + (l.quantity*(l.unitPrice||0)), 0);
+      const subtotal = cart.reduce((s, l) => s + (l.quantity * (l.unitPrice || 0)), 0);
       const { fee } = await previewShipping({
         itemsSubtotal: subtotal,
         stateId: addr.stateId ?? undefined,
         districtId: addr.districtId ?? undefined,
       });
       setShippingFee(Number(fee || 0));
-    } catch (e:any) {
+    } catch (e: any) {
       setShippingFee(0);
       const msg = (e?.response?.data?.message || e?.message || "Could not compute shipping.").toString();
       setShippingErr(msg);
@@ -613,7 +633,7 @@ function clearCoupon() {
   }, [isIntl, selectedAddrId, cart]);
 
   const subtotal = useMemo(
-    () => cart.reduce((s,l)=> s + (l.quantity*(l.unitPrice||0)), 0),
+    () => cart.reduce((s, l) => s + (l.quantity * (l.unitPrice || 0)), 0),
     [cart]
   );
   const grand = useMemo(
@@ -636,7 +656,7 @@ function clearCoupon() {
 
   async function submit() {
     const problem = validate();
-    if (problem) { setToast({kind:"bad", msg:problem}); return; }
+    if (problem) { setToast({ kind: "bad", msg: problem }); return; }
 
     const addr = selectedAddress!;
     const indiaFlow = !isIntl;
@@ -676,17 +696,17 @@ function clearCoupon() {
       shipPincode: addr.pincode || "",
 
       shipCountryId: typeof addr.countryId === "number" ? addr.countryId : undefined,
-      shipStateId:   typeof addr.stateId   === "number" ? addr.stateId   : undefined,
-      shipDistrictId:typeof addr.districtId=== "number" ? addr.districtId: undefined,
+      shipStateId: typeof addr.stateId === "number" ? addr.stateId : undefined,
+      shipDistrictId: typeof addr.districtId === "number" ? addr.districtId : undefined,
     };
 
     // Validate critical IDs before POST
-    if (!dto.customerId) { setToast({kind:"bad", msg:"customerId missing"}); return; }
-    if (!dto.shipCountryId) { setToast({kind:"bad", msg:"Country missing on shipping address"}); return; }
+    if (!dto.customerId) { setToast({ kind: "bad", msg: "customerId missing" }); return; }
+    if (!dto.shipCountryId) { setToast({ kind: "bad", msg: "Country missing on shipping address" }); return; }
     if (indiaFlow) {
-      if (!dto.shipStateId) { setToast({kind:"bad", msg:"State is required for India shipments"}); return; }
-      if (!dto.shipDistrictId) { setToast({kind:"bad", msg:"District is required for India shipments"}); return; }
-      if (!dto.shipPincode?.trim()) { setToast({kind:"bad", msg:"PIN code is required for India shipments"}); return; }
+      if (!dto.shipStateId) { setToast({ kind: "bad", msg: "State is required for India shipments" }); return; }
+      if (!dto.shipDistrictId) { setToast({ kind: "bad", msg: "District is required for India shipments" }); return; }
+      if (!dto.shipPincode?.trim()) { setToast({ kind: "bad", msg: "PIN code is required for India shipments" }); return; }
     }
 
     // --- build items from cart ---
@@ -720,16 +740,16 @@ function clearCoupon() {
       };
     });
 
-    if (!itemsPayload.length) { setToast({kind:"bad", msg:"Add at least one product"}); return; }
+    if (!itemsPayload.length) { setToast({ kind: "bad", msg: "Add at least one product" }); return; }
 
     setBusy(true);
     try {
       const created = await createManualOrder({ order: dto, items: itemsPayload });
-      setToast({ kind:"ok", msg:`Order ${created.publicCode ? `BB${created.publicCode}` : ""} created` });
-      nav(`/admin/orders?code=${encodeURIComponent(created.publicCode || "")}`, { replace:true });
-    } catch (e:any) {
+      setToast({ kind: "ok", msg: `Order ${created.publicCode ? `BB${created.publicCode}` : ""} created` });
+      nav(`/admin/orders?code=${encodeURIComponent(created.publicCode || "")}`, { replace: true });
+    } catch (e: any) {
       const msg = (e?.response?.data?.message || e?.message || "Create failed").toString();
-      setToast({ kind:"bad", msg });
+      setToast({ kind: "bad", msg });
     } finally {
       setBusy(false);
     }
@@ -765,8 +785,8 @@ function clearCoupon() {
           <div className="segline">
             <span className="lab">Destination</span>
             <div className="segs">
-              <button type="button" className={"seg"+(dest==="DOMESTIC"?" on":"")} onClick={()=>setDest("DOMESTIC")}>Domestic</button>
-              <button type="button" className={"seg"+(dest==="INTERNATIONAL"?" on":"")} onClick={()=>setDest("INTERNATIONAL")}>International</button>
+              <button type="button" className={"seg" + (dest === "DOMESTIC" ? " on" : "")} onClick={() => setDest("DOMESTIC")}>Domestic</button>
+              <button type="button" className={"seg" + (dest === "INTERNATIONAL" ? " on" : "")} onClick={() => setDest("INTERNATIONAL")}>International</button>
             </div>
           </div>
           <div className="segline">
@@ -777,24 +797,24 @@ function clearCoupon() {
       </section>
 
       {/* Step 2: Customer */}
-      <section className="card pad" style={{marginTop:12}}>
+      <section className="card pad" style={{ marginTop: 12 }}>
         <div className="row-inline">
           <label className="grow">
             <div className="lab">Customer</div>
             <div className="combo">
               <input
                 value={custQuery}
-                onChange={(e)=>{ setCustQuery(e.target.value); setCustomer(null); }}
+                onChange={(e) => { setCustQuery(e.target.value); setCustomer(null); }}
                 placeholder="Type ID or name/phone/email…"
-                onFocus={()=> setCustOpen(!!custSuggests?.length)}
+                onFocus={() => setCustOpen(!!custSuggests?.length)}
               />
-              {custOpen && custSuggests && custSuggests.length>0 && (
+              {custOpen && custSuggests && custSuggests.length > 0 && (
                 <div className="dropdown pretty">
-                  {custSuggests.map(c=>(
+                  {custSuggests.map(c => (
                     <button
                       type="button"
                       key={c.id}
-                      onClick={()=>pickCustomer(c)}
+                      onClick={() => pickCustomer(c)}
                       className="dd-item"
                     >
                       <div className="dd-line"><b>{c.id}</b> — {c.name || c.fullName || "Customer"}</div>
@@ -805,32 +825,32 @@ function clearCoupon() {
               )}
             </div>
           </label>
-          <button className="ghost as-btn" type="button" onClick={()=>setNewCustOpen(true)}>+ New</button>
+          <button className="ghost as-btn" type="button" onClick={() => setNewCustOpen(true)}>+ New</button>
         </div>
-        {customer?.id && <div className="muted" style={{marginTop:6}}>Selected: #{customer.id} — {customer.name || customer.fullName || "Customer"}</div>}
+        {customer?.id && <div className="muted" style={{ marginTop: 6 }}>Selected: #{customer.id} — {customer.name || customer.fullName || "Customer"}</div>}
 
         {newCustOpen && (
           <div className="inline-modal">
             <div className="inline-hd">
               <strong>New Customer</strong>
-              <button className="ghost sm" onClick={()=>setNewCustOpen(false)}>✕</button>
+              <button className="ghost sm" onClick={() => setNewCustOpen(false)}>✕</button>
             </div>
             <div className="form-grid">
               <label>
                 <div className="lab">Full name *</div>
-                <input value={newCust.fullName} onChange={e=>setNewCust(c=>({...c, fullName:e.target.value}))}/>
+                <input value={newCust.fullName} onChange={e => setNewCust(c => ({ ...c, fullName: e.target.value }))} />
               </label>
               <label>
                 <div className="lab">Email</div>
-                <input value={newCust.email || ""} onChange={e=>setNewCust(c=>({...c, email:e.target.value}))}/>
+                <input value={newCust.email || ""} onChange={e => setNewCust(c => ({ ...c, email: e.target.value }))} />
               </label>
               <label>
                 <div className="lab">Phone</div>
-                <input value={newCust.phone || ""} onChange={e=>setNewCust(c=>({...c, phone:e.target.value}))}/>
+                <input value={newCust.phone || ""} onChange={e => setNewCust(c => ({ ...c, phone: e.target.value }))} />
               </label>
             </div>
             <div className="end-row">
-              <button className="ghost as-btn" onClick={()=>setNewCustOpen(false)}>Cancel</button>
+              <button className="ghost as-btn" onClick={() => setNewCustOpen(false)}>Cancel</button>
               <button className="btn primary" onClick={createNewCustomer}>Save customer</button>
             </div>
           </div>
@@ -838,8 +858,8 @@ function clearCoupon() {
       </section>
 
       {/* Step 3: Address */}
-      <section className="card pad" style={{marginTop:12}}>
-        <div className="lab" style={{fontWeight:900, marginBottom:8}}>
+      <section className="card pad" style={{ marginTop: 12 }}>
+        <div className="lab" style={{ fontWeight: 900, marginBottom: 8 }}>
           Shipping Address ({isIntl ? "International" : "India"})
         </div>
 
@@ -859,7 +879,7 @@ function clearCoupon() {
                   <div className="lines">
                     {selectedAddress.phone ? `${selectedAddress.phone} • ` : ""}
                     {selectedAddress.line1}{selectedAddress.line2 ? `, ${selectedAddress.line2}` : ""}
-                    <br/>
+                    <br />
                     {isIntl ? (
                       [
                         selectedAddress.pincode || "",
@@ -893,19 +913,19 @@ function clearCoupon() {
       </section>
 
       {/* Step 4: Products */}
-      <section className="card pad" style={{marginTop:12}}>
-        <div className="lab" style={{fontWeight:900, marginBottom:10}}>Add Products</div>
+      <section className="card pad" style={{ marginTop: 12 }}>
+        <div className="lab" style={{ fontWeight: 900, marginBottom: 10 }}>Add Products</div>
         <div className="prod-add">
           <div className="combo">
             <input
               value={qry}
-              onChange={e=>setQry(e.target.value)}
+              onChange={e => setQry(e.target.value)}
               placeholder="Search products by ID or name…"
-              onFocus={()=> setProdOpen(!!prodSuggests?.length)}
+              onFocus={() => setProdOpen(!!prodSuggests?.length)}
             />
-            {prodOpen && prodSuggests && prodSuggests.length>0 && (
+            {prodOpen && prodSuggests && prodSuggests.length > 0 && (
               <div className="dropdown pretty">
-                {prodSuggests?.map(s => {
+                {prodSuggests.map(s => {
                   const base = resolveBasePrice(s);
                   return (
                     <button
@@ -919,7 +939,6 @@ function clearCoupon() {
                     </button>
                   );
                 })}
-
               </div>
             )}
           </div>
@@ -937,7 +956,7 @@ function clearCoupon() {
 
           {cart.length === 0 ? (
             <div className="pad muted">No products added yet.</div>
-          ) : cart.map(line=>(
+          ) : cart.map(line => (
             <div className="trow" key={line.key}>
               <div className="prod-cell">
                 <div className="pname">{line.product.name}</div>
@@ -952,7 +971,7 @@ function clearCoupon() {
                         <div className="opt-lab">{opt.name}</div>
                         <select
                           value={line.options!.selected.find(s => s.optionId === opt.id)?.value.id ?? ""}
-                          onChange={(e)=> onPickOptionValue(line.key, opt.id, Number(e.target.value))}
+                          onChange={(e) => onPickOptionValue(line.key, opt.id, Number(e.target.value))}
                         >
                           <option value="" disabled>Select…</option>
                           {opt.values.map(v => (
@@ -979,21 +998,21 @@ function clearCoupon() {
                   step={1}
                   className="num"
                   value={line.qtyInput ?? String(line.quantity)}
-                  onChange={(e)=> onQtyInput(line.key, e.target.value)}
-                  onBlur={()=> onQtyBlur(line.key)}
+                  onChange={(e) => onQtyInput(line.key, e.target.value)}
+                  onBlur={() => onQtyBlur(line.key)}
                 />
               </div>
 
               <div className="unit-cell">{fmtCurrency(line.unitPrice, currency)}</div>
-              <div className="total-cell">{fmtCurrency((Number(line.qtyInput ?? line.quantity) || line.quantity) * (line.unitPrice||0), currency)}</div>
-              <div><button type="button" className="ghost sm as-btn" onClick={()=>removeLine(line.key)}>Remove</button></div>
+              <div className="total-cell">{fmtCurrency((Number(line.qtyInput ?? line.quantity) || line.quantity) * (line.unitPrice || 0), currency)}</div>
+              <div><button type="button" className="ghost sm as-btn" onClick={() => removeLine(line.key)}>Remove</button></div>
             </div>
           ))}
         </div>
       </section>
 
       {/* Step 5: Summary */}
-      <section className="card sum" style={{marginTop:12}}>
+      <section className="card sum" style={{ marginTop: 12 }}>
         <div className="section-head">Summary</div>
         <div className="sum-inner">
           <div className="row-sum"><span>Subtotal</span><span>{fmtCurrency(subtotal, currency)}</span></div>
@@ -1004,16 +1023,16 @@ function clearCoupon() {
               <input
                 className="inp"
                 value={coupon}
-                onChange={e=>setCoupon(e.target.value)}
+                onChange={e => setCoupon(e.target.value)}
                 placeholder="e.g. FESTIVE10"
-                onKeyDown={(e)=>{ if(e.key==="Enter") applyCoupon(); }}
+                onKeyDown={(e) => { if (e.key === "Enter") applyCoupon(); }}
               />
               {couponErr && <div className="small err-text">{couponErr}</div>}
-              {couponAmt>0 && <div className="small ok-text">Coupon applied: −{fmtCurrency(couponAmt, currency)}</div>}
+              {couponAmt > 0 && <div className="small ok-text">Coupon applied: −{fmtCurrency(couponAmt, currency)}</div>}
             </div>
             <div className="hstack coupon-btns">
               <button className="ghost as-btn" onClick={applyCoupon} disabled={!coupon.trim() || !customer?.id}>Apply</button>
-              <button className="ghost as-btn" onClick={clearCoupon} disabled={!coupon.trim() && !couponErr && !(couponAmt>0)}>Clear</button>
+              <button className="ghost as-btn" onClick={clearCoupon} disabled={!coupon.trim() && !couponErr && !(couponAmt > 0)}>Clear</button>
             </div>
           </div>
 
@@ -1027,9 +1046,9 @@ function clearCoupon() {
               </div>
               <div>
                 <div className="lab">Delivery partner</div>
-                <select className="sel" value={partnerId} onChange={(e)=>setPartnerId(e.target.value ? Number(e.target.value) : "")}>
+                <select className="sel" value={partnerId} onChange={(e) => setPartnerId(e.target.value ? Number(e.target.value) : "")}>
                   <option value="">Select a partner…</option>
-                  {partners.map(p=>(
+                  {partners.map(p => (
                     <option key={p.id} value={p.id}>
                       {p.name}{p.code ? ` (${p.code})` : ""}
                     </option>
@@ -1041,14 +1060,14 @@ function clearCoupon() {
             <>
               <div className="row-sum">
                 <span>Shipping (International)</span>
-                <span style={{minWidth: 180, display: "inline-flex", gap: 8, alignItems: "center"}}>
+                <span style={{ minWidth: 180, display: "inline-flex", gap: 8, alignItems: "center" }}>
                   <input
                     className="inp inp-sm num"
                     type="number"
                     min={0}
                     step="0.01"
                     value={shippingFeeInput}
-                    onChange={(e)=> {
+                    onChange={(e) => {
                       const raw = e.target.value;
                       // allow empty and partial decimals while typing
                       if (raw === "" || /^(\d+(\.\d{0,2})?)$/.test(raw)) {
@@ -1056,20 +1075,20 @@ function clearCoupon() {
                         if (raw !== "") setShippingFee(Number(raw));
                       }
                     }}
-                    onBlur={()=> {
+                    onBlur={() => {
                       const n = Math.max(0, Number(shippingFeeInput || 0));
                       setShippingFee(n);
                       setShippingFeeInput(String(n));
                     }}
                     placeholder="0.00"
-                    style={{width: 140}}
+                    style={{ width: 140 }}
                   />
                   <span className="muted">INR</span>
                 </span>
               </div>
               <div>
                 <div className="lab">Logistics provider (International)</div>
-                <input className="inp" value={intlCarrier} onChange={e=>setIntlCarrier(e.target.value)} placeholder="e.g. DHL / FedEx reference" />
+                <input className="inp" value={intlCarrier} onChange={e => setIntlCarrier(e.target.value)} placeholder="e.g. DHL / FedEx reference" />
               </div>
             </>
           )}
@@ -1079,7 +1098,7 @@ function clearCoupon() {
             <input
               className="inp"
               value={externalRef}
-              onChange={e=>setExternalRef(e.target.value)}
+              onChange={e => setExternalRef(e.target.value)}
               placeholder="e.g. UTR / bank ref / Razorpay ref"
             />
           </div>
@@ -1095,7 +1114,7 @@ function clearCoupon() {
 
           <div>
             <div className="lab">Admin Note (optional)</div>
-            <input className="inp" value={note} onChange={e=>setNote(e.target.value)} placeholder="Visible in order timeline"/>
+            <input className="inp" value={note} onChange={e => setNote(e.target.value)} placeholder="Visible in order timeline" />
           </div>
 
           <div className="actions">
@@ -1114,7 +1133,7 @@ function clearCoupon() {
             <div className="sheet-hd">
               <strong>Select an address</strong>
               <div className="hstack">
-                <button className="ghost as-btn" onClick={()=>setSelectSheetOpen(false)}>✕</button>
+                <button className="ghost as-btn" onClick={() => setSelectSheetOpen(false)}>✕</button>
               </div>
             </div>
 
@@ -1139,7 +1158,7 @@ function clearCoupon() {
                         <div className="addr-meta">
                           {a.phone ? `${a.phone} • ` : ""}
                           {a.line1}{a.line2 ? `, ${a.line2}` : ""}
-                          <br/>
+                          <br />
                           {[
                             isIntl ? undefined : distNm,
                             isIntl ? undefined : stateNm,
@@ -1157,11 +1176,11 @@ function clearCoupon() {
             <div className="sheet-ft">
               <button
                 className="ghost as-btn"
-                onClick={()=>openNewAddress(isIntl ? "intl" : "domestic")}
+                onClick={() => openNewAddress(isIntl ? "intl" : "domestic")}
               >
                 + New address
               </button>
-              <button className="ghost as-btn" onClick={()=>setSelectSheetOpen(false)}>Close</button>
+              <button className="ghost as-btn" onClick={() => setSelectSheetOpen(false)}>Close</button>
             </div>
           </div>
         </div>
@@ -1173,32 +1192,32 @@ function clearCoupon() {
           <div className="na-sheet">
             <div className="sheet-hd">
               <strong>Add a new address {isIntl ? "(International)" : "(India)"}</strong>
-              <button className="ghost as-btn" onClick={()=>{ setNewAddrOpen(false); }}>✕</button>
+              <button className="ghost as-btn" onClick={() => { setNewAddrOpen(false); }}>✕</button>
             </div>
 
             <div className="na-bd">
               {naErr && <div className="alert">{naErr}</div>}
               <div>
                 <div className="lbl">Recipient name *</div>
-                <input className="inp" value={naName} onChange={e=>setNaName(e.target.value)} />
+                <input className="inp" value={naName} onChange={e => setNaName(e.target.value)} />
               </div>
               <div className="na-row2">
                 <div>
                   <div className="lbl">Phone *</div>
-                  <input className="inp" value={naPhone} onChange={e=>setNaPhone(e.target.value)} placeholder={isIntl ? "+49 176..." : "+91 9xxxxxxxxx"} />
+                  <input className="inp" value={naPhone} onChange={e => setNaPhone(e.target.value)} placeholder={isIntl ? "+49 176..." : "+91 9xxxxxxxxx"} />
                 </div>
                 <div>
                   <div className="lbl">Pincode / ZIP *</div>
-                  <input className="inp" value={naPincode} onChange={e=>setNaPincode(e.target.value)} />
+                  <input className="inp" value={naPincode} onChange={e => setNaPincode(e.target.value)} />
                 </div>
               </div>
               <div>
                 <div className="lbl">Address line 1 *</div>
-                <input className="inp" value={naLine1} onChange={e=>setNaLine1(e.target.value)} />
+                <input className="inp" value={naLine1} onChange={e => setNaLine1(e.target.value)} />
               </div>
               <div>
                 <div className="lbl">Address line 2 *</div>
-                <input className="inp" value={naLine2} onChange={e=>setNaLine2(e.target.value)} />
+                <input className="inp" value={naLine2} onChange={e => setNaLine2(e.target.value)} />
               </div>
 
               {!isIntl ? (
@@ -1209,7 +1228,7 @@ function clearCoupon() {
                       <select
                         className="sel"
                         value={naStateId}
-                        onChange={(e)=>{ const v = e.target.value ? Number(e.target.value) : ""; setNaStateId(v); setNaDistrictId(""); }}
+                        onChange={(e) => { const v = e.target.value ? Number(e.target.value) : ""; setNaStateId(v); setNaDistrictId(""); }}
                       >
                         <option value="">Select state…</option>
                         {modalStates.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -1220,7 +1239,7 @@ function clearCoupon() {
                       <select
                         className="sel"
                         value={naDistrictId}
-                        onChange={(e)=>setNaDistrictId(e.target.value ? Number(e.target.value) : "")}
+                        onChange={(e) => setNaDistrictId(e.target.value ? Number(e.target.value) : "")}
                         disabled={typeof naStateId !== "number" || loadingDistricts}
                       >
                         <option value="">{loadingDistricts ? "Loading…" : "Select district…"}</option>
@@ -1228,7 +1247,7 @@ function clearCoupon() {
                       </select>
                     </div>
                   </div>
-                  <div className="small" style={{opacity:.8}}>
+                  <div className="small" style={{ opacity: .8 }}>
                     Country: <strong>{countryNameById(INDIA_ID) || "India"}</strong>
                   </div>
                 </>
@@ -1238,7 +1257,7 @@ function clearCoupon() {
                   <select
                     className="sel"
                     value={naCountryId}
-                    onChange={(e)=>setNaCountryId(e.target.value ? Number(e.target.value) : "")}
+                    onChange={(e) => setNaCountryId(e.target.value ? Number(e.target.value) : "")}
                   >
                     <option value="">Select country…</option>
                     {countries
@@ -1249,13 +1268,13 @@ function clearCoupon() {
               )}
 
               <label className="checkline">
-                <input type="checkbox" checked={naMakeDefault} onChange={e=>setNaMakeDefault(e.target.checked)} />
+                <input type="checkbox" checked={naMakeDefault} onChange={e => setNaMakeDefault(e.target.checked)} />
                 <span className="small">Make default {isIntl ? "international" : "shipping"} address</span>
               </label>
             </div>
 
             <div className="sheet-ft">
-              <button className="ghost as-btn" onClick={()=>{ setNewAddrOpen(false); }}>Cancel</button>
+              <button className="ghost as-btn" onClick={() => { setNewAddrOpen(false); }}>Cancel</button>
               <button className="btn primary" onClick={saveNewAddress} disabled={naBusy}>
                 {naBusy ? "Saving…" : "Save & use this"}
               </button>

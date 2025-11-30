@@ -113,7 +113,6 @@ public class PrintService {
     }
 
     /** Generates packing slip PDF bytes for a given order id (no pricing). */
-    /** Generates packing slip PDF bytes for a given order id (no pricing). */
     @Transactional(readOnly = true, propagation = Propagation.SUPPORTS, noRollbackFor = Exception.class)
     public byte[] renderPackingSlipPdf(Long orderId) {
         if (orderId == null) throw new IllegalArgumentException("orderId is required");
@@ -160,7 +159,7 @@ public class PrintService {
                 (customerPhone.isBlank() ? "" : "Phone: " + customerPhone)
         );
 
-        byte[] pdf = buildPdfWithWriter((doc, writer) -> {
+        byte[] pdf= buildPdfWithWriter((doc, writer) -> {
             // Page geometry
             Rectangle page = doc.getPageSize();
             float left   = doc.left();
@@ -185,6 +184,7 @@ public class PrintService {
 
             // Brand
             topCt.addElement(brandHeader(brandName, /*uppercase*/ true, logoUrl(), logoMaxH()));
+
 
             // Meta row
             PdfPTable hdr = new PdfPTable(new float[]{2.2f, 2f, 2.2f, 2.2f});
@@ -224,25 +224,11 @@ public class PrintService {
             // ───────────────── TOP FRAME 2: Multi-column items (bounded) ─────────────────
             int n = items.size();
             int cols = (n > 24) ? 3 : (n > 12 ? 2 : 1); // auto-expand columns
-
-            // Dynamic font sizes based on column count
-            float mainSize;
-            float varSize;
-            if (cols <= 1) {
-                mainSize = 11f;
-                varSize  = 10f;
-            } else if (cols == 2) {
-                mainSize = 10f;
-                varSize  = 9f;
-            } else {
-                mainSize = 9f;
-                varSize  = 8f;
-            }
-            Font fItem = new Font(Font.HELVETICA, mainSize, Font.NORMAL);
-            Font fVar  = new Font(Font.HELVETICA, varSize, Font.ITALIC);
-
             float colGap = 12f;
             float colWidth = (right - left - (colGap * (cols - 1))) / cols;
+
+            Font fItem = new Font(Font.HELVETICA, 11, Font.NORMAL);
+            Font fVar  = new Font(Font.HELVETICA, 10, Font.ITALIC);
 
             int perCol = (int) Math.ceil(n / (double) cols);
             for (int ci = 0; ci < cols; ci++) {
@@ -257,32 +243,26 @@ public class PrintService {
                 // Use dynamic top (itemsTopY) and keep well above totals band
                 col.setSimpleColumn(x1, itemsBottomY, x2, itemsTopY);
 
+
                 for (int i = start; i < end; i++) {
                     OrderItem it = items.get(i);
 
                     // Create a small table for the item: [Image] [Text]
-                    PdfPTable itemTbl = new PdfPTable(new float[]{0.9f, 5.1f});
+                    PdfPTable itemTbl = new PdfPTable(new float[]{0.6f, 5.4f}); // Slightly wider image column
                     itemTbl.setWidthPercentage(100);
                     itemTbl.getDefaultCell().setBorder(Rectangle.NO_BORDER);
                     itemTbl.getDefaultCell().setVerticalAlignment(Element.ALIGN_TOP);
-                    itemTbl.setSplitLate(false);
-                    itemTbl.setSplitRows(true);
 
                     // 1. Image Cell
                     PdfPCell imgCell = new PdfPCell();
                     imgCell.setBorder(Rectangle.NO_BORDER);
-                    imgCell.setPaddingTop(0f);
-                    imgCell.setPaddingBottom(2f);
-                    imgCell.setPaddingLeft(0f);
-                    imgCell.setPaddingRight(6f); // clear gap between image and text
-                    imgCell.setHorizontalAlignment(Element.ALIGN_CENTER);
-                    imgCell.setVerticalAlignment(Element.ALIGN_TOP);
+                    imgCell.setPadding(0f);
+                    imgCell.setPaddingBottom(1f);
+                    imgCell.setPaddingRight(2f);
 
                     try {
                         if (it.getProductId() != null) {
-                            ProductImage pImg = productImageRepository
-                                    .findFirstByProduct_IdAndActiveTrueOrderBySortOrderAscIdAsc(it.getProductId())
-                                    .orElse(null);
+                            ProductImage pImg = productImageRepository.findFirstByProduct_IdAndActiveTrueOrderBySortOrderAscIdAsc(it.getProductId()).orElse(null);
                             if (pImg != null) {
                                 String imgUrl = pImg.getUrl();
                                 if (imgUrl == null || imgUrl.isBlank()) {
@@ -294,16 +274,12 @@ public class PrintService {
                                     try {
                                         byte[] imgBytes = downloadImageBytes(imgUrl);
                                         Image img = Image.getInstance(imgBytes);
-                                        img.scaleToFit(56f, 56f); // thumbnail size
+                                        img.scaleToFit(56f, 56f); // Larger thumbnail
                                         imgCell.addElement(img);
                                     } catch (Exception e) {
                                         log.error("[PRINT][PACKING_SLIP] Failed to load image from URL: {}", imgUrl, e);
                                     }
-                                } else {
-                                    log.warn("[PRINT][PACKING_SLIP] Found image record but no URL for product {}", it.getProductName());
                                 }
-                            } else {
-                                log.info("[PRINT][PACKING_SLIP] No active image found for product {}", it.getProductName());
                             }
                         }
                     } catch (Exception e) {
@@ -314,33 +290,36 @@ public class PrintService {
                     // 2. Text Cell
                     PdfPCell textCell = new PdfPCell();
                     textCell.setBorder(Rectangle.NO_BORDER);
-                    textCell.setPaddingTop(0f);
-                    textCell.setPaddingBottom(0f);
-                    textCell.setPaddingLeft(1.5f); // small indent so text never hugs image
-                    textCell.setPaddingRight(0f);
-
-                    Paragraph li = new Paragraph("[ ]  " + nvl(it.getQuantity()) + " × " + safe(it.getProductName()), fItem);
-                    li.setLeading(0f, 1.15f);
-                    li.setSpacingAfter(2f);
+                    textCell.setPadding(0f);
+                    
+                    // Adjust font size for long product names to avoid column overflow
+                    String productName = safe(it.getProductName());
+                    Font itemFont = fItem;
+                    if (productName.length() > 30) {
+                        itemFont = new Font(fItem.getBaseFont(), 9, Font.NORMAL);
+                    }
+                        Paragraph li = new Paragraph("[ ]  " + nvl(it.getQuantity()) + " × " + productName, itemFont);
+                    li.setSpacingAfter(0f);
                     textCell.addElement(li);
 
+                    // Variants text may also be long; shrink if needed
                     if (it.getOptionsText() != null && !it.getOptionsText().isBlank()) {
-                        Paragraph vi = new Paragraph("Variants: " + it.getOptionsText(), fVar);
-                        vi.setLeading(0f, 1.1f);
-                        vi.setIndentationLeft(0f);
-                        vi.setSpacingAfter(3f);
+                        String opts = it.getOptionsText();
+                        Font varFont = fVar;
+                        if (opts.length() > 40) {
+                            varFont = new Font(fVar.getBaseFont(), 8, Font.ITALIC);
+                        }
+                        Paragraph vi = new Paragraph("Variants: " + opts, varFont);
+                        vi.setIndentationLeft(0f); // Reset indentation as it's inside a cell
+                        vi.setSpacingAfter(1f);
                         textCell.addElement(vi);
                     }
-
                     itemTbl.addCell(textCell);
                     itemTbl.setKeepTogether(true);
 
                     // Add the table to the column
                     col.addElement(itemTbl);
-                    // Small spacer between items
-                    Paragraph spacer = new Paragraph(" ");
-                    spacer.setSpacingAfter(4f);
-                    col.addElement(spacer);
+                    col.addElement(new Paragraph(" ")); // Small spacer between items
                 }
                 col.go();
             }
@@ -418,7 +397,6 @@ public class PrintService {
         log.info("[PRINT][PACKING_SLIP] Packing slip PDF generated for orderId={}, size={} bytes", orderId, pdf.length);
         return pdf;
     }
-
     /**
      * Generates a single PDF that contains packing slips for all given order IDs.
      * Each order renders on its own page using the same layout as renderPackingSlipPdf().
@@ -481,9 +459,9 @@ public class PrintService {
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
-// REFACTORED: Single-page writer used by both single & bulk methods
-// ─────────────────────────────────────────────────────────────────────────────
-    private void writePackingSlipPage(
+    // REFACTORED: Single-page writer used by both single & bulk methods
+    // ─────────────────────────────────────────────────────────────────────────────
+    void writePackingSlipPage(
             Document doc, PdfWriter writer,
             Order order, List<OrderItem> items,
             String brandName, String fromAddress
@@ -545,6 +523,7 @@ public class PrintService {
 
         topCt.addElement(brandHeader(brandName, /*uppercase*/ true, logoUrl(), logoMaxH()));
 
+
         PdfPTable hdr = new PdfPTable(new float[]{2.2f, 2f, 2.2f, 2.2f});
         hdr.setWidthPercentage(100);
         hdr.getDefaultCell().setBorder(Rectangle.NO_BORDER);
@@ -581,24 +560,11 @@ public class PrintService {
         int cols = (n > 24) ? 3 : (n > 12 ? 2 : 1);
         log.debug("[PRINT][PACKING_SLIP_PAGE] items={}, cols={}", n, cols);
 
-        // Dynamic font sizes per column count
-        float mainSize;
-        float varSize;
-        if (cols <= 1) {
-            mainSize = 11f;
-            varSize  = 10f;
-        } else if (cols == 2) {
-            mainSize = 10f;
-            varSize  = 9f;
-        } else {
-            mainSize = 9f;
-            varSize  = 8f;
-        }
-        Font fItem = new Font(Font.HELVETICA, mainSize, Font.NORMAL);
-        Font fVar  = new Font(Font.HELVETICA, varSize, Font.ITALIC);
-
         float colGap = 12f;
         float colWidth = (right - left - (colGap * (cols - 1))) / cols;
+
+        Font fItem = new Font(Font.HELVETICA, 11, Font.NORMAL);
+        Font fVar  = new Font(Font.HELVETICA, 10, Font.ITALIC);
 
         int perCol = (int) Math.ceil(n / (double) cols);
         for (int ci = 0; ci < cols; ci++) {
@@ -616,28 +582,21 @@ public class PrintService {
                 OrderItem it = items.get(i);
 
                 // Create a small table for the item: [Image] [Text]
-                PdfPTable itemTbl = new PdfPTable(new float[]{0.9f, 5.1f});
+                PdfPTable itemTbl = new PdfPTable(new float[]{0.6f, 5.4f}); // Slightly wider image column
                 itemTbl.setWidthPercentage(100);
                 itemTbl.getDefaultCell().setBorder(Rectangle.NO_BORDER);
                 itemTbl.getDefaultCell().setVerticalAlignment(Element.ALIGN_TOP);
-                itemTbl.setSplitLate(false);
-                itemTbl.setSplitRows(true);
 
                 // 1. Image Cell
                 PdfPCell imgCell = new PdfPCell();
                 imgCell.setBorder(Rectangle.NO_BORDER);
-                imgCell.setPaddingTop(0f);
-                imgCell.setPaddingBottom(2f);
-                imgCell.setPaddingLeft(0f);
-                imgCell.setPaddingRight(6f);
-                imgCell.setHorizontalAlignment(Element.ALIGN_CENTER);
-                imgCell.setVerticalAlignment(Element.ALIGN_TOP);
+                imgCell.setPadding(0f);
+                imgCell.setPaddingBottom(1f);
+                imgCell.setPaddingRight(2f);
 
                 try {
                     if (it.getProductId() != null) {
-                        ProductImage pImg = productImageRepository
-                                .findFirstByProduct_IdAndActiveTrueOrderBySortOrderAscIdAsc(it.getProductId())
-                                .orElse(null);
+                        ProductImage pImg = productImageRepository.findFirstByProduct_IdAndActiveTrueOrderBySortOrderAscIdAsc(it.getProductId()).orElse(null);
                         if (pImg != null) {
                             String imgUrl = pImg.getUrl();
                             if (imgUrl == null || imgUrl.isBlank()) {
@@ -650,7 +609,7 @@ public class PrintService {
                                     // Use helper to download with User-Agent to avoid 400/403 from some CDNs
                                     byte[] imgBytes = downloadImageBytes(imgUrl);
                                     Image img = Image.getInstance(imgBytes);
-                                    img.scaleToFit(56f, 56f);
+                                    img.scaleToFit(56f, 56f); // Larger thumbnail
                                     imgCell.addElement(img);
                                 } catch (Exception e) {
                                     log.error("[PRINT][PACKING_SLIP] Failed to load image from URL: {}", imgUrl, e);
@@ -670,20 +629,15 @@ public class PrintService {
                 // 2. Text Cell
                 PdfPCell textCell = new PdfPCell();
                 textCell.setBorder(Rectangle.NO_BORDER);
-                textCell.setPaddingTop(0f);
-                textCell.setPaddingBottom(0f);
-                textCell.setPaddingLeft(1.5f);
-                textCell.setPaddingRight(0f);
-
+                textCell.setPadding(0f);
+                
                 Paragraph li = new Paragraph("[ ]  " + nvl(it.getQuantity()) + " × " + safe(it.getProductName()), fItem);
-                li.setLeading(0f, 1.15f);
                 li.setSpacingAfter(2f);
                 textCell.addElement(li);
 
                 if (it.getOptionsText() != null && !it.getOptionsText().isBlank()) {
                     Paragraph vi = new Paragraph("Variants: " + it.getOptionsText(), fVar);
-                    vi.setLeading(0f, 1.1f);
-                    vi.setIndentationLeft(0f);
+                    vi.setIndentationLeft(0f); // Reset indentation as it's inside a cell
                     vi.setSpacingAfter(3f);
                     textCell.addElement(vi);
                 }
@@ -691,8 +645,8 @@ public class PrintService {
                 itemTbl.setKeepTogether(true);
 
                 col.addElement(itemTbl);
-                Paragraph spacer = new Paragraph(" ");
-                spacer.setSpacingAfter(4f);
+                // Add a little spacing between items
+                Paragraph spacer = new Paragraph("", new Font(Font.HELVETICA, 2, Font.NORMAL));
                 col.addElement(spacer);
             }
             col.go();
@@ -721,7 +675,7 @@ public class PrintService {
         float colGapBtm  = 18f;
         float colWidthB  = (innerRight - innerLeft - colGapBtm) / 2f;
 
-        float bottomBlockTop = bottom + bottomZoneHeight; // keep in sync with bottomZoneHeight
+        float bottomBlockTop = bottom + 175f; // keep in sync with bottomZoneHeight
 
         // TO (left)
         ColumnText toCt = new ColumnText(writer.getDirectContent());
@@ -768,8 +722,8 @@ public class PrintService {
         }
         frCt.go();
         log.info("[PRINT][PACKING_SLIP_PAGE] Completed page render for orderId={}", order.getId());
-    }
 
+    }
 
 
 
