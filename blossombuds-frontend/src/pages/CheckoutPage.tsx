@@ -39,7 +39,12 @@ type Address = AddrModel & {};
 
 type DeliveryPartnerLite = { id: number; name: string; code?: string; active?: boolean };
 
-function showOrderSuccessPopup(orderId?: number | string) {
+type CheckoutPopupOpts = {
+  title: string;
+  message: string;
+};
+
+function showCheckoutPopup({ title, message }: CheckoutPopupOpts) {
   const host = document.createElement("div");
   host.setAttribute("data-ck-toast", "1");
   Object.assign(host.style, {
@@ -82,8 +87,8 @@ function showOrderSuccessPopup(orderId?: number | string) {
     background: "#F05D8B", // accent
   } as CSSStyleDeclaration);
 
-  const title = document.createElement("div");
-  Object.assign(title.style, {
+  const titleEl = document.createElement("div");
+  Object.assign(titleEl.style, {
     display: "flex",
     alignItems: "center",
     gap: "10px",
@@ -92,17 +97,22 @@ function showOrderSuccessPopup(orderId?: number | string) {
     letterSpacing: ".2px",
     color: "#4A4F41", // primary
   } as CSSStyleDeclaration);
-  title.innerHTML = `
+  titleEl.innerHTML = `
     <span style="width:10px;height:10px;border-radius:999px;background:#F6C320;box-shadow:0 0 0 6px rgba(246,195,32,.20);display:inline-block"></span>
-    <span>Payment successful 🎉</span>
+    <span>${title}</span>
   `;
 
   const msg = document.createElement("div");
   Object.assign(msg.style, { fontSize: "13px", opacity: ".9" } as CSSStyleDeclaration);
-  msg.textContent = orderId ? `Your order is confirmed. Order ID: #${orderId}` : "Your order is confirmed. We’ve emailed your receipt.";
+  msg.textContent = message;
 
   const actions = document.createElement("div");
-  Object.assign(actions.style, { marginTop: "10px", display: "flex", gap: "8px", justifyContent: "flex-end" } as CSSStyleDeclaration);
+  Object.assign(actions.style, {
+    marginTop: "10px",
+    display: "flex",
+    gap: "8px",
+    justifyContent: "flex-end",
+  } as CSSStyleDeclaration);
 
   const close = document.createElement("button");
   close.textContent = "Close";
@@ -134,7 +144,7 @@ function showOrderSuccessPopup(orderId?: number | string) {
   actions.appendChild(close);
   actions.appendChild(primary);
   card.appendChild(bar);
-  card.appendChild(title);
+  card.appendChild(titleEl);
   card.appendChild(msg);
   card.appendChild(actions);
 
@@ -149,15 +159,47 @@ function showOrderSuccessPopup(orderId?: number | string) {
   const remove = () => {
     card.style.opacity = "0";
     card.style.transform = "translateY(8px) scale(.98)";
-    setTimeout(() => { try { document.body.removeChild(host); } catch {} }, 180);
+    setTimeout(() => {
+      try {
+        document.body.removeChild(host);
+      } catch {}
+    }, 180);
   };
 
   const t = setTimeout(remove, 3000);
-  const finish = () => { clearTimeout(t); remove(); };
+  const finish = () => {
+    clearTimeout(t);
+    remove();
+  };
   close.addEventListener("click", finish, { once: true });
   primary.addEventListener("click", finish, { once: true });
-  host.addEventListener("click", (e) => { if (e.target === host) finish(); }, { once: true });
+  host.addEventListener(
+    "click",
+    (e) => {
+      if (e.target === host) finish();
+    },
+    { once: true }
+  );
 }
+
+function showOrderSuccessPopup(orderId?: number | string) {
+  const msg = orderId
+    ? `Your order is confirmed. Order ID: #${orderId}`
+    : "Your order is confirmed. Please check your email.";
+  showCheckoutPopup({
+    title: "Payment successful 🎉",
+    message: msg,
+  });
+}
+
+function showInternationalWhatsAppPopup() {
+  showCheckoutPopup({
+    title: "WhatsApp opened 💬",
+    message:
+      "We’ve opened WhatsApp with your order details. Please review and send the message to our team so we can confirm shipping and payment.",
+  });
+}
+
 
 /* ---------- Styles ---------- */
 const css = `
@@ -358,6 +400,7 @@ export default function CheckoutPage() {
 
   // Addresses
   const [addrList, setAddrList] = useState<Address[]>([]);
+  const [addrLoading, setAddrLoading] = useState(false);
   const [selectedAddrId, setSelectedAddrId] = useState<number | null>(null);
 
   // Partners + coupon (domestic only)
@@ -464,18 +507,29 @@ export default function CheckoutPage() {
       } catch { /* ignore */ }
 
       // user addresses
-      if (user?.id) {
-        try {
-          const a = await listAddresses(Number(user.id));
-          if (!alive) return;
-          setAddrList(a || []);
-          const def = (a || []).find(x => x.isDefault) || (a || [])[0] || null;
-          setSelectedAddrId(def?.id ?? null);
-        } catch (e: any) {
-          if (!alive) return;
-          setErr(e?.response?.data?.message || e?.message || "Could not load addresses.");
-        }
-      }
+            // user addresses
+            if (user?.id) {
+              setAddrLoading(true);
+              try {
+                const a = await listAddresses(Number(user.id));
+                if (!alive) return;
+                setAddrList(a || []);
+                const def = (a || []).find(x => x.isDefault) || (a || [])[0] || null;
+                setSelectedAddrId(def?.id ?? null);
+              } catch (e: any) {
+                if (!alive) return;
+                setErr(e?.response?.data?.message || e?.message || "Could not load addresses.");
+                setAddrList([]);
+                setSelectedAddrId(null);
+              } finally {
+                if (alive) setAddrLoading(false);
+              }
+            } else {
+              setAddrList([]);
+              setSelectedAddrId(null);
+              setAddrLoading(false);
+            }
+
     })();
     return () => { alive = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -582,15 +636,20 @@ export default function CheckoutPage() {
 
     setErr(null);
     setSubmitting(true);
-    try {
-      const msg = buildWhatsAppMessage(addr);
-      const href = waHrefFor(waNumber || "", msg);
-      window.open(href, "_blank");
-      clear();
-      nav("/");
-    } finally {
-      setSubmitting(false);
-    }
+        try {
+          const msg = buildWhatsAppMessage(addr);
+          const href = waHrefFor(waNumber || "", msg);
+
+          // 🔔 Show WhatsApp handoff popup
+          showInternationalWhatsAppPopup();
+
+          window.open(href, "_blank");
+          clear();
+          nav("/");
+        } finally {
+          setSubmitting(false);
+        }
+
   }
 
   /* ===================== SHIPPING PREVIEW (DOMESTIC) ===================== */
@@ -727,23 +786,31 @@ export default function CheckoutPage() {
             contact: selectedAddress.phone || "",
           },
           theme: { color: "#F05D8B" },
-          handler: async function (response: any) {
-            try {
-              await http.post("/api/payments/razorpay/verify", {
-                //orderId: createdOrderIdFromDraftOrIntent, // if you store it; if not, omit
-                razorpayOrderId: response.razorpay_order_id,
-                razorpayPaymentId: response.razorpay_payment_id,
-                razorpaySignature: response.razorpay_signature,
-                amount: grandTotal,
-                currency: "INR"
-              });
-              clear();
-              nav("/"); // success UX
-            } catch (e:any) {
-              console.error(e);
-              setErr(e?.response?.data?.message || "Payment captured but order could not be created.");
-            }
-          },
+                    handler: async function (response: any) {
+                      try {
+                        await http.post("/api/payments/razorpay/verify", {
+                          razorpayOrderId: response.razorpay_order_id,
+                          razorpayPaymentId: response.razorpay_payment_id,
+                          razorpaySignature: response.razorpay_signature,
+                          amount: grandTotal,
+                          currency: "INR",
+                        });
+
+                        // 🔔 Show success popup (persists across navigation)
+                        showOrderSuccessPopup(internalOrderId);
+
+                        clear();
+                        nav("/");
+                      } catch (e: any) {
+                        console.error(e);
+                        setErr(
+                          e?.response?.data?.message ||
+                            "Payment captured but order could not be created."
+                        );
+                        setSubmitting(false);
+                      }
+                    },
+
           modal: {
             ondismiss: () => {
               setSubmitting(false);
@@ -1040,56 +1107,71 @@ export default function CheckoutPage() {
                   <button className="link" onClick={()=>setInternational(true)}>Click here</button>
                 </div>
 
-                {selectedAddress ? (
-                  <div className="cur">
-                    <div className="meta">
-                      <div className="name">
-                        {selectedAddress.name}{" "}
-                        <span className="badge">{selectedAddress.isDefault ? "Default" : "Selected"}</span>
-                      </div>
-                      <div className="lines">
-                        {selectedAddress.phone ? `${selectedAddress.phone} • ` : ""}
-                        {selectedAddress.line1}{selectedAddress.line2 ? `, ${selectedAddress.line2}` : ""}
-                        <br/>
-                        {[
-                          districtNameById(selectedAddress.districtId) || "",
-                          stateNameById(selectedAddress.stateId) || "",
-                          selectedAddress.pincode || "",
-                          countryNameById(selectedAddress.countryId) || "",
-                        ].filter(Boolean).join(" • ")}
-                      </div>
-                    </div>
-                    <div className="btns">
-                      <button
-                        className="ghost"
-                        onClick={()=>{ setManageMode(false); setSelectSheetOpen(true); }}
-                        disabled={loginCta}
-                      >
-                        Change
-                      </button>
-                      <button
-                        className="ghost"
-                        onClick={()=>openNewAddress("domestic")}
-                        disabled={loginCta || !INDIA_ID}
-                      >
-                        New
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="cur">
-                    <div>{loginCta ? "Login to manage addresses." : "No Indian addresses."}</div>
-                    <div className="btns">
-                      <button
-                        className="ghost"
-                        onClick={()=>openNewAddress("domestic")}
-                        disabled={loginCta || !INDIA_ID}
-                      >
-                        Add address
-                      </button>
-                    </div>
-                  </div>
-                )}
+                                {addrLoading && !selectedAddress && !loginCta ? (
+                                  <div className="cur">
+                                    <div>Loading addresses…</div>
+                                  </div>
+                                ) : selectedAddress ? (
+                                  <div className="cur">
+                                    <div className="meta">
+                                      <div className="name">
+                                        {selectedAddress.name}{" "}
+                                        <span className="badge">
+                                          {selectedAddress.isDefault ? "Default" : "Selected"}
+                                        </span>
+                                      </div>
+                                      <div className="lines">
+                                        {selectedAddress.phone ? `${selectedAddress.phone} • ` : ""}
+                                        {selectedAddress.line1}
+                                        {selectedAddress.line2 ? `, ${selectedAddress.line2}` : ""}
+                                        <br />
+                                        {[
+                                          districtNameById(selectedAddress.districtId) || "",
+                                          stateNameById(selectedAddress.stateId) || "",
+                                          selectedAddress.pincode || "",
+                                          countryNameById(selectedAddress.countryId) || "",
+                                        ]
+                                          .filter(Boolean)
+                                          .join(" • ")}
+                                      </div>
+                                    </div>
+                                    <div className="btns">
+                                      <button
+                                        className="ghost"
+                                        onClick={() => {
+                                          setManageMode(false);
+                                          setSelectSheetOpen(true);
+                                        }}
+                                        disabled={loginCta}
+                                      >
+                                        Change
+                                      </button>
+                                      <button
+                                        className="ghost"
+                                        onClick={() => openNewAddress("domestic")}
+                                        disabled={loginCta || !INDIA_ID}
+                                      >
+                                        New
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="cur">
+                                    <div>
+                                      {loginCta ? "Login to manage addresses." : "No Indian addresses."}
+                                    </div>
+                                    <div className="btns">
+                                      <button
+                                        className="ghost"
+                                        onClick={() => openNewAddress("domestic")}
+                                        disabled={loginCta || !INDIA_ID}
+                                      >
+                                        Add address
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+
 
                 <hr className="sep"/>
 
@@ -1144,36 +1226,71 @@ export default function CheckoutPage() {
                   <button className="link" onClick={()=>setInternational(false)}>Back to domestic checkout</button>
                 </div>
 
-                {selectedAddress ? (
-                  <div className="cur">
-                    <div className="meta">
-                      <div className="name">
-                        {selectedAddress.name}{" "}
-                        <span className="badge">{selectedAddress.isDefault ? "Default" : "Selected"}</span>
-                      </div>
-                      <div className="lines">
-                        {selectedAddress.phone ? `${selectedAddress.phone} • ` : ""}
-                        {selectedAddress.line1}{selectedAddress.line2 ? `, ${selectedAddress.line2}` : ""}
-                        <br/>
-                        {[
-                          selectedAddress.pincode || "",
-                          countryNameById(selectedAddress.countryId) || "",
-                        ].filter(Boolean).join(" • ")}
-                      </div>
-                    </div>
-                    <div className="btns">
-                      <button className="ghost" onClick={()=>{ setManageMode(false); setSelectSheetOpen(true); }} disabled={loginCta}>Change</button>
-                      <button className="ghost" onClick={()=>openNewAddress("intl")} disabled={loginCta}>New</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="cur">
-                    <div>{loginCta ? "Login to manage addresses." : "No international addresses."}</div>
-                    <div className="btns">
-                      <button className="ghost" onClick={()=>openNewAddress("intl")} disabled={loginCta}>Add address</button>
-                    </div>
-                  </div>
-                )}
+                                {addrLoading && !selectedAddress && !loginCta ? (
+                                  <div className="cur">
+                                    <div>Loading addresses…</div>
+                                  </div>
+                                ) : selectedAddress ? (
+                                  <div className="cur">
+                                    <div className="meta">
+                                      <div className="name">
+                                        {selectedAddress.name}{" "}
+                                        <span className="badge">
+                                          {selectedAddress.isDefault ? "Default" : "Selected"}
+                                        </span>
+                                      </div>
+                                      <div className="lines">
+                                        {selectedAddress.phone ? `${selectedAddress.phone} • ` : ""}
+                                        {selectedAddress.line1}
+                                        {selectedAddress.line2 ? `, ${selectedAddress.line2}` : ""}
+                                        <br />
+                                        {[
+                                          selectedAddress.pincode || "",
+                                          countryNameById(selectedAddress.countryId) || "",
+                                        ]
+                                          .filter(Boolean)
+                                          .join(" • ")}
+                                      </div>
+                                    </div>
+                                    <div className="btns">
+                                      <button
+                                        className="ghost"
+                                        onClick={() => {
+                                          setManageMode(false);
+                                          setSelectSheetOpen(true);
+                                        }}
+                                        disabled={loginCta}
+                                      >
+                                        Change
+                                      </button>
+                                      <button
+                                        className="ghost"
+                                        onClick={() => openNewAddress("intl")}
+                                        disabled={loginCta}
+                                      >
+                                        New
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="cur">
+                                    <div>
+                                      {loginCta
+                                        ? "Login to manage addresses."
+                                        : "No international addresses."}
+                                    </div>
+                                    <div className="btns">
+                                      <button
+                                        className="ghost"
+                                        onClick={() => openNewAddress("intl")}
+                                        disabled={loginCta}
+                                      >
+                                        Add address
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+
 
                 <p className="small" style={{marginTop:4}}>
                   We’re currently processing international orders via WhatsApp. Please click the

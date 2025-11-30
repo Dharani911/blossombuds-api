@@ -144,7 +144,11 @@ function endOfMonth(date = new Date()) {
   return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
 }
 
-function printBlob(blob: Blob, fail: (msg?: string) => void) {
+function printBlob(
+  blob: Blob,
+  fail: (msg?: string) => void,
+  onDone?: () => void   // 🔹 NEW (optional) callback
+) {
   const url = URL.createObjectURL(blob);
   const iframe = document.createElement("iframe");
   iframe.style.position = "fixed";
@@ -154,25 +158,47 @@ function printBlob(blob: Blob, fail: (msg?: string) => void) {
   iframe.style.height = "0";
   iframe.style.border = "0";
   iframe.src = url;
+
   const cleanup = () => {
     setTimeout(() => {
-      try { URL.revokeObjectURL(url); iframe.parentNode?.removeChild(iframe); } catch { }
+      try {
+        URL.revokeObjectURL(url);
+        iframe.parentNode?.removeChild(iframe);
+      } catch { }
     }, 1500);
   };
+
   iframe.onload = () => {
     try {
       setTimeout(() => {
-        try { iframe.contentWindow?.focus(); iframe.contentWindow?.print(); cleanup(); }
-        catch { const w = window.open(url, "_blank"); if (!w) fail("Popup blocked. Allow popups to print."); cleanup(); }
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+
+          // ✅ printing dialog/tab should be triggered now
+          if (onDone) onDone();
+
+          cleanup();
+        } catch {
+          const w = window.open(url, "_blank");
+          if (!w) fail("Popup blocked. Allow popups to print.");
+
+          if (onDone) onDone();
+          cleanup();
+        }
       }, 250);
     } catch {
       const w = window.open(url, "_blank");
       if (!w) fail("Popup blocked. Allow popups to print.");
+
+      if (onDone) onDone();
       cleanup();
     }
   };
+
   document.body.appendChild(iframe);
 }
+
 
 function openPdfBlob(blob: Blob, filename = "packing-slips.pdf") {
   // Fallback if print fails or user wants to download
@@ -199,6 +225,7 @@ export default function OrdersPage() {
   const [size, setSize] = useState<number>(20);
   const [sort, setSort] = useState<string>("id");
   const [dir, setDir] = useState<"ASC" | "DESC">("DESC");
+const [printingBulk, setPrintingBulk] = useState(false); // 🔹 NEW
 
 
   // NEW: status filter state
@@ -310,15 +337,26 @@ export default function OrdersPage() {
         setToast({ kind: "bad", msg: "No orders to print." });
         return;
       }
+
+      setPrintingBulk(true); // 🔹 show loading
       setToast({ kind: "ok", msg: `Generating ${ids.length} packing slip(s)…` });
 
       const pdfBlob = await fetchPackingSlipsBulk(ids);
-      printBlob(pdfBlob, (msg) => setToast({ kind: "bad", msg: msg || "Print failed" }));
+
+      const fail = (msg?: string) => {
+        setToast({ kind: "bad", msg: msg || "Print failed" });
+        setPrintingBulk(false);          // 🔹 stop loading on failure
+      };
+
+      // 🔹 stop loading when print window / dialog is triggered
+      printBlob(pdfBlob, fail, () => setPrintingBulk(false));
     } catch (e: any) {
       const msg = e?.response?.data?.message || "Failed to generate packing slips";
       setToast({ kind: "bad", msg });
+      setPrintingBulk(false);            // 🔹 fail-safe
     }
   }
+
 
 
 
@@ -523,10 +561,11 @@ export default function OrdersPage() {
                 <button
                   className="btn sm"
                   onClick={printPackingForCurrentResults}
-                  disabled={loading || orders.length === 0}
+                  disabled={loading || orders.length === 0 || printingBulk}
                 >
-                  Packing slips
+                  {printingBulk ? "Preparing…" : "Packing slips"}
                 </button>
+
               </div>
             </div>
 
@@ -689,6 +728,7 @@ function OrderDrawer({
   const [items, setItems] = useState<OrderItem[] | null>(null);
   const [payments, setPayments] = useState<Payment[] | null>(null);
   const [events, setEvents] = useState<OrderEvent[] | null>(null);
+const [printBusy, setPrintBusy] = useState<"invoice" | "packing" | null>(null); // 🔹 NEW
 
   const [updBusy, setUpdBusy] = useState(false);
   const [selStatus, setSelStatus] = useState<OrderStatus>((order?.status as OrderStatus) || "ORDERED");
@@ -889,13 +929,27 @@ function OrderDrawer({
   // print: fetch blob → iframe → print/open
   async function openPrint(kind: "invoice" | "packing") {
     if (!order) return;
-    const fail = (msg?: string) =>
+
+    const fail = (msg?: string) => {
       setToast({ kind: "bad", msg: msg || "Could not open printer dialog." });
+      setPrintBusy(null);  // 🔹 stop loading on failure
+    };
+
     try {
-      const blob = kind === "invoice" ? await fetchInvoicePdf(order.id) : await fetchPackingSlipPdf(order.id);
-      printBlob(blob, fail);
-    } catch (e: any) { fail(e?.message); }
+      setPrintBusy(kind);  // 🔹 mark which one is busy
+
+      const blob =
+        kind === "invoice"
+          ? await fetchInvoicePdf(order.id)
+          : await fetchPackingSlipPdf(order.id);
+
+      // 🔹 stop loading when print dialog / new tab is triggered
+      printBlob(blob, fail, () => setPrintBusy(null));
+    } catch (e: any) {
+      fail(e?.message);
+    }
   }
+
 
   const shipAddress = useMemo(() => {
     if (!order) return "";
@@ -928,9 +982,25 @@ function OrderDrawer({
                 </div>
                 <div className="hdr-right">
                   <div className="print-group">
-                    <button type="button" className="ghost sm" onClick={() => openPrint("invoice")}>Invoice PDF</button>
-                    <button type="button" className="ghost sm" onClick={() => openPrint("packing")}>Packing Slip</button>
+                    <button
+                      type="button"
+                      className="ghost sm"
+                      onClick={() => openPrint("invoice")}
+                      disabled={printBusy !== null}
+                    >
+                      {printBusy === "invoice" ? "Opening…" : "Invoice PDF"}
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost sm"
+                      onClick={() => openPrint("packing")}
+                      disabled={printBusy !== null}
+                    >
+                      {printBusy === "packing" ? "Opening…" : "Packing Slip"}
+                    </button>
                   </div>
+
+
                   <button className="ghost" onClick={onClose} aria-label="Close">Close</button>
                 </div>
               </header>

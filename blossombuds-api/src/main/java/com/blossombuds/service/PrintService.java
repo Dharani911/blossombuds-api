@@ -256,7 +256,9 @@ public class PrintService {
                     // 1. Image Cell
                     PdfPCell imgCell = new PdfPCell();
                     imgCell.setBorder(Rectangle.NO_BORDER);
-                    imgCell.setPaddingRight(4f);
+                    imgCell.setPadding(0f);
+                    imgCell.setPaddingBottom(1f);
+                    imgCell.setPaddingRight(2f);
 
                     try {
                         if (it.getProductId() != null) {
@@ -288,7 +290,7 @@ public class PrintService {
                     // 2. Text Cell
                     PdfPCell textCell = new PdfPCell();
                     textCell.setBorder(Rectangle.NO_BORDER);
-                    textCell.setPaddingLeft(2f);
+                    textCell.setPadding(0f);
                     
                     Paragraph li = new Paragraph("[ ]  " + nvl(it.getQuantity()) + " × " + safe(it.getProductName()), fItem);
                     li.setSpacingAfter(2f);
@@ -577,6 +579,7 @@ public class PrintService {
                 PdfPCell imgCell = new PdfPCell();
                 imgCell.setBorder(Rectangle.NO_BORDER);
                 imgCell.setPadding(0f);
+                imgCell.setPaddingBottom(1f);
                 imgCell.setPaddingRight(2f);
 
                 try {
@@ -614,7 +617,7 @@ public class PrintService {
                 // 2. Text Cell
                 PdfPCell textCell = new PdfPCell();
                 textCell.setBorder(Rectangle.NO_BORDER);
-                textCell.setPaddingLeft(0f);
+                textCell.setPadding(0f);
                 
                 Paragraph li = new Paragraph("[ ]  " + nvl(it.getQuantity()) + " × " + safe(it.getProductName()), fItem);
                 li.setSpacingAfter(2f);
