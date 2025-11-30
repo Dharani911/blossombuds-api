@@ -248,7 +248,7 @@ public class PrintService {
                     OrderItem it = items.get(i);
 
                     // Create a small table for the item: [Image] [Text]
-                    PdfPTable itemTbl = new PdfPTable(new float[]{1.2f, 4f}); // Slightly wider image column
+                    PdfPTable itemTbl = new PdfPTable(new float[]{0.6f, 5.4f}); // Slightly wider image column
                     itemTbl.setWidthPercentage(100);
                     itemTbl.getDefaultCell().setBorder(Rectangle.NO_BORDER);
                     itemTbl.getDefaultCell().setVerticalAlignment(Element.ALIGN_TOP);

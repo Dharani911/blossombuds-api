@@ -262,7 +262,26 @@ const css = `
 .sum-inner{ position:sticky; top:16px; padding:12px; display:grid; gap:10px; }
 .row-sum{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .total{ font-size:20px; font-weight:900; }
-.items{ display:grid; gap:10px; }
+.items{
+  display:grid;
+  gap:10px;
+  max-height:220px;        /* show ~3–4 items before scroll */
+  overflow:auto;
+  padding-right:4px;       /* little space for scrollbar */
+}
+
+/* optional, nicer scrollbar; safe to skip if you want */
+.items::-webkit-scrollbar{
+  width:6px;
+}
+.items::-webkit-scrollbar-track{
+  background:transparent;
+}
+.items::-webkit-scrollbar-thumb{
+  background:rgba(0,0,0,.16);
+  border-radius:999px;
+}
+
 .item{ display:grid; grid-template-columns: 1fr auto; gap:8px; padding:8px; border:1px dashed var(--ink); border-radius:12px; }
 .item .name{ font-weight:800; }
 .item .muted{ font-size:12px; opacity:.75; }
@@ -363,6 +382,29 @@ svg.icon { width: 24px; height: 24px; }
                                                                        font-size: 13px;
                                                                        gap: 6px;
                                                                      } }
+  .alert{
+    margin:10px 0;
+    padding:10px 12px;
+    border-radius:12px;
+    background:#fff3f5;
+    color:#b0003a;
+    border:1px solid rgba(240,93,139,.25);
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:8px;
+    font-size:13px;
+  }
+  .alert-close{
+    border:none;
+    background:transparent;
+    color:inherit;
+    font-size:18px;
+    line-height:1;
+    cursor:pointer;
+    padding:0 2px;
+  }
+
 `;
 
 // INR
@@ -427,6 +469,11 @@ export default function CheckoutPage() {
   // 🔎 Profile info for WhatsApp message
   const [custName, setCustName] = useState<string>("");
   const [custEmail, setCustEmail] = useState<string>("");
+useEffect(() => {
+  if (!err) return;
+  const t = setTimeout(() => setErr(null), 6000);
+  return () => clearTimeout(t);
+}, [err]);
 
   useEffect(() => {
     let alive = true;
@@ -1093,7 +1140,20 @@ export default function CheckoutPage() {
         </span>
       </header>
 
-      {err && <div className="alert">{err}</div>}
+      {err && (
+        <div className="alert" role="alert">
+          <span>{err}</span>
+          <button
+            type="button"
+            className="alert-close"
+            onClick={() => setErr(null)}
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
 
       <div className="grid">
         {/* LEFT: Shipping flow */}
