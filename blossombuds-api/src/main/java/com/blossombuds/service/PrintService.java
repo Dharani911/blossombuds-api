@@ -159,240 +159,8 @@ public class PrintService {
                 (customerPhone.isBlank() ? "" : "Phone: " + customerPhone)
         );
 
-        byte[] pdf= buildPdfWithWriter((doc, writer) -> {
-            // Page geometry
-            Rectangle page = doc.getPageSize();
-            float left   = doc.left();
-            float right  = doc.right();
-            float top    = doc.top();
-            float bottom = doc.bottom();
-
-            // Reserve a compact zone at the bottom for addresses (TO/FROM)
-            float bottomZoneHeight = 175f; // compact address zone height
-            float lineGap          = 10f;  // small gap between line and addresses
-            float yCut             = bottom + bottomZoneHeight + lineGap; // line sits just above addresses
-
-            // Draw the cut/fold line exactly above the addresses
-            writer.setPageEvent(new CutFoldLineEvent(yCut));
-
-            // Top guard so content never kisses the line
-            float guardTop = 12f;
-
-            // ───────────────── TOP FRAME 1: Header + Meta + Notes + "ITEMS" header ─────────────────
-            ColumnText topCt = new ColumnText(writer.getDirectContent());
-            topCt.setSimpleColumn(left, yCut + guardTop, right, top);
-
-            // Brand
-            topCt.addElement(brandHeader(brandName, /*uppercase*/ true, logoUrl(), logoMaxH()));
-
-
-            // Meta row
-            PdfPTable hdr = new PdfPTable(new float[]{2.2f, 2f, 2.2f, 2.2f});
-            hdr.setWidthPercentage(100);
-            hdr.getDefaultCell().setBorder(Rectangle.NO_BORDER);
-            hdr.addCell(noBorder(td("Order #: " + (orderCode.isBlank() ? order.getId() : orderCode))));
-            hdr.addCell(noBorder(td("Date: " + fmtDate(order.getCreatedAt()))));
-            hdr.addCell(noBorder(td("Customer: " + (customerName.isBlank() ? "—" : customerName))));
-            hdr.addCell(noBorder(td("Phone: " + (customerPhone.isBlank() ? "—" : customerPhone))));
-            topCt.addElement(hdr);
-
-            if (!notes.isBlank()) {
-                Paragraph p = new Paragraph("Order Notes: \"" + notes + "\"",
-                        new Font(Font.HELVETICA, 10, Font.NORMAL));
-                p.setSpacingBefore(8f);   // ↑ a bit more breathing room
-                p.setSpacingAfter(8f);    // ↓ so it won’t touch the ITEMS header
-                topCt.addElement(p);
-            }
-
-            Paragraph itemsHdr = new Paragraph("ITEMS", new Font(Font.HELVETICA, 11, Font.BOLD));
-            itemsHdr.setSpacingBefore(6f);
-            itemsHdr.setSpacingAfter(6f); // space after ensures separation from first item
-            topCt.addElement(itemsHdr);
-
-            // Lay out the above and capture the remaining top Y line
-            topCt.go();
-            float itemsTopY = topCt.getYLine();
-            if (itemsTopY <= 0 || Float.isNaN(itemsTopY)) {
-                itemsTopY = top - 90f; // conservative fallback
-            }
-            itemsTopY -= 6f; // tiny padding just below the "ITEMS" header
-
-            // Reserve a band for totals just above the cut line
-            float totalsBandHeight = 64f;
-            float itemsBottomY     = yCut + totalsBandHeight + 6f; // items must stay above this
-
-            // ───────────────── TOP FRAME 2: Multi-column items (bounded) ─────────────────
-            int n = items.size();
-            int cols = (n > 24) ? 3 : (n > 12 ? 2 : 1); // auto-expand columns
-            float colGap = 12f;
-            float colWidth = (right - left - (colGap * (cols - 1))) / cols;
-
-            Font fItem = new Font(Font.HELVETICA, 11, Font.NORMAL);
-            Font fVar  = new Font(Font.HELVETICA, 10, Font.ITALIC);
-
-            int perCol = (int) Math.ceil(n / (double) cols);
-            for (int ci = 0; ci < cols; ci++) {
-                int start = ci * perCol;
-                if (start >= n) break;
-                int end = Math.min(n, start + perCol);
-
-                float x1 = left + ci * (colWidth + colGap);
-                float x2 = x1 + colWidth;
-
-                ColumnText col = new ColumnText(writer.getDirectContent());
-                // Use dynamic top (itemsTopY) and keep well above totals band
-                col.setSimpleColumn(x1, itemsBottomY, x2, itemsTopY);
-
-
-                for (int i = start; i < end; i++) {
-                    OrderItem it = items.get(i);
-
-                    // Create a small table for the item: [Image] [Text]
-                    PdfPTable itemTbl = new PdfPTable(new float[]{0.6f, 5.4f}); // Slightly wider image column
-                    itemTbl.setWidthPercentage(100);
-                    itemTbl.getDefaultCell().setBorder(Rectangle.NO_BORDER);
-                    itemTbl.getDefaultCell().setVerticalAlignment(Element.ALIGN_TOP);
-
-                    // 1. Image Cell
-                    PdfPCell imgCell = new PdfPCell();
-                    imgCell.setBorder(Rectangle.NO_BORDER);
-                    imgCell.setPadding(0f);
-                    imgCell.setPaddingBottom(1f);
-                    imgCell.setPaddingRight(2f);
-
-                    try {
-                        if (it.getProductId() != null) {
-                            ProductImage pImg = productImageRepository.findFirstByProduct_IdAndActiveTrueOrderBySortOrderAscIdAsc(it.getProductId()).orElse(null);
-                            if (pImg != null) {
-                                String imgUrl = pImg.getUrl();
-                                if (imgUrl == null || imgUrl.isBlank()) {
-                                    imgUrl = pImg.getWatermarkVariantUrl();
-                                }
-
-                                if (imgUrl != null && !imgUrl.isBlank()) {
-                                    log.info("[PRINT][PACKING_SLIP] Loading image for item {} from: {}", it.getProductName(), imgUrl);
-                                    try {
-                                        byte[] imgBytes = downloadImageBytes(imgUrl);
-                                        Image img = Image.getInstance(imgBytes);
-                                        img.scaleToFit(56f, 56f); // Larger thumbnail
-                                        imgCell.addElement(img);
-                                    } catch (Exception e) {
-                                        log.error("[PRINT][PACKING_SLIP] Failed to load image from URL: {}", imgUrl, e);
-                                    }
-                                }
-                            }
-                        }
-                    } catch (Exception e) {
-                        log.error("[PRINT][PACKING_SLIP] Error fetching image for productId={}", it.getProductId(), e);
-                    }
-                    itemTbl.addCell(imgCell);
-
-                    // 2. Text Cell
-                    PdfPCell textCell = new PdfPCell();
-                    textCell.setBorder(Rectangle.NO_BORDER);
-                    textCell.setPadding(0f);
-                    
-                    // Adjust font size for long product names to avoid column overflow
-                    String productName = safe(it.getProductName());
-                    Font itemFont = fItem;
-                    if (productName.length() > 30) {
-                        itemFont = new Font(fItem.getBaseFont(), 9, Font.NORMAL);
-                    }
-                        Paragraph li = new Paragraph("[ ]  " + nvl(it.getQuantity()) + " × " + productName, itemFont);
-                    li.setSpacingAfter(0f);
-                    textCell.addElement(li);
-
-                    // Variants text may also be long; shrink if needed
-                    if (it.getOptionsText() != null && !it.getOptionsText().isBlank()) {
-                        String opts = it.getOptionsText();
-                        Font varFont = fVar;
-                        if (opts.length() > 40) {
-                            varFont = new Font(fVar.getBaseFont(), 8, Font.ITALIC);
-                        }
-                        Paragraph vi = new Paragraph("Variants: " + opts, varFont);
-                        vi.setIndentationLeft(0f); // Reset indentation as it's inside a cell
-                        vi.setSpacingAfter(1f);
-                        textCell.addElement(vi);
-                    }
-                    itemTbl.addCell(textCell);
-                    itemTbl.setKeepTogether(true);
-
-                    // Add the table to the column
-                    col.addElement(itemTbl);
-                    col.addElement(new Paragraph(" ")); // Small spacer between items
-                }
-                col.go();
-            }
-
-            // ───────────────── TOP FRAME 3: Totals band right above the line ─────────────────
-            ColumnText totalsCt = new ColumnText(writer.getDirectContent());
-            totalsCt.setSimpleColumn(left, yCut + 6f, right, yCut + totalsBandHeight);
-            Paragraph totalsHdr = new Paragraph("TOTALS (INR)", new Font(Font.HELVETICA, 11, Font.BOLD));
-            totalsHdr.setSpacingAfter(3f);
-            Paragraph totalsP = new Paragraph(
-                    "Items: " + inr(itemsSubtotal) + "  +  " +
-                            "Shipping: " + inr(shipping) + "  -  " +
-                            "Discount: " + inr(discount) + "  =  " +
-                            "Total: " + inr(grand),
-                    new Font(Font.HELVETICA, 10, Font.BOLD)
-            );
-            totalsCt.addElement(totalsHdr);
-            totalsCt.addElement(totalsP);
-            totalsCt.go();
-
-            // ───────────────── BOTTOM FRAME: Addresses (wider L/R margins) ─────────────────
-            float extraMargin = 56f;
-            float innerLeft  = left  + extraMargin;
-            float innerRight = right - extraMargin;
-            float colGapBtm  = 18f;
-            float colWidthB  = (innerRight - innerLeft - colGapBtm) / 2f;
-
-            float bottomBlockTop = bottom + bottomZoneHeight; // absolute cap for bottom content
-
-            // TO (left) — slightly higher
-            ColumnText toCt = new ColumnText(writer.getDirectContent());
-            toCt.setSimpleColumn(
-                    innerLeft,
-                    bottom,
-                    innerLeft + colWidthB,
-                    bottomBlockTop - 2f // never cross into the line gap
-            );
-            Paragraph toH = new Paragraph("TO:", new Font(Font.HELVETICA, 11, Font.BOLD));
-            toH.setSpacingAfter(4f);
-            toCt.addElement(toH);
-            for (String ln : toBlock.split("\\r?\\n")) {
-                if (!ln.isBlank()) {
-                    Paragraph l = new Paragraph(ln, new Font(Font.HELVETICA, 10, Font.NORMAL));
-                    toCt.addElement(l);
-                }
-            }
-            if (!courier.isBlank()) {
-                Paragraph c = new Paragraph("COURIER: " + courier, new Font(Font.HELVETICA, 10, Font.BOLD));
-                c.setSpacingBefore(6f);
-                toCt.addElement(c);
-            }
-            toCt.go();
-
-            // FROM (right) — a bit lower/staggered vs TO
-            ColumnText frCt = new ColumnText(writer.getDirectContent());
-            frCt.setSimpleColumn(
-                    innerLeft + colWidthB + colGapBtm,
-                    bottom,
-                    innerRight,
-                    bottomBlockTop - 18f // visually lower than TO but still capped
-            );
-            Paragraph fromH = new Paragraph("FROM:", new Font(Font.HELVETICA, 11, Font.BOLD));
-            fromH.setAlignment(Paragraph.ALIGN_RIGHT);
-            fromH.setSpacingAfter(4f);
-            frCt.addElement(fromH);
-            for (String ln : fromAddress.split("\\r?\\n")) {
-                if (!ln.isBlank()) {
-                    Paragraph l = new Paragraph(ln, new Font(Font.HELVETICA, 10, Font.NORMAL));
-                    l.setAlignment(Paragraph.ALIGN_RIGHT);
-                    frCt.addElement(l);
-                }
-            }
-            frCt.go();
+        byte[] pdf = buildPdfWithWriter((doc, writer) -> {
+            writePackingSlipPage(doc, writer, order, items, brandName, fromAddress);
         });
         log.info("[PRINT][PACKING_SLIP] Packing slip PDF generated for orderId={}, size={} bytes", orderId, pdf.length);
         return pdf;
@@ -505,7 +273,7 @@ public class PrintService {
         float top    = doc.top();
         float bottom = doc.bottom();
 
-        // Bottom address zone + cut line (same numbers as your single renderer)
+        // Bottom address zone + cut line
         float bottomZoneHeight = 175f;
         float lineGap          = 10f;
         float yCut             = bottom + bottomZoneHeight + lineGap;
@@ -521,8 +289,8 @@ public class PrintService {
         ColumnText topCt = new ColumnText(writer.getDirectContent());
         topCt.setSimpleColumn(left, yCut + guardTop, right, top);
 
+        // Brand header (logo + text)
         topCt.addElement(brandHeader(brandName, /*uppercase*/ true, logoUrl(), logoMaxH()));
-
 
         PdfPTable hdr = new PdfPTable(new float[]{2.2f, 2f, 2.2f, 2.2f});
         hdr.setWidthPercentage(100);
@@ -560,7 +328,7 @@ public class PrintService {
         int cols = (n > 24) ? 3 : (n > 12 ? 2 : 1);
         log.debug("[PRINT][PACKING_SLIP_PAGE] items={}, cols={}", n, cols);
 
-        float colGap = 12f;
+        float colGap   = 12f;
         float colWidth = (right - left - (colGap * (cols - 1))) / cols;
 
         Font fItem = new Font(Font.HELVETICA, 11, Font.NORMAL);
@@ -582,7 +350,7 @@ public class PrintService {
                 OrderItem it = items.get(i);
 
                 // Create a small table for the item: [Image] [Text]
-                PdfPTable itemTbl = new PdfPTable(new float[]{0.6f, 5.4f}); // Slightly wider image column
+                PdfPTable itemTbl = new PdfPTable(new float[]{0.7f, 5.3f}); // 0.7 vs 5.3 to give text a bit more room
                 itemTbl.setWidthPercentage(100);
                 itemTbl.getDefaultCell().setBorder(Rectangle.NO_BORDER);
                 itemTbl.getDefaultCell().setVerticalAlignment(Element.ALIGN_TOP);
@@ -590,13 +358,16 @@ public class PrintService {
                 // 1. Image Cell
                 PdfPCell imgCell = new PdfPCell();
                 imgCell.setBorder(Rectangle.NO_BORDER);
-                imgCell.setPadding(0f);
+                imgCell.setPaddingTop(1f);
                 imgCell.setPaddingBottom(1f);
-                imgCell.setPaddingRight(2f);
+                imgCell.setPaddingRight(3f);
+                imgCell.setVerticalAlignment(Element.ALIGN_TOP);
 
                 try {
                     if (it.getProductId() != null) {
-                        ProductImage pImg = productImageRepository.findFirstByProduct_IdAndActiveTrueOrderBySortOrderAscIdAsc(it.getProductId()).orElse(null);
+                        ProductImage pImg = productImageRepository
+                                .findFirstByProduct_IdAndActiveTrueOrderBySortOrderAscIdAsc(it.getProductId())
+                                .orElse(null);
                         if (pImg != null) {
                             String imgUrl = pImg.getUrl();
                             if (imgUrl == null || imgUrl.isBlank()) {
@@ -604,18 +375,20 @@ public class PrintService {
                             }
 
                             if (imgUrl != null && !imgUrl.isBlank()) {
-                                log.info("[PRINT][PACKING_SLIP] Loading image for item {} from: {}", it.getProductName(), imgUrl);
+                                log.info("[PRINT][PACKING_SLIP] Loading image for item {} from: {}",
+                                        it.getProductName(), imgUrl);
                                 try {
-                                    // Use helper to download with User-Agent to avoid 400/403 from some CDNs
                                     byte[] imgBytes = downloadImageBytes(imgUrl);
                                     Image img = Image.getInstance(imgBytes);
-                                    img.scaleToFit(56f, 56f); // Larger thumbnail
+                                    img.scaleToFit(56f, 56f);        // fixed thumbnail box
+                                    img.setAlignment(Image.ALIGN_TOP); // stay at top of the cell
                                     imgCell.addElement(img);
                                 } catch (Exception e) {
                                     log.error("[PRINT][PACKING_SLIP] Failed to load image from URL: {}", imgUrl, e);
                                 }
                             } else {
-                                log.warn("[PRINT][PACKING_SLIP] Found image record but no URL for product {}", it.getProductName());
+                                log.warn("[PRINT][PACKING_SLIP] Found image record but no URL for product {}",
+                                        it.getProductName());
                             }
                         } else {
                             log.info("[PRINT][PACKING_SLIP] No active image found for product {}", it.getProductName());
@@ -629,25 +402,40 @@ public class PrintService {
                 // 2. Text Cell
                 PdfPCell textCell = new PdfPCell();
                 textCell.setBorder(Rectangle.NO_BORDER);
-                textCell.setPadding(0f);
-                
-                Paragraph li = new Paragraph("[ ]  " + nvl(it.getQuantity()) + " × " + safe(it.getProductName()), fItem);
-                li.setSpacingAfter(2f);
+                textCell.setPaddingTop(1.5f);   // small top padding so text never touches the image
+                textCell.setPaddingLeft(1f);
+                textCell.setPaddingRight(0f);
+                textCell.setPaddingBottom(0f);
+
+                // Adjust font size for long product names to avoid overflow
+                String productName = safe(it.getProductName());
+                Font itemFont = fItem;
+                if (productName.length() > 30) {
+                    itemFont = new Font(fItem.getBaseFont(), 9, Font.NORMAL);
+                }
+                Paragraph li = new Paragraph("[ ]  " + nvl(it.getQuantity()) + " × " + productName, itemFont);
+                li.setSpacingAfter(0f);
                 textCell.addElement(li);
 
+                // Variants text may also be long; shrink if needed
                 if (it.getOptionsText() != null && !it.getOptionsText().isBlank()) {
-                    Paragraph vi = new Paragraph("Variants: " + it.getOptionsText(), fVar);
-                    vi.setIndentationLeft(0f); // Reset indentation as it's inside a cell
-                    vi.setSpacingAfter(3f);
+                    String opts = it.getOptionsText();
+                    Font varFont = fVar;
+                    if (opts.length() > 40) {
+                        varFont = new Font(fVar.getBaseFont(), 8, Font.ITALIC);
+                    }
+                    Paragraph vi = new Paragraph("Variants: " + opts, varFont);
+                    vi.setIndentationLeft(0f);
+                    vi.setSpacingAfter(1.5f);
                     textCell.addElement(vi);
                 }
+
                 itemTbl.addCell(textCell);
                 itemTbl.setKeepTogether(true);
 
                 col.addElement(itemTbl);
-                // Add a little spacing between items
-                Paragraph spacer = new Paragraph("", new Font(Font.HELVETICA, 2, Font.NORMAL));
-                col.addElement(spacer);
+                // small spacer between items to avoid visual crowding
+                col.addElement(new Paragraph(" ", new Font(Font.HELVETICA, 2, Font.NORMAL)));
             }
             col.go();
         }
@@ -669,13 +457,12 @@ public class PrintService {
         totalsCt.go();
 
         // ── BOTTOM FRAME: Addresses ──
-        float extraMargin = 56f;
-        float innerLeft  = left  + extraMargin;
-        float innerRight = right - extraMargin;
-        float colGapBtm  = 18f;
-        float colWidthB  = (innerRight - innerLeft - colGapBtm) / 2f;
-
-        float bottomBlockTop = bottom + 175f; // keep in sync with bottomZoneHeight
+        float extraMargin   = 56f;
+        float innerLeft     = left  + extraMargin;
+        float innerRight    = right - extraMargin;
+        float colGapBtm     = 18f;
+        float colWidthB     = (innerRight - innerLeft - colGapBtm) / 2f;
+        float bottomBlockTop = bottom + bottomZoneHeight;
 
         // TO (left)
         ColumnText toCt = new ColumnText(writer.getDirectContent());
@@ -721,9 +508,10 @@ public class PrintService {
             }
         }
         frCt.go();
-        log.info("[PRINT][PACKING_SLIP_PAGE] Completed page render for orderId={}", order.getId());
 
+        log.info("[PRINT][PACKING_SLIP_PAGE] Completed page render for orderId={}", order.getId());
     }
+
 
 
 
