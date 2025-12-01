@@ -88,16 +88,32 @@ public class AdminMetricsService {
     private OffsetDateTime startOfRange(String bucket) {
         ZoneId zone = ZoneId.systemDefault();
         ZonedDateTime now = ZonedDateTime.now(zone);
-        OffsetDateTime start= switch (bucket == null ? "month" : bucket.toLowerCase()) {
+
+        String key = (bucket == null ? "month" : bucket.trim().toLowerCase());
+
+        // 🔁 Normalize aliases from frontend
+        switch (key) {
+            case "today", "d", "24h" -> key = "day";
+            case "weekly", "7d"      -> key = "week";
+            case "monthly", "30d"    -> key = "month";
+            case "yearly", "12m"     -> key = "year";
+            default -> { /* keep as is: day, week, month, year */ }
+        }
+
+        OffsetDateTime start = switch (key) {
             case "day" -> now.truncatedTo(DAYS).toOffsetDateTime();
             case "week" -> now.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
                     .truncatedTo(DAYS).toOffsetDateTime();
-            case "year" -> now.withDayOfYear(1).truncatedTo(DAYS).toOffsetDateTime();
-            default /* month */ -> now.withDayOfMonth(1).truncatedTo(DAYS).toOffsetDateTime();
+            case "year" -> now.withDayOfYear(1)
+                    .truncatedTo(DAYS).toOffsetDateTime();
+            default /* month */ -> now.withDayOfMonth(1)
+                    .truncatedTo(DAYS).toOffsetDateTime();
         };
-        log.debug("🕒 startOfRange for '{}' = {}", bucket, start);
+
+        log.debug("🕒 startOfRange for '{}' (normalized='{}') = {}", bucket, key, start);
         return start;
     }
+
     public List<LabeledValue> topProducts(String range, int limit) {
         OffsetDateTime start = startOfRange(range);
         log.info("🏆 Fetching top {} products since {} (range={})", limit, start, range);

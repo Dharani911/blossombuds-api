@@ -223,6 +223,21 @@ const styles = `
   border-radius: 16px; padding: 16px 18px;
   text-shadow: 0 1px 0 rgba(0,0,0,.35);
 }
+
+
+/* 🔹 Desktop overlay: make glass lighter + less blur */
+@media (min-width: 561px) {
+  .overlay-only .panel{
+    background: radial-gradient(
+      120% 120% at 50% 0%,
+      rgba(0,0,0,.08),
+      rgba(0,0,0,.22)
+    );                         /* much more transparent */
+    border-color: rgba(255,255,255,.10);
+    backdrop-filter: blur(2px) saturate(120%);  /* less blur */
+    box-shadow: 0 14px 40px rgba(0,0,0,.18);    /* slightly softer shadow */
+  }
+}
 .panel h1{
   margin:0 0 6px; font-weight:900; letter-spacing:.2px;
   font-size: clamp(20px, 5vw, 34px);
