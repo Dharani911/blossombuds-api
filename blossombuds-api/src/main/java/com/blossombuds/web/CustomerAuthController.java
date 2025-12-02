@@ -61,6 +61,11 @@ public class CustomerAuthController {
     public void confirmPasswordReset(@Valid @RequestBody PasswordResetConfirm req) {
         passwordResetService.confirmReset(req.getToken(), req.getNewPassword());
     }
+    @PostMapping("/resend-verification")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void resendVerification(@Valid @RequestBody ResendVerificationRequest req) {
+        auth.resendVerificationEmail(req.getEmail());
+    }
 
     // ---------- DTOs ----------
 
@@ -77,4 +82,11 @@ public class CustomerAuthController {
         @NotBlank @Size(min = 8, message = "Password must be at least 8 characters")
         private String newPassword;
     }
+    @Data
+    public static class ResendVerificationRequest {
+        @NotBlank
+        @Email
+        private String email;
+    }
+
 }

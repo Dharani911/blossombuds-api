@@ -147,57 +147,38 @@ function endOfMonth(date = new Date()) {
 function printBlob(
   blob: Blob,
   fail: (msg?: string) => void,
-  onDone?: () => void   // 🔹 NEW (optional) callback
+  onDone?: () => void
 ) {
+  // Create a blob URL for the PDF
   const url = URL.createObjectURL(blob);
-  const iframe = document.createElement("iframe");
-  iframe.style.position = "fixed";
-  iframe.style.right = "0";
-  iframe.style.bottom = "0";
-  iframe.style.width = "0";
-  iframe.style.height = "0";
-  iframe.style.border = "0";
-  iframe.src = url;
 
-  const cleanup = () => {
-    setTimeout(() => {
-      try {
-        URL.revokeObjectURL(url);
-        iframe.parentNode?.removeChild(iframe);
-      } catch { }
-    }, 1500);
+  // Open in a new tab
+  const win = window.open(url, "_blank");
+
+  if (!win) {
+    // Popup blocked
+    fail("Popup blocked. Please allow popups to view/print the PDF.");
+    return;
+  }
+
+  try {
+    win.focus();
+    // Try to trigger print; if browser ignores it, user can print manually
+    win.print?.();
+  } catch {
+    // Even if print() throws, they still see the PDF in the new tab
+  }
+
+  if (onDone) onDone();
+
+  // Clean up when that new tab closes
+  const revoke = () => {
+    URL.revokeObjectURL(url);
+    win.removeEventListener("beforeunload", revoke);
   };
-
-  iframe.onload = () => {
-    try {
-      setTimeout(() => {
-        try {
-          iframe.contentWindow?.focus();
-          iframe.contentWindow?.print();
-
-          // ✅ printing dialog/tab should be triggered now
-          if (onDone) onDone();
-
-          cleanup();
-        } catch {
-          const w = window.open(url, "_blank");
-          if (!w) fail("Popup blocked. Allow popups to print.");
-
-          if (onDone) onDone();
-          cleanup();
-        }
-      }, 250);
-    } catch {
-      const w = window.open(url, "_blank");
-      if (!w) fail("Popup blocked. Allow popups to print.");
-
-      if (onDone) onDone();
-      cleanup();
-    }
-  };
-
-  document.body.appendChild(iframe);
+  win.addEventListener("beforeunload", revoke);
 }
+
 
 
 function openPdfBlob(blob: Blob, filename = "packing-slips.pdf") {

@@ -19,6 +19,10 @@ export default function LoginModal() {
   const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+    const [needsVerify, setNeedsVerify] = useState(false);
+    const [resendBusy, setResendBusy] = useState(false);
+    const [resendMsg, setResendMsg] = useState<string | null>(null);
+
 
   const [forgotOpen, setForgotOpen] = useState(false);
   const [fpEmail, setFpEmail] = useState("");
@@ -38,7 +42,15 @@ export default function LoginModal() {
       loginWithToken(token);
       nav("/profile", { replace: true });
     } catch (e: any) {
-      setErr(e?.response?.data?.message || "Login failed. Please check your credentials.");
+            const msg = e?.response?.data?.message || "Login failed. Please check your credentials.";
+            setErr(msg);
+
+            // 👇 detect backend “verify your email” message
+            if (typeof msg === "string" && msg.toLowerCase().includes("verify your email")) {
+              setNeedsVerify(true);
+            } else {
+              setNeedsVerify(false);
+            }
     } finally {
       setBusy(false);
     }
@@ -104,6 +116,31 @@ export default function LoginModal() {
       setFpBusy(false);
     }
   }
+    async function resendVerification() {
+      if (!/^\S+@\S+\.\S+$/.test(email)) {
+        setResendMsg("Enter a valid email above first.");
+        return;
+      }
+      setResendBusy(true);
+      setResendMsg(null);
+      try {
+        const res = await fetch(apiUrl("/api/customers/auth/resend-verification"), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({ email }),
+        });
+        if (!res.ok) throw new Error();
+        setResendMsg("Verification email sent. Please check your inbox.");
+      } catch {
+        setResendMsg("Could not resend verification email. Please try again.");
+      } finally {
+        setResendBusy(false);
+      }
+    }
+
 
   const modal = (
     <>
@@ -172,7 +209,30 @@ export default function LoginModal() {
                 </div>
               </label>
 
-              {err && <div className="error" role="alert">{err}</div>}
+                            {err && (
+                              <div className="error" role="alert">
+                                {err}
+                                {needsVerify && (
+                                  <div style={{ marginTop: 8 }}>
+                                    <button
+                                      type="button"
+                                      className="textlink"
+                                      onClick={resendVerification}
+                                      disabled={resendBusy}
+                                    >
+                                      {resendBusy ? "Sending verification email…" : "Resend verification email"}
+                                    </button>
+                                    {resendMsg && (
+                                      <div style={{ marginTop: 4, fontSize: 12 }}>
+                                        {resendMsg}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+
 
               <div className="links">
                 <p className="muted">

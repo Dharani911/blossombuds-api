@@ -156,9 +156,53 @@ public class CustomerAuthService {
             throw new IllegalArgumentException("Invalid email or password");
         }
         log.info("[CUSTOMER][LOGIN] Login successful for customerId={}", c.getId());
+        if (!Boolean.TRUE.equals(c.getEmailVerified())) {
+            log.warn("[CUSTOMER][LOGIN] Blocked login for unverified customerId={}", c.getId());
+            throw new IllegalArgumentException("Please verify your email before logging in.");
+        }
 
         return jwt.createToken("cust:" + c.getId(), Map.of("role", "CUSTOMER", "cid", c.getId()));
     }
+
+    @Transactional
+    public void resendVerificationEmail(String emailRaw) {
+        String email = normalizeEmail(emailRaw);
+        if (isBlank(email)) {
+            throw new IllegalArgumentException("Email is required");
+        }
+
+        Customer c = customers.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("No account found for this email"));
+
+        if (Boolean.TRUE.equals(c.getEmailVerified())) {
+            log.info("[CUSTOMER][VERIFY_EMAIL] Resend requested but already verified, email={}", email);
+            // you can also throw if you prefer:
+            // throw new IllegalArgumentException("Email already verified.");
+            return;
+        }
+
+        // deactivate old tokens
+        evtRepo.deactivateActiveTokensForCustomer(c.getId());
+
+        // new token
+        String token = randomToken();
+        EmailVerificationToken evt = new EmailVerificationToken();
+        evt.setCustomerId(c.getId());
+        evt.setToken(token);
+        evt.setExpiresAt(OffsetDateTime.now().plus(24, ChronoUnit.HOURS));
+        evt.setActive(true);
+        evtRepo.save(evt);
+
+        if (isBlank(frontendBase)) {
+            throw new IllegalStateException("Frontend base URL is not configured");
+        }
+        String base = frontendBase.endsWith("/") ? frontendBase.substring(0, frontendBase.length() - 1) : frontendBase;
+        String verifyUrl = base + "/verify-email?token=" + URLEncoder.encode(token, StandardCharsets.UTF_8);
+
+        emailService.sendVerificationEmail(c.getEmail(), verifyUrl);
+        log.info("[CUSTOMER][VERIFY_EMAIL] Verification email resent to {}", email);
+    }
+
 
     /** Generates a URL-safe random token (240 bits). */
     private static String randomToken() {
