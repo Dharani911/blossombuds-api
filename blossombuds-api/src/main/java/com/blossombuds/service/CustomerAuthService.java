@@ -44,7 +44,7 @@ public class CustomerAuthService {
 
     /** Registers a customer, sends verification email, and returns a CUSTOMER JWT. */
     @Transactional
-    public String register(RegisterRequest req) {
+    public void register(RegisterRequest req) {
         if (req == null) throw new IllegalArgumentException("RegisterRequest is required");
         String name = safeTrim(req.getName());
         String email = normalizeEmail(req.getEmail());
@@ -101,7 +101,9 @@ public class CustomerAuthService {
         log.info("[CUSTOMER][VERIFY_EMAIL] Verification email sent to: {}", email);
 
         // Return a CUSTOMER JWT so the UI can consider the user logged in (even before verify)
-        return jwt.createToken("cust:" + c.getId(), Map.of("role", "CUSTOMER", "cid", c.getId()));
+        //return jwt.createToken("cust:" + c.getId(), Map.of("role", "CUSTOMER", "cid", c.getId()));
+        log.info("[CUSTOMER][REGISTER] Registration completed, verification email sent to {}", email);
+
     }
 
     /** Marks the customer email as verified if token is valid and unconsumed. */

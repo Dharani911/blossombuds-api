@@ -2,13 +2,13 @@ import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { customerRegister } from "../../api/auth";
 import { useNavigate, useLocation, Link } from "react-router-dom";
-import { useAuth } from "../../app/AuthProvider";
+//import { useAuth } from "../../app/AuthProvider";
 import logo from "../../assets/BB_logo.svg";
 
 export default function RegisterModal() {
   const nav = useNavigate();
   const location = useLocation();
-  const { loginWithToken } = useAuth();
+  //const { loginWithToken } = useAuth();
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -62,20 +62,30 @@ export default function RegisterModal() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
-    setBusy(true); setErr(null);
+    setBusy(true);
+    setErr(null);
+
     try {
-      const { token } = await customerRegister({
-        name, email, password, phone
+      await customerRegister({
+        name,
+        email,
+        password,
+        phone,
       } as any);
-      loginWithToken(token);
-      localStorage.setItem("bb.verifyPending", "1");
-      nav("/", { replace: true });
+
+      // ✅ No auto-login, no token, no profile redirect
+      // Option A: send them straight to login modal
+      nav("/login", {
+        replace: true,
+        state: { from: "/", background: (location.state as any)?.background || location },
+      });
     } catch (e: any) {
       setErr(e?.response?.data?.message || "Registration failed. Try a different email.");
     } finally {
       setBusy(false);
     }
   };
+
 
   const close = () => nav("/", { replace: true });
 

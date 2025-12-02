@@ -1,6 +1,6 @@
 // src/components/profile/OrdersSection.tsx
 import React, { useMemo, useState, useEffect, useRef } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, Link } from "react-router-dom";
 import http from "../../api/http";
 import { useAuth } from "../../app/AuthProvider";
 import type { OrderLite } from "../../types/profile";
@@ -259,6 +259,9 @@ export default function OrdersSection({ orders }: { orders: OrderLite[] }) {
           <div className="empty-icon">🧺</div>
           <h3>No orders yet</h3>
           <p className="muted">Your purchases will appear here.</p>
+          <Link to="/categories" className="cta">
+                Start shopping
+          </Link>
         </div>
       ) : (
         <ul className="olist">
@@ -747,4 +750,26 @@ const styles = `
 .drawer svg[width="auto"], .drawer svg[height="auto"]{
   width:18px !important; height:18px !important;
 }
+.empty .cta{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  margin-top:10px;
+  padding:0 14px;
+  height:36px;
+  border-radius:999px;
+  border:none;
+  background: linear-gradient(135deg, var(--bb-accent), #ff7aa6);
+  color:#fff;
+  font-weight:900;
+  text-decoration:none;
+  cursor:pointer;
+  box-shadow: 0 8px 22px rgba(240,93,139,.30);
+  transition: transform .16s ease, box-shadow .16s ease;
+}
+.empty .cta:hover{
+  transform: translateY(-1px);
+  box-shadow: 0 12px 30px rgba(240,93,139,.40);
+}
+
 `;

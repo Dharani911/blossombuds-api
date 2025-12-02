@@ -28,9 +28,9 @@ public class CustomerAuthController {
     /** Register customer, send verification email, return a customer JWT. */
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    public CustomerTokenResponse register(@Valid @RequestBody RegisterRequest req) {
-        String token = auth.register(req);
-        return new CustomerTokenResponse(token);
+    public void register(@Valid @RequestBody RegisterRequest req) {
+        auth.register(req);
+
     }
 
     /** Verify email with token sent via email (public). */
