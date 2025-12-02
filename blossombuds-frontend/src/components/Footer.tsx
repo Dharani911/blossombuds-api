@@ -124,13 +124,17 @@ export default function Footer() {
 
       <div className="bbf-bottom">
         <div className="bbf-bottomWrap">
-          <div className="bbf-copy">© {year} Blossom Buds Floral Artistry</div>
+          <div className="bbf-copy">
+            © {year} Blossom Buds Floral Artistry
+            <span className="bbf-credit"> • Crafted &amp; built by Dharani Perumal Samy •</span>
+          </div>
           <div className="bbf-bottomLinks">
             <FooterLink to="/pages/privacy">Privacy</FooterLink>
             <FooterLink to="/pages/terms">Terms</FooterLink>
           </div>
         </div>
       </div>
+
     </footer>
   );
 }
