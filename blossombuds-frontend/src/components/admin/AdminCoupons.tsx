@@ -8,6 +8,8 @@ import {
   type Coupon,
   type DiscountType,
 } from "../../api/adminCoupons";
+import { formatIstDateTime } from "../../utils/dates";
+
 
 /** ─────────────────────────────────────────────────────────
  *  Design tokens
@@ -389,19 +391,27 @@ function toLocalInput(iso?: string | null) {
 
 function human(dt?: string | null) {
   if (!dt) return "—";
-  const d = new Date(dt);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString();
+  try {
+    return formatIstDateTime(dt);
+  } catch {
+    return "—";
+  }
 }
 
 function humanRange(from?: string | null, to?: string | null) {
-  const a = human(from);
-  const b = human(to);
-  if (a === "—" && b === "—") return "—";
-  if (a !== "—" && b !== "—") return `${a} → ${b}`;
-  if (a !== "—") return `from ${a}`;
+  const hasFrom = !!from;
+  const hasTo = !!to;
+
+  if (!hasFrom && !hasTo) return "—";
+
+  const a = hasFrom ? human(from) : "—";
+  const b = hasTo ? human(to) : "—";
+
+  if (hasFrom && hasTo) return `${a} → ${b}`;
+  if (hasFrom) return `from ${a}`;
   return `until ${b}`;
 }
+
 
 /* ---------- styles (namespaced) ---------- */
 const css = `

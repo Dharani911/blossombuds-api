@@ -16,6 +16,7 @@ import VerifyPage from "../pages/VerifyPage";
 import ShopCategoriesPage from "../pages/ShopCategoriesPage";
 import FeaturedPage from "../pages/FeaturedPage";
 import CheckoutPage from "../pages/CheckoutPage"
+import PaymentProcessingPage from "../pages/PaymentProcessingPage";
 import CustomerReviewsPage from "../pages/ReviewsPage";
 import CmsPage from "../pages/CmsPage";
 import PoliciesIndexPage from "../pages/PoliciesIndexPage";
@@ -57,6 +58,7 @@ export default function AppRoutes() {
           <Route path="/categories/:id" element={<ShopCategoriesPage />} />
           <Route path="/featured" element={<FeaturedPage />} />
           <Route path="/checkout" element={<CheckoutPage />} />
+          <Route path="/payment-processing" element={<PaymentProcessingPage />} />
           <Route path="/reviews" element={<CustomerReviewsPage />} />
           <Route path="/pages/:slug" element={<CmsPage />} />
           <Route path="/policies" element={<PoliciesIndexPage />} />

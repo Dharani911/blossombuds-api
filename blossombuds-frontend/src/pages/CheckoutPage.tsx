@@ -162,7 +162,7 @@ function showCheckoutPopup({ title, message }: CheckoutPopupOpts) {
     setTimeout(() => {
       try {
         document.body.removeChild(host);
-      } catch {}
+      } catch { }
     }, 180);
   };
 
@@ -469,11 +469,11 @@ export default function CheckoutPage() {
   // 🔎 Profile info for WhatsApp message
   const [custName, setCustName] = useState<string>("");
   const [custEmail, setCustEmail] = useState<string>("");
-useEffect(() => {
-  if (!err) return;
-  const t = setTimeout(() => setErr(null), 6000);
-  return () => clearTimeout(t);
-}, [err]);
+  useEffect(() => {
+    if (!err) return;
+    const t = setTimeout(() => setErr(null), 6000);
+    return () => clearTimeout(t);
+  }, [err]);
 
   useEffect(() => {
     let alive = true;
@@ -526,7 +526,7 @@ useEffect(() => {
         }
 
         if (resolvedIndiaId) setINDIA_ID(resolvedIndiaId);
-      } catch {/* ignore */}
+      } catch {/* ignore */ }
 
       // label lookups
       (async () => {
@@ -543,7 +543,7 @@ useEffect(() => {
           (allDists || []).forEach(d => { if (d?.id != null) dm[d.id] = d.name || String(d.id); });
           setStateMap(sm);
           setDistrictMap(dm);
-        } catch {/* ignore */}
+        } catch {/* ignore */ }
       })();
 
       // delivery partners (domestic)
@@ -554,32 +554,32 @@ useEffect(() => {
       } catch { /* ignore */ }
 
       // user addresses
-            // user addresses
-            if (user?.id) {
-              setAddrLoading(true);
-              try {
-                const a = await listAddresses(Number(user.id));
-                if (!alive) return;
-                setAddrList(a || []);
-                const def = (a || []).find(x => x.isDefault) || (a || [])[0] || null;
-                setSelectedAddrId(def?.id ?? null);
-              } catch (e: any) {
-                if (!alive) return;
-                setErr(e?.response?.data?.message || e?.message || "Could not load addresses.");
-                setAddrList([]);
-                setSelectedAddrId(null);
-              } finally {
-                if (alive) setAddrLoading(false);
-              }
-            } else {
-              setAddrList([]);
-              setSelectedAddrId(null);
-              setAddrLoading(false);
-            }
+      // user addresses
+      if (user?.id) {
+        setAddrLoading(true);
+        try {
+          const a = await listAddresses(Number(user.id));
+          if (!alive) return;
+          setAddrList(a || []);
+          const def = (a || []).find(x => x.isDefault) || (a || [])[0] || null;
+          setSelectedAddrId(def?.id ?? null);
+        } catch (e: any) {
+          if (!alive) return;
+          setErr(e?.response?.data?.message || e?.message || "Could not load addresses.");
+          setAddrList([]);
+          setSelectedAddrId(null);
+        } finally {
+          if (alive) setAddrLoading(false);
+        }
+      } else {
+        setAddrList([]);
+        setSelectedAddrId(null);
+        setAddrLoading(false);
+      }
 
     })();
     return () => { alive = false; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
 
@@ -683,19 +683,19 @@ useEffect(() => {
 
     setErr(null);
     setSubmitting(true);
-        try {
-          const msg = buildWhatsAppMessage(addr);
-          const href = waHrefFor(waNumber || "", msg);
+    try {
+      const msg = buildWhatsAppMessage(addr);
+      const href = waHrefFor(waNumber || "", msg);
 
-          // 🔔 Show WhatsApp handoff popup
-          showInternationalWhatsAppPopup();
+      // 🔔 Show WhatsApp handoff popup
+      showInternationalWhatsAppPopup();
 
-          window.open(href, "_blank");
-          clear();
-          nav("/");
-        } finally {
-          setSubmitting(false);
-        }
+      window.open(href, "_blank");
+      clear();
+      nav("/");
+    } finally {
+      setSubmitting(false);
+    }
 
   }
 
@@ -749,135 +749,122 @@ useEffect(() => {
   }, [international, subtotal, shippingFee, discountTotal]);
 
 
-    async function onPlaceDomestic() {
-      if (!user?.id) { setErr("Please login to continue."); return; }
+  async function onPlaceDomestic() {
+    if (!user?.id) { setErr("Please login to continue."); return; }
 
-      const selectedAddress = domesticAddresses.find(a => a.id === selectedAddrId) || null;
-      if (!selectedAddress) { setErr("Please add/select an Indian address."); return; }
-      if (!partnerId) { setErr("Please select a delivery partner."); return; }
-      if (shippingLoading) { setErr("Please wait while we calculate shipping."); return; }
+    const selectedAddress = domesticAddresses.find(a => a.id === selectedAddrId) || null;
+    if (!selectedAddress) { setErr("Please add/select an Indian address."); return; }
+    if (!partnerId) { setErr("Please select a delivery partner."); return; }
+    if (shippingLoading) { setErr("Please wait while we calculate shipping."); return; }
 
-      setErr(null);
-      setSubmitting(true);
+    setErr(null);
+    setSubmitting(true);
 
-      // 1) Build order items payload (server DTO)
-      const orderItems: OrderItemDto[] = items.map((it) => {
-        const parsedId = Number(String(it.id).split(":")[0]);
-        const pid = (it as any).productId ?? (Number.isFinite(parsedId) ? parsedId : undefined);
-        return {
-          productId: pid,
-          productName: it.name,
-          quantity: it.qty,
-          unitPrice: it.price,
-          lineTotal: (Number(it.price) * Number(it.qty)).toFixed(2),
-          optionsText: it.variant || undefined,
-        };
+    // 1) Build order items payload (server DTO)
+    const orderItems: OrderItemDto[] = items.map((it) => {
+      const parsedId = Number(String(it.id).split(":")[0]);
+      const pid = (it as any).productId ?? (Number.isFinite(parsedId) ? parsedId : undefined);
+      return {
+        productId: pid,
+        productName: it.name,
+        quantity: it.qty,
+        unitPrice: it.price,
+        lineTotal: (Number(it.price) * Number(it.qty)).toFixed(2),
+        optionsText: it.variant || undefined,
+      };
+    });
+
+    const partnerName = partners.find(p => p.id === partnerId)?.name;
+
+    // 2) Build order payload (use previewed shippingFee + computed grandTotal)
+    const order: OrderDto = {
+      customerId: Number(user?.id),
+      itemsSubtotal: subtotal,
+      shippingFee: shippingFee || 0,
+      discountTotal,
+      grandTotal,
+      currency: "INR",
+      deliveryPartnerId: typeof partnerId === "number" ? partnerId : undefined,
+      courierName: partnerName,
+      couponId: typeof couponId === "number" ? couponId : undefined,
+      couponCode: couponAmt > 0 ? coupon.trim() : undefined,
+      orderNotes: orderNotes.trim() ? orderNotes.trim() : undefined,
+
+      shipName: selectedAddress.name,
+      shipPhone: selectedAddress.phone || undefined,
+      shipLine1: selectedAddress.line1,
+      shipLine2: selectedAddress.line2 || undefined,
+      shipPincode: selectedAddress.pincode || undefined,
+      shipDistrictId: selectedAddress.districtId || undefined,
+      shipStateId: selectedAddress.stateId || undefined,
+      shipCountryId: selectedAddress.countryId || undefined,
+    };
+
+    try {
+      // 3) Ask backend to create/prepare checkout (it should create the Razorpay order)
+      const resp = await startCheckout(order, orderItems);
+      if (resp?.type !== "RZP_ORDER" || !resp.razorpayOrder) {
+        throw new Error("Server did not return a Razorpay order.");
+      }
+      const rzpOrder = resp.razorpayOrder; // { id, amount, currency, ... }
+      const internalOrderId = (resp as any).orderId || (rzpOrder.notes?.orderId ? Number(rzpOrder.notes.orderId) : undefined);
+
+      // 4) Ensure Razorpay script is loaded
+      const ok = await loadRazorpay();
+      if (!ok || !(window as any).Razorpay) {
+        throw new Error("Could not load Razorpay. Please retry.");
+      }
+
+      // 5) Fetch public key from backend (profile-aware)
+      const { keyId } = await getRzpConfig();
+      if (!keyId) throw new Error("Razorpay key not configured on server.");
+
+      // 6) Open Razorpay Checkout
+      const rzp = new (window as any).Razorpay({
+        key: keyId,
+        order_id: rzpOrder.id,
+        amount: rzpOrder.amount,                 // in paise
+        currency: rzpOrder.currency || "INR",
+        name: "Blossom Buds Floral Artistry",
+        description: "Order Payment",
+        prefill: {
+          name: custName || "",
+          email: custEmail || "",
+          contact: selectedAddress.phone || "",
+        },
+        theme: { color: "#F05D8B" },
+        handler: async function (response: any) {
+          // Navigate to processing page with payment details
+          const params = new URLSearchParams({
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+            amount: String(grandTotal),
+            currency: "INR",
+          });
+          nav(`/payment-processing?${params.toString()}`, { replace: true });
+        },
+
+        modal: {
+          ondismiss: () => {
+            setSubmitting(false);
+          },
+        },
       });
 
-      const partnerName = partners.find(p => p.id === partnerId)?.name;
-
-      // 2) Build order payload (use previewed shippingFee + computed grandTotal)
-      const order: OrderDto = {
-        customerId: Number(user?.id),
-        itemsSubtotal: subtotal,
-        shippingFee: shippingFee || 0,
-        discountTotal,
-        grandTotal,
-        currency: "INR",
-        deliveryPartnerId: typeof partnerId === "number" ? partnerId : undefined,
-          courierName: partnerName,
-          couponId: typeof couponId === "number" ? couponId : undefined,
-          couponCode: couponAmt > 0 ? coupon.trim() : undefined,
-          orderNotes: orderNotes.trim() ? orderNotes.trim() : undefined,
-
-        shipName: selectedAddress.name,
-        shipPhone: selectedAddress.phone || undefined,
-        shipLine1: selectedAddress.line1,
-        shipLine2: selectedAddress.line2 || undefined,
-        shipPincode: selectedAddress.pincode || undefined,
-        shipDistrictId: selectedAddress.districtId || undefined,
-        shipStateId: selectedAddress.stateId || undefined,
-        shipCountryId: selectedAddress.countryId || undefined,
-      };
-
-      try {
-        // 3) Ask backend to create/prepare checkout (it should create the Razorpay order)
-        const resp = await startCheckout(order, orderItems);
-        if (resp?.type !== "RZP_ORDER" || !resp.razorpayOrder) {
-          throw new Error("Server did not return a Razorpay order.");
-        }
-        const rzpOrder = resp.razorpayOrder; // { id, amount, currency, ... }
-        const internalOrderId = (resp as any).orderId || (rzpOrder.notes?.orderId ? Number(rzpOrder.notes.orderId) : undefined);
-
-        // 4) Ensure Razorpay script is loaded
-        const ok = await loadRazorpay();
-        if (!ok || !(window as any).Razorpay) {
-          throw new Error("Could not load Razorpay. Please retry.");
-        }
-
-        // 5) Fetch public key from backend (profile-aware)
-        const { keyId } = await getRzpConfig();
-        if (!keyId) throw new Error("Razorpay key not configured on server.");
-
-        // 6) Open Razorpay Checkout
-        const rzp = new (window as any).Razorpay({
-          key: keyId,
-          order_id: rzpOrder.id,
-          amount: rzpOrder.amount,                 // in paise
-          currency: rzpOrder.currency || "INR",
-          name: "Blossom Buds Floral Artistry",
-          description: "Order Payment",
-          prefill: {
-            name: custName || "",
-            email: custEmail || "",
-            contact: selectedAddress.phone || "",
-          },
-          theme: { color: "#F05D8B" },
-                    handler: async function (response: any) {
-                      try {
-                        await http.post("/api/payments/razorpay/verify", {
-                          razorpayOrderId: response.razorpay_order_id,
-                          razorpayPaymentId: response.razorpay_payment_id,
-                          razorpaySignature: response.razorpay_signature,
-                          amount: grandTotal,
-                          currency: "INR",
-                        });
-
-                        // 🔔 Show success popup (persists across navigation)
-                        showOrderSuccessPopup(internalOrderId);
-
-                        clear();
-                        nav("/");
-                      } catch (e: any) {
-                        console.error(e);
-                        setErr(
-                          e?.response?.data?.message ||
-                            "Payment captured but order could not be created."
-                        );
-                        setSubmitting(false);
-                      }
-                    },
-
-          modal: {
-            ondismiss: () => {
-              setSubmitting(false);
-            },
-          },
-        });
-
-        rzp.on("payment.failed", (err: any) => {
-          console.warn("Razorpay payment.failed:", err);
-          setErr(err?.error?.description || "Payment failed. Please try again.");
-          setSubmitting(false);
-        });
-
-        rzp.open();
-      } catch (e: any) {
-        const msg = e?.response?.data?.message || e?.message || "Checkout failed. Please try again.";
-        setErr(msg);
+      rzp.on("payment.failed", (err: any) => {
+        console.warn("Razorpay payment.failed:", err);
+        setErr(err?.error?.description || "Payment failed. Please try again.");
         setSubmitting(false);
-      }
+      });
+
+      rzp.open();
+    } catch (e: any) {
+      const msg = e?.response?.data?.message || e?.message || "Checkout failed. Please try again.";
+      setErr(msg);
+      setSubmitting(false);
     }
+  }
 
 
 
@@ -1162,85 +1149,85 @@ useEffect(() => {
           <div className="body">
             {!international ? (
               <div className="addr">
-                <div className="small" style={{textAlign:"right"}}>
+                <div className="small" style={{ textAlign: "right" }}>
                   International order?{" "}
-                  <button className="link" onClick={()=>setInternational(true)}>Click here</button>
+                  <button className="link" onClick={() => setInternational(true)}>Click here</button>
                 </div>
 
-                                {addrLoading && !selectedAddress && !loginCta ? (
-                                  <div className="cur">
-                                    <div>Loading addresses…</div>
-                                  </div>
-                                ) : selectedAddress ? (
-                                  <div className="cur">
-                                    <div className="meta">
-                                      <div className="name">
-                                        {selectedAddress.name}{" "}
-                                        <span className="badge">
-                                          {selectedAddress.isDefault ? "Default" : "Selected"}
-                                        </span>
-                                      </div>
-                                      <div className="lines">
-                                        {selectedAddress.phone ? `${selectedAddress.phone} • ` : ""}
-                                        {selectedAddress.line1}
-                                        {selectedAddress.line2 ? `, ${selectedAddress.line2}` : ""}
-                                        <br />
-                                        {[
-                                          districtNameById(selectedAddress.districtId) || "",
-                                          stateNameById(selectedAddress.stateId) || "",
-                                          selectedAddress.pincode || "",
-                                          countryNameById(selectedAddress.countryId) || "",
-                                        ]
-                                          .filter(Boolean)
-                                          .join(" • ")}
-                                      </div>
-                                    </div>
-                                    <div className="btns">
-                                      <button
-                                        className="ghost"
-                                        onClick={() => {
-                                          setManageMode(false);
-                                          setSelectSheetOpen(true);
-                                        }}
-                                        disabled={loginCta}
-                                      >
-                                        Change
-                                      </button>
-                                      <button
-                                        className="ghost"
-                                        onClick={() => openNewAddress("domestic")}
-                                        disabled={loginCta || !INDIA_ID}
-                                      >
-                                        New
-                                      </button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="cur">
-                                    <div>
-                                      {loginCta ? "Login to manage addresses." : "No Indian addresses."}
-                                    </div>
-                                    <div className="btns">
-                                      <button
-                                        className="ghost"
-                                        onClick={() => openNewAddress("domestic")}
-                                        disabled={loginCta || !INDIA_ID}
-                                      >
-                                        Add address
-                                      </button>
-                                    </div>
-                                  </div>
-                                )}
+                {addrLoading && !selectedAddress && !loginCta ? (
+                  <div className="cur">
+                    <div>Loading addresses…</div>
+                  </div>
+                ) : selectedAddress ? (
+                  <div className="cur">
+                    <div className="meta">
+                      <div className="name">
+                        {selectedAddress.name}{" "}
+                        <span className="badge">
+                          {selectedAddress.isDefault ? "Default" : "Selected"}
+                        </span>
+                      </div>
+                      <div className="lines">
+                        {selectedAddress.phone ? `${selectedAddress.phone} • ` : ""}
+                        {selectedAddress.line1}
+                        {selectedAddress.line2 ? `, ${selectedAddress.line2}` : ""}
+                        <br />
+                        {[
+                          districtNameById(selectedAddress.districtId) || "",
+                          stateNameById(selectedAddress.stateId) || "",
+                          selectedAddress.pincode || "",
+                          countryNameById(selectedAddress.countryId) || "",
+                        ]
+                          .filter(Boolean)
+                          .join(" • ")}
+                      </div>
+                    </div>
+                    <div className="btns">
+                      <button
+                        className="ghost"
+                        onClick={() => {
+                          setManageMode(false);
+                          setSelectSheetOpen(true);
+                        }}
+                        disabled={loginCta}
+                      >
+                        Change
+                      </button>
+                      <button
+                        className="ghost"
+                        onClick={() => openNewAddress("domestic")}
+                        disabled={loginCta || !INDIA_ID}
+                      >
+                        New
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="cur">
+                    <div>
+                      {loginCta ? "Login to manage addresses." : "No Indian addresses."}
+                    </div>
+                    <div className="btns">
+                      <button
+                        className="ghost"
+                        onClick={() => openNewAddress("domestic")}
+                        disabled={loginCta || !INDIA_ID}
+                      >
+                        Add address
+                      </button>
+                    </div>
+                  </div>
+                )}
 
 
-                <hr className="sep"/>
+                <hr className="sep" />
 
                 <div className="form">
                   <div>
                     <div className="lbl">Delivery partner</div>
-                    <select className="sel" value={partnerId} onChange={e=>setPartnerId(e.target.value ? Number(e.target.value) : "")}>
+                    <select className="sel" value={partnerId} onChange={e => setPartnerId(e.target.value ? Number(e.target.value) : "")}>
                       <option value="">Select a partner…</option>
-                      {partners.map(p=>(
+                      {partners.map(p => (
                         <option key={p.id} value={p.id}>
                           {p.name}{p.code ? ` (${p.code})` : ""}
                         </option>
@@ -1255,12 +1242,12 @@ useEffect(() => {
                       <input
                         className="inp"
                         value={coupon}
-                        onChange={e=>setCoupon(e.target.value)}
+                        onChange={e => setCoupon(e.target.value)}
                         placeholder="e.g. BLOOM10"
                         onKeyDown={(e) => { if (e.key === "Enter") tryCoupon(); }}
                       />
                     </div>
-                    <div style={{alignSelf:"end", display:"flex", gap:8, justifyContent:"flex-end"}}>
+                    <div style={{ alignSelf: "end", display: "flex", gap: 8, justifyContent: "flex-end" }}>
                       <button className="ghost" onClick={tryCoupon} disabled={loginCta || !coupon.trim()}>
                         Apply
                       </button>
@@ -1275,84 +1262,84 @@ useEffect(() => {
                     </div>
                   </div>
 
-                  {couponErr && <div className="small" style={{color:"#b0003a"}}>{couponErr}</div>}
-                  {couponAmt>0 && <div className="small" style={{color:"#136f2a"}}>Coupon applied: −{inr(couponAmt)}</div>}
+                  {couponErr && <div className="small" style={{ color: "#b0003a" }}>{couponErr}</div>}
+                  {couponAmt > 0 && <div className="small" style={{ color: "#136f2a" }}>Coupon applied: −{inr(couponAmt)}</div>}
                 </div>
               </div>
             ) : (
               <div className="addr">
-                <div className="small" style={{textAlign:"right"}}>
+                <div className="small" style={{ textAlign: "right" }}>
                   Not international?{" "}
-                  <button className="link" onClick={()=>setInternational(false)}>Back to domestic checkout</button>
+                  <button className="link" onClick={() => setInternational(false)}>Back to domestic checkout</button>
                 </div>
 
-                                {addrLoading && !selectedAddress && !loginCta ? (
-                                  <div className="cur">
-                                    <div>Loading addresses…</div>
-                                  </div>
-                                ) : selectedAddress ? (
-                                  <div className="cur">
-                                    <div className="meta">
-                                      <div className="name">
-                                        {selectedAddress.name}{" "}
-                                        <span className="badge">
-                                          {selectedAddress.isDefault ? "Default" : "Selected"}
-                                        </span>
-                                      </div>
-                                      <div className="lines">
-                                        {selectedAddress.phone ? `${selectedAddress.phone} • ` : ""}
-                                        {selectedAddress.line1}
-                                        {selectedAddress.line2 ? `, ${selectedAddress.line2}` : ""}
-                                        <br />
-                                        {[
-                                          selectedAddress.pincode || "",
-                                          countryNameById(selectedAddress.countryId) || "",
-                                        ]
-                                          .filter(Boolean)
-                                          .join(" • ")}
-                                      </div>
-                                    </div>
-                                    <div className="btns">
-                                      <button
-                                        className="ghost"
-                                        onClick={() => {
-                                          setManageMode(false);
-                                          setSelectSheetOpen(true);
-                                        }}
-                                        disabled={loginCta}
-                                      >
-                                        Change
-                                      </button>
-                                      <button
-                                        className="ghost"
-                                        onClick={() => openNewAddress("intl")}
-                                        disabled={loginCta}
-                                      >
-                                        New
-                                      </button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="cur">
-                                    <div>
-                                      {loginCta
-                                        ? "Login to manage addresses."
-                                        : "No international addresses."}
-                                    </div>
-                                    <div className="btns">
-                                      <button
-                                        className="ghost"
-                                        onClick={() => openNewAddress("intl")}
-                                        disabled={loginCta}
-                                      >
-                                        Add address
-                                      </button>
-                                    </div>
-                                  </div>
-                                )}
+                {addrLoading && !selectedAddress && !loginCta ? (
+                  <div className="cur">
+                    <div>Loading addresses…</div>
+                  </div>
+                ) : selectedAddress ? (
+                  <div className="cur">
+                    <div className="meta">
+                      <div className="name">
+                        {selectedAddress.name}{" "}
+                        <span className="badge">
+                          {selectedAddress.isDefault ? "Default" : "Selected"}
+                        </span>
+                      </div>
+                      <div className="lines">
+                        {selectedAddress.phone ? `${selectedAddress.phone} • ` : ""}
+                        {selectedAddress.line1}
+                        {selectedAddress.line2 ? `, ${selectedAddress.line2}` : ""}
+                        <br />
+                        {[
+                          selectedAddress.pincode || "",
+                          countryNameById(selectedAddress.countryId) || "",
+                        ]
+                          .filter(Boolean)
+                          .join(" • ")}
+                      </div>
+                    </div>
+                    <div className="btns">
+                      <button
+                        className="ghost"
+                        onClick={() => {
+                          setManageMode(false);
+                          setSelectSheetOpen(true);
+                        }}
+                        disabled={loginCta}
+                      >
+                        Change
+                      </button>
+                      <button
+                        className="ghost"
+                        onClick={() => openNewAddress("intl")}
+                        disabled={loginCta}
+                      >
+                        New
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="cur">
+                    <div>
+                      {loginCta
+                        ? "Login to manage addresses."
+                        : "No international addresses."}
+                    </div>
+                    <div className="btns">
+                      <button
+                        className="ghost"
+                        onClick={() => openNewAddress("intl")}
+                        disabled={loginCta}
+                      >
+                        Add address
+                      </button>
+                    </div>
+                  </div>
+                )}
 
 
-                <p className="small" style={{marginTop:4}}>
+                <p className="small" style={{ marginTop: 4 }}>
                   We’re currently processing international orders via WhatsApp. Please click the
                   <strong> “Send on WhatsApp”</strong> button on the right to share your cart and address with our team.
                   Sit back and relax — we’ll get back to you with shipping options and payment details. 💐
@@ -1367,7 +1354,7 @@ useEffect(() => {
           <div className="section-head">Order Summary</div>
           <div className="sum-inner">
             <div className="items">
-              {items.map(it=>(
+              {items.map(it => (
                 <div key={it.id} className="item">
                   <div>
                     <div className="name">{it.name}</div>
@@ -1398,7 +1385,7 @@ useEffect(() => {
               </div>
             )}
 
-            {!international && couponAmt>0 && (
+            {!international && couponAmt > 0 && (
               <div className="row-sum">
                 <span>Discount</span>
                 <span>−{inr(couponAmt)}</span>
@@ -1411,24 +1398,24 @@ useEffect(() => {
             </div>
 
             {shippingErr && !international && (
-              <div className="small" style={{ color:"#b0003a" }}>{shippingErr}</div>
+              <div className="small" style={{ color: "#b0003a" }}>{shippingErr}</div>
             )}
             {/* Order notes (optional) */}
             {!international && (
-            <div>
-              <div className="lbl">Order notes (optional)</div>
-              <textarea
-                className="ta"
-                rows={3}
-                maxLength={500}
-                placeholder="Do you want to let anything us know?"
-                value={orderNotes}
-                onChange={(e) => setOrderNotes(e.target.value)}
-              />
-              <div className="small" style={{ textAlign: "right" }}>
-                {500 - (orderNotes?.length || 0)} characters left
-              </div>
-            </div>)}
+              <div>
+                <div className="lbl">Order notes (optional)</div>
+                <textarea
+                  className="ta"
+                  rows={3}
+                  maxLength={500}
+                  placeholder="Do you want to let anything us know?"
+                  value={orderNotes}
+                  onChange={(e) => setOrderNotes(e.target.value)}
+                />
+                <div className="small" style={{ textAlign: "right" }}>
+                  {500 - (orderNotes?.length || 0)} characters left
+                </div>
+              </div>)}
 
             <div className="actions">
               {international ? (
@@ -1441,11 +1428,11 @@ useEffect(() => {
                   {submitting ? "Processing…" : "Proceed to Pay"}
                 </button>
               )}
-              <button className="btn secondary" onClick={()=>nav("/categories")}>Continue shopping</button>
+              <button className="btn secondary" onClick={() => nav("/categories")}>Continue shopping</button>
             </div>
 
             {!user?.id && !international && (
-              <div className="small" style={{opacity:.7, marginTop:6}}>
+              <div className="small" style={{ opacity: .7, marginTop: 6 }}>
                 You’re not logged in. <Link to="/login" state={{ background: location, from: location }}>Login</Link> to pay online.
               </div>
             )}
@@ -1459,11 +1446,11 @@ useEffect(() => {
           <div className="sheet">
             <div className="sheet-hd">
               <strong>{manageMode ? "Manage addresses" : "Select an address"}</strong>
-              <div style={{display:"flex", gap:8}}>
-                <button className="ghost" onClick={()=>setManageMode(m => !m)}>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="ghost" onClick={() => setManageMode(m => !m)}>
                   {manageMode ? "Back to select" : "Manage"}
                 </button>
-                <button className="ghost" onClick={()=>setSelectSheetOpen(false)}>✕</button>
+                <button className="ghost" onClick={() => setSelectSheetOpen(false)}>✕</button>
               </div>
             </div>
 
@@ -1490,7 +1477,7 @@ useEffect(() => {
                             <div className="addr-meta">
                               {a.phone ? `${a.phone} • ` : ""}
                               {a.line1}{a.line2 ? `, ${a.line2}` : ""}
-                              <br/>
+                              <br />
                               {[
                                 distNm,
                                 stateNm,
@@ -1502,7 +1489,7 @@ useEffect(() => {
                           <div>
                             <button
                               className="ghost"
-                              onClick={(e)=>{ e.stopPropagation(); setEditAddr(a); setModalContext(international ? "intl" : "domestic"); setNewAddrOpen(true); }}
+                              onClick={(e) => { e.stopPropagation(); setEditAddr(a); setModalContext(international ? "intl" : "domestic"); setNewAddrOpen(true); }}
                               aria-label="Edit"
                             >
                               Edit
@@ -1512,8 +1499,8 @@ useEffect(() => {
                       );
                     })}
                   </div>
-                  <div style={{display:"flex", justifyContent:"flex-end", gap:8, marginTop:10}}>
-                    <button className="ghost" onClick={()=>openNewAddress(international ? "intl" : "domestic")}>+ New address</button>
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10 }}>
+                    <button className="ghost" onClick={() => openNewAddress(international ? "intl" : "domestic")}>+ New address</button>
                   </div>
                 </>
               ) : (
@@ -1524,7 +1511,7 @@ useEffect(() => {
                       const distNm = districtNameById(a.districtId);
                       const ctryNm = countryNameById(a.countryId);
                       return (
-                        <div key={a.id} className="addr-card" style={{cursor:"default"}}>
+                        <div key={a.id} className="addr-card" style={{ cursor: "default" }}>
                           <div className="addr-icon">{a.name?.[0]?.toUpperCase() || "A"}</div>
                           <div className="addr-info">
                             <div className="nm">
@@ -1533,7 +1520,7 @@ useEffect(() => {
                             <div className="addr-meta">
                               {a.phone ? `${a.phone} • ` : ""}
                               {a.line1}{a.line2 ? `, ${a.line2}` : ""}
-                              <br/>
+                              <br />
                               {[
                                 distNm,
                                 stateNm,
@@ -1542,28 +1529,28 @@ useEffect(() => {
                               ].filter(Boolean).join(" • ")}
                             </div>
                           </div>
-                          <div style={{display:"flex", gap:8}}>
+                          <div style={{ display: "flex", gap: 8 }}>
                             {!a.isDefault && (
-                              <button className="ghost" onClick={()=> onSetDefaultAddress(a.id)}>
+                              <button className="ghost" onClick={() => onSetDefaultAddress(a.id)}>
                                 Set default
                               </button>
                             )}
-                            <button className="ghost" onClick={()=>{ setEditAddr(a); setModalContext(international ? "intl" : "domestic"); setNewAddrOpen(true); }}>Edit</button>
-                            <button className="ghost" onClick={()=>onDeleteAddress(a.id)}>Delete</button>
+                            <button className="ghost" onClick={() => { setEditAddr(a); setModalContext(international ? "intl" : "domestic"); setNewAddrOpen(true); }}>Edit</button>
+                            <button className="ghost" onClick={() => onDeleteAddress(a.id)}>Delete</button>
                           </div>
                         </div>
                       );
                     })}
                   </div>
-                  <div style={{display:"flex", justifyContent:"flex-end", gap:8, marginTop:10}}>
-                    <button className="ghost" onClick={()=>openNewAddress(international ? "intl" : "domestic")}>+ New address</button>
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10 }}>
+                    <button className="ghost" onClick={() => openNewAddress(international ? "intl" : "domestic")}>+ New address</button>
                   </div>
                 </>
               )}
             </div>
 
             <div className="sheet-ft">
-              <button className="ghost" onClick={()=>setSelectSheetOpen(false)}>Close</button>
+              <button className="ghost" onClick={() => setSelectSheetOpen(false)}>Close</button>
             </div>
           </div>
         </div>
@@ -1575,32 +1562,32 @@ useEffect(() => {
           <div className="na-sheet">
             <div className="sheet-hd">
               <strong>{editAddr ? "Edit address" : "Add a new address"} {modalContext === "intl" ? "(International)" : "(India)"}</strong>
-              <button className="ghost" onClick={()=>{ setNewAddrOpen(false); setEditAddr(null); }}>✕</button>
+              <button className="ghost" onClick={() => { setNewAddrOpen(false); setEditAddr(null); }}>✕</button>
             </div>
 
             <div className="na-bd">
               {naErr && <div className="alert">{naErr}</div>}
               <div>
                 <div className="lbl">Recipient name *</div>
-                <input className="inp" value={naName} onChange={e=>setNaName(e.target.value)} />
+                <input className="inp" value={naName} onChange={e => setNaName(e.target.value)} />
               </div>
               <div className="na-row2">
                 <div>
                   <div className="lbl">Phone *</div>
-                  <input className="inp" value={naPhone} onChange={e=>setNaPhone(e.target.value)} placeholder={modalContext==="intl" ? "+49 176..." : "+91 9xxxxxxxxx"} />
+                  <input className="inp" value={naPhone} onChange={e => setNaPhone(e.target.value)} placeholder={modalContext === "intl" ? "+49 176..." : "+91 9xxxxxxxxx"} />
                 </div>
                 <div>
                   <div className="lbl">Pincode / ZIP *</div>
-                  <input className="inp" value={naPincode} onChange={e=>setNaPincode(e.target.value)} />
+                  <input className="inp" value={naPincode} onChange={e => setNaPincode(e.target.value)} />
                 </div>
               </div>
               <div>
                 <div className="lbl">Address line 1 *</div>
-                <input className="inp" value={naLine1} onChange={e=>setNaLine1(e.target.value)} />
+                <input className="inp" value={naLine1} onChange={e => setNaLine1(e.target.value)} />
               </div>
               <div>
                 <div className="lbl">Address line 2 *</div>
-                <input className="inp" value={naLine2} onChange={e=>setNaLine2(e.target.value)} />
+                <input className="inp" value={naLine2} onChange={e => setNaLine2(e.target.value)} />
               </div>
 
               {modalContext === "domestic" ? (
@@ -1611,7 +1598,7 @@ useEffect(() => {
                       <select
                         className="sel"
                         value={naStateId}
-                        onChange={(e)=>{ const v = e.target.value ? Number(e.target.value) : ""; setNaStateId(v); setNaDistrictId(""); }}
+                        onChange={(e) => { const v = e.target.value ? Number(e.target.value) : ""; setNaStateId(v); setNaDistrictId(""); }}
                       >
                         <option value="">Select state…</option>
                         {modalStates.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -1622,7 +1609,7 @@ useEffect(() => {
                       <select
                         className="sel"
                         value={naDistrictId}
-                        onChange={(e)=>setNaDistrictId(e.target.value ? Number(e.target.value) : "")}
+                        onChange={(e) => setNaDistrictId(e.target.value ? Number(e.target.value) : "")}
                         disabled={typeof naStateId !== "number" || loadingDistricts}
                       >
                         <option value="">{loadingDistricts ? "Loading…" : "Select district…"}</option>
@@ -1630,7 +1617,7 @@ useEffect(() => {
                       </select>
                     </div>
                   </div>
-                  <div className="small" style={{opacity:.8}}>
+                  <div className="small" style={{ opacity: .8 }}>
                     Country: <strong>{countryNameById(INDIA_ID) || "India"}</strong>
                   </div>
                 </>
@@ -1640,7 +1627,7 @@ useEffect(() => {
                   <select
                     className="sel"
                     value={naCountryId}
-                    onChange={(e)=>setNaCountryId(e.target.value ? Number(e.target.value) : "")}
+                    onChange={(e) => setNaCountryId(e.target.value ? Number(e.target.value) : "")}
                   >
                     <option value="">Select country…</option>
                     {countries
@@ -1649,16 +1636,16 @@ useEffect(() => {
                   </select>
                 </div>
               )}
-                {editAddr && (
-              <label className="checkbox-line">
-                <input type="checkbox" checked={naMakeDefault} onChange={e => setNaMakeDefault(e.target.checked)} />
-                <span>Make this my default {modalContext === "intl" ? "international" : "shipping"} address</span>
-              </label>
-)}
+              {editAddr && (
+                <label className="checkbox-line">
+                  <input type="checkbox" checked={naMakeDefault} onChange={e => setNaMakeDefault(e.target.checked)} />
+                  <span>Make this my default {modalContext === "intl" ? "international" : "shipping"} address</span>
+                </label>
+              )}
             </div>
 
             <div className="sheet-ft">
-              <button className="ghost" onClick={()=>{ setNewAddrOpen(false); setEditAddr(null); }}>Cancel</button>
+              <button className="ghost" onClick={() => { setNewAddrOpen(false); setEditAddr(null); }}>Cancel</button>
               <button
                 className="btn primary"
                 onClick={editAddr ? saveEditAddress : saveNewAddress}

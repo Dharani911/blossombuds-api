@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import http from "../../api/adminHttp";
 import { Link } from "react-router-dom";
+import { formatIstDateTime } from "../../utils/dates";
+
 import {
   ResponsiveContainer,
   LineChart, Line,
@@ -95,8 +97,9 @@ export default function AdminAnalyticsSimple() {
             ))}
           </div>
           <div className="meta">
-            Updated {new Intl.DateTimeFormat("en-IN", { dateStyle:"medium", timeStyle:"short" }).format(new Date())}
+            Updated {formatIstDateTime(new Date())}
           </div>
+
         </div>
       </div>
 

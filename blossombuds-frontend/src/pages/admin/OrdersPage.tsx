@@ -1,6 +1,8 @@
 // src/pages/admin/OrdersPage.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { formatIstDateTime, formatIstDate } from "../../utils/dates";
+
 
 import {
   listAllOrders,
@@ -108,7 +110,9 @@ const statusClass = (s: string) => `bb-badge ${"bb-" + (s || "ORDERED").toLowerC
 type StatusKey = keyof typeof STATUS_LABEL;
 const fmtMoneyINR = (n: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2 }).format(n || 0);
-const fmtDT = (d?: string | number | Date) => (d ? new Date(d).toLocaleString() : "—");
+const fmtDT = (d?: string | number | Date) =>
+  d ? formatIstDateTime(d) : "—";
+
 
 // ── NEW: UI helpers ───────────────────────────────────────────────
 function formatLocalDTForInput(d: Date) {
@@ -290,8 +294,8 @@ const [printingBulk, setPrintingBulk] = useState(false); // 🔹 NEW
   function activeFilterBadges() {
     const badges: string[] = [];
     if (statusFilter.length) badges.push(`${statusFilter.length} status`);
-    if (fromDT) badges.push(`from ${new Date(fromDT).toLocaleDateString()}`);
-    if (toDT) badges.push(`to ${new Date(toDT).toLocaleDateString()}`);
+    if (fromDT) badges.push(`from ${formatIstDate(fromDT)}`);
+    if (toDT) badges.push(`to ${formatIstDate(toDT)}`);
     return badges;
   }
 
@@ -580,8 +584,8 @@ const [printingBulk, setPrintingBulk] = useState(false); // 🔹 NEW
 
                 {/* live summary badges */}
                 <div className="mini-badges" style={{ marginLeft: 8 }}>
-                  {fromDT && <span className="mini">From {new Date(fromDT).toLocaleDateString()}</span>}
-                  {toDT && <span className="mini">To {new Date(toDT).toLocaleDateString()}</span>}
+                  {fromDT && <span className="mini">From {formatIstDate(fromDT)}</span>}
+                  {toDT && <span className="mini">To {formatIstDate(toDT)}</span>}
                   {statusFilter.map((s) => (
                     <span key={s} className="mini">
                       {STATUS_LABEL[s] ?? s}
@@ -859,7 +863,7 @@ const [printBusy, setPrintBusy] = useState<"invoice" | "packing" | null>(null); 
       }
 
       setHasPartner(true);
-      const partner = await fetchJSON<any>(`/api/delivery-partners/${partnerId}`);
+      const partner = await fetchJSON<any>(`/api/partners/${partnerId}`);
 
       const directUrl = (partner?.trackingUrl ?? partner?.tracking_url ?? partner?.url ?? "").trim?.() || "";
       const template =
@@ -1204,7 +1208,7 @@ const [printBusy, setPrintBusy] = useState<"invoice" | "packing" | null>(null); 
 
                           <div>{p.ref || "—"}</div>
                           <div>{fmtMoneyINR(p.amount || 0)}</div>
-                          <div>{p.createdAt ? new Date(p.createdAt).toLocaleString() : "—"}</div>
+                          <div>{p.createdAt ? formatIstDateTime(p.createdAt) : "—"}</div>
                         </div>
                       ))}
                     </div>
@@ -1230,7 +1234,10 @@ const [printBusy, setPrintBusy] = useState<"invoice" | "packing" | null>(null); 
                     <ul className="timeline">
                       {events.map((ev) => (
                         <li key={ev.id}>
-                          <div className="when">{ev.createdAt ? new Date(ev.createdAt).toLocaleString() : ""}</div>
+                          <div className="when">
+                            {ev.createdAt ? formatIstDateTime(ev.createdAt) : ""}
+                          </div>
+
                           <div className="what"><b>{ev.type}</b> — {ev.message}</div>
                         </li>
                       ))}

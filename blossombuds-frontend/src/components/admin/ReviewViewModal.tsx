@@ -4,6 +4,7 @@ import { getAdminReviewDetail, type ProductReviewDetailView } from "../../api/ad
 import html2canvas from "html2canvas";
 import { saveAs } from "file-saver";
 import adminHttp from "../../api/adminHttp";
+import { formatIstDate } from "../../utils/dates";
 
 type Props = { open: boolean; reviewId: number; onClose: () => void };
 
@@ -238,13 +239,14 @@ export default function ReviewViewModal({ open, reviewId, onClose }: Props) {
                 <div className="meta">
                   <div>
                     <strong>{data.customerName || `Customer #${data.customerId}`}</strong>
-                    <span> — {new Date(data.createdAt).toLocaleDateString()}</span>
+                    <span> — {formatIstDate(data.createdAt)}</span>
                   </div>
                   <div className="muted small">
                     {data.productName || `Product #${data.productId}`} •{" "}
                     {data.concern ? "Consent ✅" : "No Consent ❌"}
                   </div>
                 </div>
+
               </div>
 
               <div className="poster-footer">

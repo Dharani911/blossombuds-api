@@ -1,5 +1,7 @@
 // src/pages/admin/ReviewsPage.tsx
 import React, { useEffect, useState } from "react";
+import { formatIstDateTime } from "../../utils/dates";
+
 import {
   listAdminReviews,
   moderateReview,
@@ -197,7 +199,10 @@ export default function ReviewsPage() {
               <div className="cell-cust">
                 {r.customerName ? r.customerName : (r.customerId ? `#${r.customerId}` : "—")}
               </div>
-              <div className="cell-when">{r.createdAt ? new Date(r.createdAt).toLocaleString() : "—"}</div>
+              <div className="cell-when">
+                {r.createdAt ? formatIstDateTime(r.createdAt) : "—"}
+              </div>
+
               <div className="cell-status">
                 <span className={"badge s-"+(r.status||"PENDING").toLowerCase()}>
                   {r.status}
