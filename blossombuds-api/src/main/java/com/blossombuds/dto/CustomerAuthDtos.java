@@ -9,14 +9,14 @@ public class CustomerAuthDtos {
     @Data
     public static class RegisterRequest {
         @NotBlank private String name;
-        @Email @NotBlank private String email;
+        @Email private String email; // optional if phone is provided
         @NotBlank private String password;
-        private String phone; // optional
+        private String phone; // optional if email is provided
     }
 
     @Data
     public static class CustomerLoginRequest {
-        @NotBlank private String email;
+        @NotBlank private String identifier; // email or phone (+91XXXXXXXXXX)
         @NotBlank private String password;
     }
 

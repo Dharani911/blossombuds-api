@@ -129,7 +129,7 @@ export default function ProfilePage() {
   }, [cust?.fullName, cust?.email]);
 
   const onLogout = async () => {
-    try { await http.post("/api/auth/logout"); } catch {}
+    try { await http.post("/api/auth/logout"); } catch { }
     logout();
   };
 
@@ -191,15 +191,15 @@ export default function ProfilePage() {
   function pickIds(a: any) {
     const stateId =
       typeof a?.stateId === "number" ? a.stateId :
-      typeof a?.stateId === "string" ? Number(a.stateId) :
-      typeof a?.state?.id === "number" ? a.state.id :
-      typeof a?.state?.id === "string" ? Number(a.state.id) : undefined;
+        typeof a?.stateId === "string" ? Number(a.stateId) :
+          typeof a?.state?.id === "number" ? a.state.id :
+            typeof a?.state?.id === "string" ? Number(a.state.id) : undefined;
 
     const districtId =
       typeof a?.districtId === "number" ? a.districtId :
-      typeof a?.districtId === "string" ? Number(a.districtId) :
-      typeof a?.district?.id === "number" ? a.district.id :
-      typeof a?.district?.id === "string" ? Number(a.district.id) : undefined;
+        typeof a?.districtId === "string" ? Number(a.districtId) :
+          typeof a?.district?.id === "number" ? a.district.id :
+            typeof a?.district?.id === "string" ? Number(a.district.id) : undefined;
 
     return { stateId, districtId };
   }
@@ -290,77 +290,78 @@ export default function ProfilePage() {
   const safeAddresses = useMemo(() => (Array.isArray(addresses) ? addresses : []), [addresses]);
 
   return (
-      <div className="pro2-wrap">
-        <style>{pageStyles}</style>
+    <div className="pro2-wrap">
+      <style>{pageStyles}</style>
 
-        <ProfileHero
-          initials={(initials || "BB").slice(0,2).toUpperCase()}
-          fullName={cust?.name || "Your profile"}
-          ordersCount={ordersCount}
-          onLogout={onLogout}
-        />
+      <ProfileHero
+        initials={(initials || "BB").slice(0, 2).toUpperCase()}
+        fullName={cust?.name || "Your profile"}
+        ordersCount={ordersCount}
+        onLogout={onLogout}
+      />
 
-        {/* MAIN */}
-        <section className="pro2-main">
-          {err && <div className="alert bad">{err}</div>}
+      {/* MAIN */}
+      <section className="pro2-main">
+        {err && <div className="alert bad">{err}</div>}
 
-          <div className="grid">
-            <div className="col">
-              <AccountCard
-                loading={loading}
-                editing={editingAcc}
-                setEditing={setEditingAcc}
-                fullName={fullName}
-                setFullName={setFullName}
-                email={cust?.email || ""}
-                phone={phone}
-                setPhone={setPhone}
-                onSave={saveAccount}
-                saving={savingAcc}
-              />
+        <div className="grid">
+          <div className="col">
+            <AccountCard
+              loading={loading}
+              editing={editingAcc}
+              setEditing={setEditingAcc}
+              fullName={fullName}
+              setFullName={setFullName}
+              email={cust?.email || ""}
+              phone={phone}
+              setPhone={setPhone}
+              onSave={saveAccount}
+              saving={savingAcc}
+              isGoogleUser={!!cust?.googleSubject}
+            />
 
-              <AddressesCard
-                loading={!addresses}
-                addresses={safeAddresses}
-                onAdd={openAddAddress}
-                onEdit={openEditAddress}
-                onSetDefault={setDefaultAddress}
-                onDelete={deleteAddress}
-                stateNameById={stateNameById}
-                districtNameById={districtNameById}
-                countryNameById={countryNameById}
-              />
-            </div>
+            <AddressesCard
+              loading={!addresses}
+              addresses={safeAddresses}
+              onAdd={openAddAddress}
+              onEdit={openEditAddress}
+              onSetDefault={setDefaultAddress}
+              onDelete={deleteAddress}
+              stateNameById={stateNameById}
+              districtNameById={districtNameById}
+              countryNameById={countryNameById}
+            />
+          </div>
 
-            <div className="col">
-              {/* ⬇️ Orders UI (auto-opens drawer via ?code=&pid=&itemId=) */}
-              <OrdersSection orders={orders || []} />
-              <div className="card promo">
-                <div className="promo-inner">
-                  <h4>Looking for something bespoke?</h4>
-                  <p>Share your idea, we’ll make it bloom beautifully.</p>
-                  <Link to="/" className="cta">Start a custom order</Link>
-                </div>
+          <div className="col">
+            {/* ⬇️ Orders UI (auto-opens drawer via ?code=&pid=&itemId=) */}
+            <OrdersSection orders={orders || []} />
+            <div className="card promo">
+              <div className="promo-inner">
+                <h4>Looking for something bespoke?</h4>
+                <p>Share your idea, we’ll make it bloom beautifully.</p>
+                <Link to="/" className="cta">Start a custom order</Link>
               </div>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {addrModal && (
-          <AddressModal
-            initial={addrModal.data}
-            busy={addrBusy}
-            error={addrErr}
-            onClose={() => setAddrModal(null)}
-            onSubmit={submitAddress}
-            mode={addrModal.mode}
-          />
-        )}
+      {addrModal && (
+        <AddressModal
+          initial={addrModal.data}
+          busy={addrBusy}
+          error={addrErr}
+          onClose={() => setAddrModal(null)}
+          onSubmit={submitAddress}
+          mode={addrModal.mode}
+        />
+      )}
 
-        <ToastHost items={toasts.items} />
-      </div>
-    );
-  }
+      <ToastHost items={toasts.items} />
+    </div>
+  );
+}
 
 /* page-level styles (responsive width + small padding on mobile) */
 const pageStyles = `

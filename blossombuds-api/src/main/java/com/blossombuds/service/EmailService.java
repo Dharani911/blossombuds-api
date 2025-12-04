@@ -22,4 +22,8 @@ public interface EmailService {
     /** Sends a short request asking the customer to leave a review for the order. */
     void sendReviewRequest(String toEmail, String toName,
                            String publicCodeYYNNNN, String reviewUrl);
+
+    void sendVerificationOtp(String toEmail, String otpCode);
+
+    void sendPasswordResetOtp(String toEmail, String otpCode);
 }

@@ -14,6 +14,8 @@ type Props = {
 
   onSave: () => void;
   saving: boolean;
+
+  isGoogleUser?: boolean; // Show Google badge if true
 };
 
 export default function AccountCard({
@@ -27,6 +29,7 @@ export default function AccountCard({
   setPhone,
   onSave,
   saving,
+  isGoogleUser,
 }: Props) {
   const [isMobile, setIsMobile] = useState<boolean>(() =>
     typeof window !== "undefined" ? window.matchMedia("(max-width:560px)").matches : false
@@ -47,27 +50,30 @@ export default function AccountCard({
       <style>{styles}</style>
 
       <div className="head">
-        <h3>Account</h3>
+        <div className="head-title">
+          <h3>Account</h3>
+          {isGoogleUser && <span className="google-badge">Google</span>}
+        </div>
 
         <div className="head-right">
 
-        {/* Show actions only when expanded on mobile, always on desktop */}
-                  {(!isMobile || open) && (
-                    !editing ? (
-                      <button className="icon" onClick={() => setEditing(true)} title="Edit" aria-label="Edit">
-                        ✎
-                      </button>
-                    ) : (
-                      <div className="actions">
-                        <button className="btn ghost" onClick={() => setEditing(false)} disabled={saving}>
-                          Cancel
-                        </button>
-                        <button className="btn" onClick={onSave} disabled={saving}>
-                          {saving ? "Saving…" : "Save"}
-                        </button>
-                      </div>
-                    )
-                  )}
+          {/* Show actions only when expanded on mobile, always on desktop */}
+          {(!isMobile || open) && (
+            !editing ? (
+              <button className="icon" onClick={() => setEditing(true)} title="Edit" aria-label="Edit">
+                ✎
+              </button>
+            ) : (
+              <div className="actions">
+                <button className="btn ghost" onClick={() => setEditing(false)} disabled={saving}>
+                  Cancel
+                </button>
+                <button className="btn" onClick={onSave} disabled={saving}>
+                  {saving ? "Saving…" : "Save"}
+                </button>
+              </div>
+            )
+          )}
           {/* Mobile expand/collapse */}
           {isMobile && (
             <button
@@ -108,22 +114,29 @@ export default function AccountCard({
             </label>
 
             <label className="field">
-              <span>Email</span>
+              <span>Email {isGoogleUser && <small className="google-hint">(from Google)</small>}</span>
               <div className="value">{email || "—"}</div>
             </label>
 
             <label className="field">
               <span>Phone</span>
               {editing ? (
-                <input
-                  className="input"
-                  value={phone ?? ""}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+91 ..."
-                  inputMode="tel"
-                />
+                <div className="phone-field">
+                  <span className="phone-prefix">+91</span>
+                  <input
+                    className="input phone-input"
+                    value={(phone ?? "").replace(/^\+91/, "")}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+                      setPhone(digits ? `+91${digits}` : "");
+                    }}
+                    placeholder="9876543210"
+                    maxLength={10}
+                    inputMode="tel"
+                  />
+                </div>
               ) : (
-                <div className="value">{phone || "—"}</div>
+                <div className="value">{phone ? `+91 ${phone.replace(/^\+91/, "")}` : "—"}</div>
               )}
             </label>
           </div>
@@ -138,7 +151,20 @@ const styles = `
   display:flex; align-items:center; justify-content:space-between; gap: 10px;
   padding: 12px 14px; border-bottom: 1px solid rgba(0,0,0,.06);
 }
+.head-title{ display:flex; align-items:center; gap:10px; }
 .head-right{ display:flex; align-items:center; gap:8px; }
+
+/* Google badge */
+.google-badge{
+  display:inline-flex; align-items:center; gap:4px;
+  padding: 4px 10px; border-radius: 20px;
+  background: linear-gradient(135deg, #4285f4, #34a853, #fbbc05, #ea4335);
+  background-size: 200% 100%;
+  color: #fff; font-size: 11px; font-weight: 700;
+  animation: google-shimmer 3s ease infinite;
+}
+@keyframes google-shimmer { 0%,100%{background-position: 0% 50%} 50%{background-position: 100% 50%} }
+.google-hint{ font-weight:400; opacity:.7; font-size:11px; }
 
 .icon{ width:36px; height:36px; border-radius:10px; border:1px solid rgba(0,0,0,.1); background:#fff; cursor:pointer; }
 .actions{ display:flex; gap:8px; }
@@ -174,6 +200,20 @@ const styles = `
 .input{
   height: 44px; border-radius: 12px; border:1px solid rgba(0,0,0,.12);
   padding: 0 12px; background:#fff; color: var(--bb-primary);
+}
+
+/* Phone field with prefix */
+.phone-field{
+  display:flex; align-items:center; gap:0;
+  border:1px solid rgba(0,0,0,.12); border-radius:12px; background:#fff; overflow:hidden;
+}
+.phone-prefix{
+  padding:0 12px; background:rgba(0,0,0,.03); border-right:1px solid rgba(0,0,0,.12);
+  font-weight:700; color: var(--bb-primary); height:44px; display:flex; align-items:center;
+}
+.phone-input{
+  flex:1; height:44px; border:none !important; border-radius: 0 12px 12px 0 !important;
+  padding: 0 12px; background:transparent; color: var(--bb-primary);
 }
 
 .skeleton{

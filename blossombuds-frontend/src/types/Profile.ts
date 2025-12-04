@@ -1,9 +1,11 @@
 // src/types/profile.ts
 export type Customer = {
   id: number;
+  name?: string;
   fullName?: string;
   email?: string;
   phone?: string;
+  googleSubject?: string; // present if user logged in via Google
 };
 
 export type Address = {
@@ -65,5 +67,5 @@ export type OrderLite = {
 
   // 🔹 COUPON (read)
   couponCode?: string | null;
-  couponId?:number | null;
+  couponId?: number | null;
 };

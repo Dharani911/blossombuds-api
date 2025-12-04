@@ -841,14 +841,27 @@ export default function CreateOrderPage() {
                 <input value={newCust.fullName} onChange={e => setNewCust(c => ({ ...c, fullName: e.target.value }))} />
               </label>
               <label>
-                <div className="lab">Email</div>
-                <input value={newCust.email || ""} onChange={e => setNewCust(c => ({ ...c, email: e.target.value }))} />
+                <div className="lab">Email (optional)</div>
+                <input type="email" value={newCust.email || ""} onChange={e => setNewCust(c => ({ ...c, email: e.target.value }))} placeholder="customer@example.com" />
               </label>
               <label>
-                <div className="lab">Phone</div>
-                <input value={newCust.phone || ""} onChange={e => setNewCust(c => ({ ...c, phone: e.target.value }))} />
+                <div className="lab">Phone *</div>
+                <div className="phone-field">
+                  <span className="phone-prefix">+91</span>
+                  <input
+                    type="tel"
+                    maxLength={10}
+                    value={(newCust.phone || "").replace(/^\+91/, "")}
+                    onChange={e => {
+                      const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+                      setNewCust(c => ({ ...c, phone: digits ? `+91${digits}` : "" }));
+                    }}
+                    placeholder="9876543210"
+                  />
+                </div>
               </label>
             </div>
+            <div className="muted" style={{ marginTop: 6 }}>Either email or phone is required.</div>
             <div className="end-row">
               <button className="ghost as-btn" onClick={() => setNewCustOpen(false)}>Cancel</button>
               <button className="btn primary" onClick={createNewCustomer}>Save customer</button>
@@ -1463,4 +1476,9 @@ const css = `
 }
 
 /* NOTE: We intentionally DO NOT hide number input spinners anymore */
+
+/* Phone input with prefix */
+.phone-field{ display:flex; align-items:center; border:1px solid ${INK}; border-radius:10px; background:#fff; overflow:hidden; }
+.phone-field .phone-prefix{ padding:0 10px; background:#f5f5f5; border-right:1px solid ${INK}; font-weight:700; color:${PRIMARY}; height:36px; display:flex; align-items:center; }
+.phone-field input{ flex:1; height:36px; border:none; padding:0 10px; outline:none; background:transparent; }
 `;

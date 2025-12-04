@@ -24,6 +24,7 @@ import PolicyPage from "../pages/PolicyPage";
 import ForgotPasswordPage from "../pages/ForgotPasswordPage";
 import ResetPasswordPage from "../pages/ResetPasswordPage";
 import ContactPage from "../pages/ContactPage";
+import OAuth2RedirectHandler from "../components/auth/OAuth2RedirectHandler";
 
 
 
@@ -71,6 +72,7 @@ export default function AppRoutes() {
           {/* Email verification routes (support both forms if you use both) */}
           <Route path="/verify" element={<VerifyPage />} />
           <Route path="/verify-email" element={<VerifyPage />} />
+          <Route path="/oauth2/redirect" element={<OAuth2RedirectHandler />} />
 
           {/* If user directly visits /login or /register (no background), send them home */}
           <Route path="/login" element={<Navigate to="/" replace />} />

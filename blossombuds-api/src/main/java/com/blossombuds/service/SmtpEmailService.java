@@ -106,46 +106,60 @@ public class SmtpEmailService implements EmailService {
 
     /** Sends an email verification link to a customer. */
     @Override
-    public void sendVerificationEmail(String toEmail, String verifyUrl) {
+    public void sendVerificationEmail(String toEmail, String verifyOtp) {
         log.info("[EMAIL][VERIFICATION] to='{}'", toEmail);
-        String subject = "Verify your email";
+        String subject = "Email verification code";
         String body = """
             Hi there,
 
             Welcome to %s!
-            Please verify your email address to activate your account:
+            Your email verification code is:
 
-            {{A|Verify your email|%s}}
-
+            %s
+                            
+            This code is valid for 10 minutes. Please do not share it with anyone.
+                            
             %s
 
             Warm regards,
             %s
-            """.formatted(brandName(), verifyUrl, contactLineText(), brandName());
+            """.formatted(brandName(), verifyOtp, contactLineText(), brandName());
 
         sendRichMasked(toEmail, subject, body);
     }
 
+    @Override
+    public void sendVerificationOtp(String toEmail, String otpCode) {
+        sendVerificationEmail(toEmail, otpCode);
+    }
+
     /** Sends a password reset link to a customer/admin. */
     @Override
-    public void sendPasswordResetEmail(String toEmail, String resetUrl) {
+    public void sendPasswordResetEmail(String toEmail, String resetOtp) {
         log.info("[EMAIL][RESET] to='{}'", toEmail);
-        String subject = "Reset your password";
+        String subject = "Password reset code";
         String body = """
             Hi there,
 
             We received a request to reset your password.
-            You can set a new password using the link below:
+            Your password reset code is:
 
-            {{A|Reset your password|%s}}
-
+            %s
+                            
+            This code is valid for 10 minutes. If you did not request this, you can ignore this email.
+                            
             %s
 
             Warm regards,
             %s
-            """.formatted(resetUrl, contactLineText(), brandName());
+            """.formatted(resetOtp, contactLineText(), brandName());
 
         sendRichMasked(toEmail, subject, body);
+    }
+
+    @Override
+    public void sendPasswordResetOtp(String toEmail, String otpCode) {
+        sendPasswordResetEmail(toEmail, otpCode);
     }
 
     /** Sends order confirmation with code and total (public code is YYNNNN; rendered as BBYYNNNN). */

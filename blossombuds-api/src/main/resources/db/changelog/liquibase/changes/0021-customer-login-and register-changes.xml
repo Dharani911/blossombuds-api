@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+           http://www.liquibase.org/xml/ns/dbchangelog
+           http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.23.xsd">
+
+    <!-- 1️⃣ CUSTOMER: multi-channel auth support (email/phone/Google) -->
+    <changeSet id="0021-01-customers-multichannel-auth" author="dharani">
+        <comment>
+            Make email nullable, add phone_verified + Google fields, and add unique indexes
+            so customers can log in via email, phone, or Google subject.
+        </comment>
+
+        <!-- Make email nullable (was NOT NULL before) -->
+        <dropNotNullConstraint
+                tableName="customers"
+                columnName="email"
+                columnDataType="varchar(320)"/>
+
+        <!-- New columns -->
+        <addColumn tableName="customers">
+            <column name="phone_verified" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="google_subject" type="varchar(255)"/>
+            <column name="google_email" type="varchar(320)"/>
+        </addColumn>
+
+
+
+        <!-- Unique index for phone (only one account per phone number) -->
+        <createIndex tableName="customers"
+                     indexName="idx_customers_phone_unique"
+                     unique="true">
+            <column name="phone"/>
+        </createIndex>
+
+        <!-- Unique index for Google subject (one account per Google identity) -->
+        <createIndex tableName="customers"
+                     indexName="idx_customers_google_subject_unique"
+                     unique="true">
+            <column name="google_subject"/>
+        </createIndex>
+    </changeSet>
+
+    <!-- 2️⃣ OTP storage for email/phone based flows -->
+    <changeSet id="0021-02-auth-otp-tokens" author="dharani">
+        <comment>
+            Table to store OTP codes for email/phone, for purposes like LOGIN, SIGNUP,
+            FORGOT_PASSWORD, VERIFY_CONTACT.
+        </comment>
+
+        <createTable tableName="auth_otp_tokens">
+            <column name="id" type="bigserial">
+                <constraints primaryKey="true"
+                             primaryKeyName="pk_auth_otp_tokens"/>
+            </column>
+
+            <!-- Optional link to a customer (nullable for first-time signups) -->
+            <column name="customer_id" type="bigint"/>
+
+            <!-- EMAIL or PHONE -->
+            <column name="channel" type="varchar(20)">
+                <constraints nullable="false"/>
+            </column>
+
+            <!-- Email address or phone number the code was sent to (normalized) -->
+            <column name="destination" type="varchar(180)">
+                <constraints nullable="false"/>
+            </column>
+
+            <!-- OTP code itself (e.g. 6 digits) -->
+            <column name="code" type="varchar(10)">
+                <constraints nullable="false"/>
+            </column>
+
+            <!-- LOGIN / SIGNUP / FORGOT_PASSWORD / VERIFY_CONTACT / etc -->
+            <column name="purpose" type="varchar(40)">
+                <constraints nullable="false"/>
+            </column>
+
+            <!-- Expiry and usage tracking -->
+            <column name="expires_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="consumed_at" type="timestamp with time zone"/>
+
+            <!-- Audit / creation timestamp -->
+            <column name="created_at" type="timestamp with time zone"
+                    defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <!-- FK to customers (optional) -->
+        <addForeignKeyConstraint
+                baseTableName="auth_otp_tokens"
+                baseColumnNames="customer_id"
+                constraintName="fk_auth_otp_tokens_customer"
+                referencedTableName="customers"
+                referencedColumnNames="id"
+                deferrable="false"
+                initiallyDeferred="false"/>
+
+        <!-- Index to quickly fetch valid OTPs for a destination/channel/purpose -->
+        <createIndex tableName="auth_otp_tokens"
+                     indexName="idx_auth_otp_tokens_lookup">
+            <column name="destination"/>
+            <column name="channel"/>
+            <column name="purpose"/>
+            <column name="consumed_at"/>
+        </createIndex>
+
+        <!-- Index for easy cleanup by expiry -->
+        <createIndex tableName="auth_otp_tokens"
+                     indexName="idx_auth_otp_tokens_expires_at">
+            <column name="expires_at"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

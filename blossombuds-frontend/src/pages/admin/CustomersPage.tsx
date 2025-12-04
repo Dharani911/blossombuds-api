@@ -7,6 +7,7 @@ import {
   type Address,
   type OrderSummary,
 } from "../../api/adminCustomers";
+import { formatIstDateTime } from "../../utils/dates";
 
 const PRIMARY = "#4A4F41";
 const INK     = "rgba(0,0,0,.08)";
@@ -172,7 +173,8 @@ export default function CustomersPage() {
             <div className="cell-name">{c.name || "—"}</div>
             <div className="cell-email" title={c.email || ""}>{c.email || "—"}</div>
             <div className="cell-phone">{c.phone || "—"}</div>
-            <div>{c.createdAt ? new Date(c.createdAt).toLocaleString() : "—"}</div>
+            <div>{c.createdAt ? formatIstDateTime(c.createdAt as any) : "—"}</div>
+
             <div className="cell-actions">
               <button className="ghost sm" onClick={() => openDetail(c)}>View</button>
             </div>
@@ -244,7 +246,8 @@ export default function CustomersPage() {
                         <div>BB{o.orderNumber}</div>
                         <div>{o.status || "—"}</div>
                         <div>{fmtMoney(o.totalAmount ?? 0, o.currency ?? "INR")}</div>
-                        <div>{o.placedAt ? new Date(o.placedAt).toLocaleString() : "—"}</div>
+                        <div>{o.placedAt ? formatIstDateTime(o.placedAt as any) : "—"}</div>
+
                       </div>
                     ))}
                   </div>

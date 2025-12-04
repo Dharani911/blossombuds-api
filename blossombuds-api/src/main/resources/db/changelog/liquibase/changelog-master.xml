@@ -30,4 +30,5 @@
     <include file="db/changelog/liquibase/changes/0019-table-updates.xml"/>
     <include file="db/changelog/liquibase/changes/1002-seed-settings.xml"/>
     <include file="db/changelog/liquibase/changes/0020-admin-metrics-indexes.xml"/>
+    <include file="db/changelog/liquibase/changes/0021-customer-login-and-register-changes.xml"/>
 </databaseChangeLog>
