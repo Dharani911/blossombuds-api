@@ -12,18 +12,25 @@ export default function OAuth2RedirectHandler() {
       console.log("[OAUTH2] token from URL =", token);
 
       if (!token) {
-        navigate("/login?error=oauth2_failed", { replace: true });
+        // Hard redirect to login with error
+        window.location.replace("/login?error=oauth2_failed");
         return;
       }
 
       try {
+        // Store token in auth context/localStorage
         loginWithToken(token);
-        navigate("/profile", { replace: true });
+
+        // Hard redirect to profile to avoid any router nesting / modal background issues
+        window.location.replace("/profile");
       } catch (e) {
         console.error("[OAUTH2] loginWithToken failed", e);
-        navigate("/login?error=oauth2_failed", { replace: true });
+        window.location.replace("/login?error=oauth2_failed");
       }
-    }, [searchParams, loginWithToken, navigate]);
+      // We intentionally want this to run once on mount
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
 
 
     return (
