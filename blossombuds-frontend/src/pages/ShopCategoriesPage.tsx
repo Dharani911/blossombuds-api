@@ -87,7 +87,7 @@ export default function ShopCategoriesPage() {
   const [childrenMap, setChildrenMap] = useState<Record<number, Category[]>>({});
   const [productsMap, setProductsMap] = useState<Record<number, Product[]>>({});
   const [openNode, setOpenNode] = useState<Record<number, boolean>>({});
-
+  const [loadingTree, setLoadingTree] = useState(false);
   // parent (selected) full record for description block
   const [selParent, setSelParent] = useState<Category | null>(null);
 
@@ -200,64 +200,89 @@ export default function ShopCategoriesPage() {
     return rows;
   }, []);
 
-  // Load level-1 children and their products; for each child, also load grandchildren (and their products)
-  useEffect(() => {
-    let live = true;
-    (async () => {
-      if (!selectedParentId) {
-        setChildrenMap({});
-        setProductsMap({});
-        setOpenNode({});
-        return;
-      }
+    // Load level-1 children and their products; for each child, also load grandchildren (and their products)
+    useEffect(() => {
+      let live = true;
 
-      try {
-        const level1 = await loadChildren(selectedParentId);
-        if (!live) return;
-
-        const nextChildrenMap: Record<number, Category[]> = {};
-        const nextProductsMap: Record<number, Product[]> = {};
-        const nextOpen: Record<number, boolean> = {};
-
-        nextChildrenMap[selectedParentId] = level1;
-        nextOpen[selectedParentId] = true; // root open
-
-        // Load products for root/parent
-        nextProductsMap[selectedParentId] = await loadProducts(selectedParentId);
-        if (!live) return;
-
-        // For every child, load its products and its own children (grandchildren)
-        for (const c1 of level1) {
-          nextOpen[c1.id] = true; // open level-1 by default (desktop feels snappier)
-          nextProductsMap[c1.id] = await loadProducts(c1.id);
+      async function buildTree() {
+        if (!selectedParentId) {
           if (!live) return;
-
-          const level2 = await loadChildren(c1.id);
-          nextChildrenMap[c1.id] = level2;
-
-          // For each grandchild, load products
-          for (const c2 of level2) {
-            nextOpen[c2.id] = false; // collapsed by default
-            nextProductsMap[c2.id] = await loadProducts(c2.id);
-            if (!live) return;
-          }
+          setChildrenMap({});
+          setProductsMap({});
+          setOpenNode({});
+          setLoadingTree(false);
+          return;
         }
 
         if (!live) return;
-        setChildrenMap(nextChildrenMap);
-        setProductsMap(nextProductsMap);
-        setOpenNode(nextOpen);
-      } catch {
-        if (!live) return;
+        setLoadingTree(true);
+
+        // clear previous tree for new parent
         setChildrenMap({});
         setProductsMap({});
-      }
-    })();
+        setOpenNode({ [selectedParentId]: true }); // root open
 
-    return () => {
-      live = false;
-    };
-  }, [selectedParentId, loadChildren, loadProducts]);
+        try {
+          // 🔹 1) Load level-1 children + root products in parallel
+          const [level1, rootProds] = await Promise.all([
+            loadChildren(selectedParentId),
+            loadProducts(selectedParentId),
+          ]);
+          if (!live) return;
+
+          // update root immediately → user sees products quickly
+          setChildrenMap((prev) => ({ ...prev, [selectedParentId]: level1 }));
+          setProductsMap((prev) => ({ ...prev, [selectedParentId]: rootProds }));
+
+          // 🔹 2) For each child, load its products + its children in parallel
+          await Promise.all(
+            level1.map(async (c1) => {
+              if (!live) return;
+
+              const [c1Prods, level2] = await Promise.all([
+                loadProducts(c1.id),
+                loadChildren(c1.id),
+              ]);
+              if (!live) return;
+
+              // update as soon as each child finishes → incremental display
+              setProductsMap((prev) => ({ ...prev, [c1.id]: c1Prods }));
+              setChildrenMap((prev) => ({ ...prev, [c1.id]: level2 }));
+              setOpenNode((prev) => ({ ...prev, [c1.id]: true }));
+
+              // 🔹 3) For each grandchild, just load products
+              if (level2.length > 0) {
+                await Promise.all(
+                  level2.map(async (c2) => {
+                    if (!live) return;
+
+                    const c2Prods = await loadProducts(c2.id);
+                    if (!live) return;
+
+                    setProductsMap((prev) => ({ ...prev, [c2.id]: c2Prods }));
+                    setOpenNode((prev) => ({ ...prev, [c2.id]: false }));
+                  })
+                );
+              }
+            })
+          );
+        } catch {
+          if (!live) return;
+          setChildrenMap({});
+          setProductsMap({});
+        } finally {
+          if (live) setLoadingTree(false);
+        }
+      }
+
+      buildTree();
+
+      return () => {
+        live = false;
+      };
+    }, [selectedParentId, loadChildren, loadProducts]);
+
+
 
   const setSelectedParent = (pid: number) => nav(`/categories/${pid}`);
   const toggleNode = (cid: number) => setOpenNode((m) => ({ ...m, [cid]: !m[cid] }));
@@ -326,9 +351,11 @@ export default function ShopCategoriesPage() {
               </div>
             )}
 
-            {prods.length === 0 && children.length === 0 && (
-              <div className="pad muted">No products here yet.</div>
-            )}
+                        {prods.length === 0 && children.length === 0 && !loadingTree && (
+                          <div className="pad muted">No products here yet.</div>
+                        )}
+
+
           </div>
         )}
       </section>
@@ -337,7 +364,7 @@ export default function ShopCategoriesPage() {
 
   return (
     <div className="wrap">
-      <Seo title="Categories • Blossom & Buds" />
+      <Seo title="Categories • Blossom Buds" />
       <style>{css}</style>
 
       <div className="shell">
@@ -383,25 +410,35 @@ export default function ShopCategoriesPage() {
           )}
 
           {/* Parent description block (no duplicate header below) */}
-          {selectedParentId && selParent && (
-            <>
-              <section className="parent-desc card">
-                <div className="pd-in">
-                  <h2>{selParent.name}</h2>
-                  {!!selParent.description && <p className="muted">{selParent.description}</p>}
-                </div>
-              </section>
+                    {/* Parent description block (no duplicate header below) */}
+                    {selectedParentId && selParent && (
+                      <>
+                        <section className="parent-desc card">
+                          <div className="pd-in">
+                            <h2>{selParent.name}</h2>
+                            {!!selParent.description && <p className="muted">{selParent.description}</p>}
+                          </div>
+                        </section>
 
-              {/* Root of the tree — header hidden to prevent duplication */}
-              <Section
-                catId={selParent.id}
-                title={selParent.name}
-                desc={selParent.description ?? null}
-                depth={0}
-                showHeader={false}
-              />
-            </>
-          )}
+                        {/* Small loader while tree is still being built, but keep content visible */}
+                        {loadingTree && (
+                          <section className="card pad muted">
+                            Loading products…
+                          </section>
+                        )}
+
+                        {/* Root of the tree – will handle the “no root products, only subcategories” case */}
+                        <Section
+                          catId={selParent.id}
+                          title={selParent.name}
+                          desc={selParent.description ?? null}
+                          depth={0}
+                          showHeader={false}
+                        />
+                      </>
+                    )}
+
+
         </main>
       </div>
 
