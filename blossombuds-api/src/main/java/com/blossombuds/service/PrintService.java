@@ -323,7 +323,7 @@ public class PrintService {
         float totalsBandHeight = 64f;
         float itemsBottomY     = yCut + totalsBandHeight + 6f;
 
-        // ── TOP FRAME 2: Items in dynamic columns ──
+       /* // ── TOP FRAME 2: Items in dynamic columns ──
         int n = items.size();
         int cols = (n > 24) ? 3 : (n > 12 ? 2 : 1);
         log.debug("[PRINT][PACKING_SLIP_PAGE] items={}, cols={}", n, cols);
@@ -438,7 +438,47 @@ public class PrintService {
                 col.addElement(new Paragraph(" ", new Font(Font.HELVETICA, 2, Font.NORMAL)));
             }
             col.go();
+        }*/
+
+        // ── TOP FRAME 2: Items (single column, auto-paginated if needed) ──
+        Font fItem = new Font(Font.HELVETICA, 11, Font.NORMAL);
+        Font fVar  = new Font(Font.HELVETICA, 10, Font.ITALIC);
+
+// Build item elements once
+        java.util.List<Element> itemElements = new java.util.ArrayList<>();
+        for (OrderItem it : items) {
+            itemElements.add(buildPackingSlipItemElement(it, fItem, fVar));
+            // tiny spacer between items
+            itemElements.add(new Paragraph(" ", new Font(Font.HELVETICA, 2, Font.NORMAL)));
         }
+
+        ColumnText itemsCt = new ColumnText(writer.getDirectContent());
+        float curTop = itemsTopY;
+        float curBottom = itemsBottomY;
+
+        itemsCt.setSimpleColumn(left, curBottom, right, curTop);
+        for (Element el : itemElements) {
+            itemsCt.addElement(el);
+        }
+
+// Render on first page, below header and above totals band
+        int status = itemsCt.go();
+
+// If more text doesn’t fit, continue on new pages (no bottom address on those pages)
+        while (ColumnText.hasMoreText(status)) {
+            doc.newPage();
+            log.info("[PRINT][PACKING_SLIP_PAGE] Items overflow -> new page for orderId={}", order.getId());
+
+            Rectangle p = doc.getPageSize();
+            float pageLeft   = doc.left();
+            float pageRight  = doc.right();
+            float pageTop    = doc.top() - 20f;   // small top guard
+            float pageBottom = doc.bottom() + 20f;
+
+            itemsCt.setSimpleColumn(pageLeft, pageBottom, pageRight, pageTop);
+            status = itemsCt.go();
+        }
+
 
         // ── TOP FRAME 3: Totals band ──
         ColumnText totalsCt = new ColumnText(writer.getDirectContent());
@@ -510,6 +550,87 @@ public class PrintService {
         frCt.go();
 
         log.info("[PRINT][PACKING_SLIP_PAGE] Completed page render for orderId={}", order.getId());
+    }
+
+    /** Build one packing-slip line: [thumbnail] [wrapped text]. */
+    private Element buildPackingSlipItemElement(OrderItem it, Font fItem, Font fVar) throws Exception {
+        PdfPTable itemTbl = new PdfPTable(new float[]{0.7f, 5.3f});
+        itemTbl.setWidthPercentage(100);
+        itemTbl.getDefaultCell().setBorder(Rectangle.NO_BORDER);
+        itemTbl.getDefaultCell().setVerticalAlignment(Element.ALIGN_TOP);
+
+        // 1) Image cell
+        PdfPCell imgCell = new PdfPCell();
+        imgCell.setBorder(Rectangle.NO_BORDER);
+        imgCell.setPaddingTop(1f);
+        imgCell.setPaddingBottom(1f);
+        imgCell.setPaddingRight(4f);
+        imgCell.setVerticalAlignment(Element.ALIGN_TOP);
+        imgCell.setNoWrap(true); // keep image column compact
+
+        try {
+            if (it.getProductId() != null) {
+                ProductImage pImg = productImageRepository
+                        .findFirstByProduct_IdAndActiveTrueOrderBySortOrderAscIdAsc(it.getProductId())
+                        .orElse(null);
+                if (pImg != null) {
+                    String imgUrl = pImg.getUrl();
+                    if (imgUrl == null || imgUrl.isBlank()) {
+                        imgUrl = pImg.getWatermarkVariantUrl();
+                    }
+                    if (imgUrl != null && !imgUrl.isBlank()) {
+                        byte[] imgBytes = downloadImageBytes(imgUrl);
+                        Image img = Image.getInstance(imgBytes);
+                        img.scaleToFit(48f, 48f);        // a bit smaller so text has more height room
+                        img.setAlignment(Image.ALIGN_TOP);
+                        imgCell.addElement(img);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("[PRINT][PACKING_SLIP] Error fetching image for productId={}", it.getProductId(), e);
+        }
+        itemTbl.addCell(imgCell);
+
+        // 2) Text cell (wrapped)
+        PdfPCell textCell = new PdfPCell();
+        textCell.setBorder(Rectangle.NO_BORDER);
+        textCell.setPaddingTop(1.5f);
+        textCell.setPaddingLeft(1f);
+        textCell.setPaddingRight(0f);
+        textCell.setPaddingBottom(0f);
+        textCell.setVerticalAlignment(Element.ALIGN_TOP);
+        textCell.setNoWrap(false); // IMPORTANT: allow wrapping inside this cell
+
+        String productName = safe(it.getProductName());
+        Font itemFont = fItem;
+        if (productName.length() > 30) {
+            itemFont = new Font(fItem.getBaseFont(), 9, Font.NORMAL);
+        }
+
+        Paragraph li = new Paragraph("[ ]  " + nvl(it.getQuantity()) + " × " + productName, itemFont);
+        li.setLeading(0f, 1.2f);       // nicer line spacing
+        li.setSpacingAfter(1f);
+        textCell.addElement(li);
+
+        if (it.getOptionsText() != null && !it.getOptionsText().isBlank()) {
+            String opts = it.getOptionsText();
+            Font varFont = fVar;
+            if (opts.length() > 40) {
+                varFont = new Font(fVar.getBaseFont(), 8, Font.ITALIC);
+            }
+            Paragraph vi = new Paragraph("Variants: " + opts, varFont);
+            vi.setLeading(0f, 1.1f);
+            vi.setSpacingAfter(1.5f);
+            textCell.addElement(vi);
+        }
+
+        itemTbl.addCell(textCell);
+
+        // keep each item as a unit (but ColumnText pagination still works)
+        itemTbl.setKeepTogether(true);
+
+        return itemTbl;
     }
 
 
