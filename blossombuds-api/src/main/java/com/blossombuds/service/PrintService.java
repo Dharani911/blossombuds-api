@@ -228,6 +228,7 @@ public class PrintService {
 
     // ─────────────────────────────────────────────────────────────────────────────
     // REFACTORED: Single-page writer used by both single & bulk methods
+    // Dynamically adjusts columns, font sizes, and image sizes to fit all items
     // ─────────────────────────────────────────────────────────────────────────────
     void writePackingSlipPage(
             Document doc, PdfWriter writer,
@@ -323,16 +324,99 @@ public class PrintService {
         float totalsBandHeight = 64f;
         float itemsBottomY     = yCut + totalsBandHeight + 6f;
 
-       /* // ── TOP FRAME 2: Items in dynamic columns ──
+        // ── TOP FRAME 2: Items in dynamic columns with adaptive sizing ──
         int n = items.size();
-        int cols = (n > 24) ? 3 : (n > 12 ? 2 : 1);
-        log.debug("[PRINT][PACKING_SLIP_PAGE] items={}, cols={}", n, cols);
+        float availableHeight = itemsTopY - itemsBottomY;
+        log.debug("[PRINT][PACKING_SLIP_PAGE] availableHeight={} for {} items", availableHeight, n);
 
-        float colGap   = 12f;
+        // Calculate optimal layout configuration to fit all items
+        // Start with conservative estimates and shrink if needed
+        int cols;
+        float imgSize;
+        float itemFontSize;
+        float varFontSize;
+        float itemHeight;
+        float colGap = 10f;
+
+        // Determine optimal configuration based on item count and available space
+        // We'll try different configurations until items fit
+        if (n <= 6) {
+            // Few items: 1 column, large images/fonts
+            cols = 1;
+            imgSize = 48f;
+            itemFontSize = 11f;
+            varFontSize = 10f;
+            itemHeight = 58f; // image height + padding
+        } else if (n <= 12) {
+            // Moderate items: 1-2 columns
+            cols = 2;
+            imgSize = 44f;
+            itemFontSize = 10f;
+            varFontSize = 9f;
+            itemHeight = 52f;
+        } else if (n <= 20) {
+            // More items: 2 columns, smaller sizing
+            cols = 2;
+            imgSize = 40f;
+            itemFontSize = 9f;
+            varFontSize = 8f;
+            itemHeight = 48f;
+        } else if (n <= 30) {
+            // Many items: 3 columns
+            cols = 3;
+            imgSize = 36f;
+            itemFontSize = 8f;
+            varFontSize = 7f;
+            itemHeight = 44f;
+        } else if (n <= 45) {
+            // Very many items: 3 columns, compact
+            cols = 3;
+            imgSize = 32f;
+            itemFontSize = 7f;
+            varFontSize = 6f;
+            itemHeight = 40f;
+        } else {
+            // Extreme case: 3 columns, minimum sizing
+            cols = 3;
+            imgSize = 28f;
+            itemFontSize = 6f;
+            varFontSize = 5f;
+            itemHeight = 36f;
+        }
+
+        // Verify the configuration fits; if not, shrink further
+        int itemsPerCol = (int) Math.ceil(n / (double) cols);
+        float requiredHeight = itemsPerCol * itemHeight;
+
+        // Iteratively shrink if content doesn't fit
+        while (requiredHeight > availableHeight && itemHeight > 20f) {
+            // Try increasing columns first (up to 3)
+            if (cols < 3) {
+                cols++;
+                itemsPerCol = (int) Math.ceil(n / (double) cols);
+                requiredHeight = itemsPerCol * itemHeight;
+                log.debug("[PRINT][PACKING_SLIP_PAGE] Increased to {} columns, requiredHeight={}", cols, requiredHeight);
+                if (requiredHeight <= availableHeight) break;
+            }
+
+            // Shrink item dimensions
+            imgSize = Math.max(20f, imgSize - 4f);
+            itemFontSize = Math.max(5f, itemFontSize - 0.5f);
+            varFontSize = Math.max(4f, varFontSize - 0.5f);
+            itemHeight = Math.max(24f, itemHeight - 4f);
+            
+            itemsPerCol = (int) Math.ceil(n / (double) cols);
+            requiredHeight = itemsPerCol * itemHeight;
+            log.debug("[PRINT][PACKING_SLIP_PAGE] Shrunk to imgSize={}, itemHeight={}, requiredHeight={}", 
+                    imgSize, itemHeight, requiredHeight);
+        }
+
+        log.info("[PRINT][PACKING_SLIP_PAGE] Final layout: cols={}, imgSize={}, itemFontSize={}, itemHeight={}", 
+                cols, imgSize, itemFontSize, itemHeight);
+
         float colWidth = (right - left - (colGap * (cols - 1))) / cols;
-
-        Font fItem = new Font(Font.HELVETICA, 11, Font.NORMAL);
-        Font fVar  = new Font(Font.HELVETICA, 10, Font.ITALIC);
+        Font fItem = new Font(Font.HELVETICA, itemFontSize, Font.NORMAL);
+        Font fVar  = new Font(Font.HELVETICA, varFontSize, Font.ITALIC);
 
         int perCol = (int) Math.ceil(n / (double) cols);
         for (int ci = 0; ci < cols; ci++) {
@@ -349,8 +433,12 @@ public class PrintService {
             for (int i = start; i < end; i++) {
                 OrderItem it = items.get(i);
 
+                // Calculate image cell width ratio based on image size
+                float imgCellRatio = imgSize / (imgSize + 120f); // Approximate ratio
+                float textCellRatio = 1f - imgCellRatio;
+                
                 // Create a small table for the item: [Image] [Text]
-                PdfPTable itemTbl = new PdfPTable(new float[]{0.7f, 5.3f}); // 0.7 vs 5.3 to give text a bit more room
+                PdfPTable itemTbl = new PdfPTable(new float[]{imgCellRatio, textCellRatio});
                 itemTbl.setWidthPercentage(100);
                 itemTbl.getDefaultCell().setBorder(Rectangle.NO_BORDER);
                 itemTbl.getDefaultCell().setVerticalAlignment(Element.ALIGN_TOP);
@@ -358,10 +446,11 @@ public class PrintService {
                 // 1. Image Cell
                 PdfPCell imgCell = new PdfPCell();
                 imgCell.setBorder(Rectangle.NO_BORDER);
-                imgCell.setPaddingTop(1f);
-                imgCell.setPaddingBottom(1f);
-                imgCell.setPaddingRight(3f);
+                imgCell.setPaddingTop(0f);
+                imgCell.setPaddingBottom(0f);
+                imgCell.setPaddingRight(2f);
                 imgCell.setVerticalAlignment(Element.ALIGN_TOP);
+                imgCell.setFixedHeight(imgSize + 4f);
 
                 try {
                     if (it.getProductId() != null) {
@@ -375,23 +464,18 @@ public class PrintService {
                             }
 
                             if (imgUrl != null && !imgUrl.isBlank()) {
-                                log.info("[PRINT][PACKING_SLIP] Loading image for item {} from: {}",
-                                        it.getProductName(), imgUrl);
+                                log.debug("[PRINT][PACKING_SLIP] Loading image for item {} (size={})", 
+                                        it.getProductName(), imgSize);
                                 try {
                                     byte[] imgBytes = downloadImageBytes(imgUrl);
                                     Image img = Image.getInstance(imgBytes);
-                                    img.scaleToFit(56f, 56f);        // fixed thumbnail box
-                                    img.setAlignment(Image.ALIGN_TOP); // stay at top of the cell
+                                    img.scaleToFit(imgSize, imgSize);
+                                    img.setAlignment(Image.ALIGN_TOP);
                                     imgCell.addElement(img);
                                 } catch (Exception e) {
                                     log.error("[PRINT][PACKING_SLIP] Failed to load image from URL: {}", imgUrl, e);
                                 }
-                            } else {
-                                log.warn("[PRINT][PACKING_SLIP] Found image record but no URL for product {}",
-                                        it.getProductName());
                             }
-                        } else {
-                            log.info("[PRINT][PACKING_SLIP] No active image found for product {}", it.getProductName());
                         }
                     }
                 } catch (Exception e) {
@@ -402,31 +486,43 @@ public class PrintService {
                 // 2. Text Cell
                 PdfPCell textCell = new PdfPCell();
                 textCell.setBorder(Rectangle.NO_BORDER);
-                textCell.setPaddingTop(1.5f);   // small top padding so text never touches the image
+                textCell.setPaddingTop(1f);
                 textCell.setPaddingLeft(1f);
                 textCell.setPaddingRight(0f);
                 textCell.setPaddingBottom(0f);
 
-                // Adjust font size for long product names to avoid overflow
                 String productName = safe(it.getProductName());
+                // Truncate very long names if in compact mode
+                if (productName.length() > 40 && itemFontSize <= 8) {
+                    productName = productName.substring(0, 37) + "...";
+                } else if (productName.length() > 50 && itemFontSize <= 9) {
+                    productName = productName.substring(0, 47) + "...";
+                }
+                
                 Font itemFont = fItem;
-                if (productName.length() > 30) {
-                    itemFont = new Font(fItem.getBaseFont(), 9, Font.NORMAL);
+                if (productName.length() > 30 && itemFontSize > 7) {
+                    itemFont = new Font(Font.HELVETICA, Math.max(6f, itemFontSize - 1f), Font.NORMAL);
                 }
                 Paragraph li = new Paragraph("[ ]  " + nvl(it.getQuantity()) + " × " + productName, itemFont);
+                li.setLeading(0f, 1.1f);
                 li.setSpacingAfter(0f);
                 textCell.addElement(li);
 
-                // Variants text may also be long; shrink if needed
+                // Variants text
                 if (it.getOptionsText() != null && !it.getOptionsText().isBlank()) {
                     String opts = it.getOptionsText();
+                    // Truncate long variant text in compact mode
+                    if (opts.length() > 50 && varFontSize <= 7) {
+                        opts = opts.substring(0, 47) + "...";
+                    }
                     Font varFont = fVar;
-                    if (opts.length() > 40) {
-                        varFont = new Font(fVar.getBaseFont(), 8, Font.ITALIC);
+                    if (opts.length() > 40 && varFontSize > 6) {
+                        varFont = new Font(Font.HELVETICA, Math.max(5f, varFontSize - 1f), Font.ITALIC);
                     }
                     Paragraph vi = new Paragraph("Variants: " + opts, varFont);
+                    vi.setLeading(0f, 1.0f);
                     vi.setIndentationLeft(0f);
-                    vi.setSpacingAfter(1.5f);
+                    vi.setSpacingAfter(0f);
                     textCell.addElement(vi);
                 }
 
@@ -434,51 +530,15 @@ public class PrintService {
                 itemTbl.setKeepTogether(true);
 
                 col.addElement(itemTbl);
-                // small spacer between items to avoid visual crowding
-                col.addElement(new Paragraph(" ", new Font(Font.HELVETICA, 2, Font.NORMAL)));
+                // Minimal spacer between items
+                Paragraph spacerP = new Paragraph(" ", new Font(Font.HELVETICA, 1, Font.NORMAL));
+                spacerP.setSpacingAfter(1f);
+                col.addElement(spacerP);
             }
             col.go();
-        }*/
-
-        // ── TOP FRAME 2: Items (single column, auto-paginated if needed) ──
-        Font fItem = new Font(Font.HELVETICA, 11, Font.NORMAL);
-        Font fVar  = new Font(Font.HELVETICA, 10, Font.ITALIC);
-
-// Build item elements once
-        java.util.List<Element> itemElements = new java.util.ArrayList<>();
-        for (OrderItem it : items) {
-            itemElements.add(buildPackingSlipItemElement(it, fItem, fVar));
-            // tiny spacer between items
-            itemElements.add(new Paragraph(" ", new Font(Font.HELVETICA, 2, Font.NORMAL)));
         }
 
-        ColumnText itemsCt = new ColumnText(writer.getDirectContent());
-        float curTop = itemsTopY;
-        float curBottom = itemsBottomY;
-
-        itemsCt.setSimpleColumn(left, curBottom, right, curTop);
-        for (Element el : itemElements) {
-            itemsCt.addElement(el);
-        }
-
-// Render on first page, below header and above totals band
-        int status = itemsCt.go();
-
-// If more text doesn’t fit, continue on new pages (no bottom address on those pages)
-        while (ColumnText.hasMoreText(status)) {
-            doc.newPage();
-            log.info("[PRINT][PACKING_SLIP_PAGE] Items overflow -> new page for orderId={}", order.getId());
-
-            Rectangle p = doc.getPageSize();
-            float pageLeft   = doc.left();
-            float pageRight  = doc.right();
-            float pageTop    = doc.top() - 20f;   // small top guard
-            float pageBottom = doc.bottom() + 20f;
-
-            itemsCt.setSimpleColumn(pageLeft, pageBottom, pageRight, pageTop);
-            status = itemsCt.go();
-        }
-
+        log.info("[PRINT][PACKING_SLIP_PAGE] Rendered {} items in {} columns for orderId={}", n, cols, order.getId());
 
         // ── TOP FRAME 3: Totals band ──
         ColumnText totalsCt = new ColumnText(writer.getDirectContent());
