@@ -74,7 +74,7 @@ public class RedisConfig {
         @com.fasterxml.jackson.annotation.JsonCreator
         public PageImplMixin(
                 @com.fasterxml.jackson.annotation.JsonProperty("content") java.util.List<?> content,
-                @com.fasterxml.jackson.annotation.JsonProperty("pageable") com.fasterxml.jackson.databind.JsonNode pageable,
+                @com.fasterxml.jackson.annotation.JsonProperty("pageable") org.springframework.data.domain.Pageable pageable,
                 @com.fasterxml.jackson.annotation.JsonProperty("totalElements") long total) {
         }
     }
