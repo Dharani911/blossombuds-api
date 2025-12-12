@@ -73,9 +73,13 @@ public class Coupon {
     @Column(name = "per_customer_limit")
     private Integer perCustomerLimit;
 
-    /** Soft-visibility/activation flag. */
+    /** Soft-delete flag (when false, record is considered deleted). */
     @Column(name = "active", nullable = false)
     private Boolean active = Boolean.TRUE;
+
+    /** Visibility flag (when false, coupon is hidden from customers but visible to admin). */
+    @Column(name = "visible", nullable = false)
+    private Boolean visible = Boolean.TRUE;
 
     /** Audit: created by whom. */
     @CreatedBy

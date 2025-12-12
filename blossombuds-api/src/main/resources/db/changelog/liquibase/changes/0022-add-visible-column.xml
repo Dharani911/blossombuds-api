@@ -1,0 +1,36 @@
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+  https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- Add 'visible' column to coupons table for customer visibility control -->
+    <changeSet id="0022-01-add-visible-to-coupons" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="coupons" columnName="visible"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="coupons">
+            <column name="visible" type="BOOLEAN" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <comment>Visibility flag: when false, coupon is hidden from customers but visible to admin</comment>
+    </changeSet>
+
+    <!-- Add 'visible' column to delivery_partners table for customer visibility control -->
+    <changeSet id="0022-02-add-visible-to-delivery-partners" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="delivery_partners" columnName="visible"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="delivery_partners">
+            <column name="visible" type="BOOLEAN" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <comment>Visibility flag: when false, partner is hidden from customers but visible to admin</comment>
+    </changeSet>
+
+</databaseChangeLog>

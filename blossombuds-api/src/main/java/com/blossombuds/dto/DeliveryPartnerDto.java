@@ -14,4 +14,6 @@ public class DeliveryPartnerDto {
     private String trackingUrlTemplate;
     /** Active flag (defaults to true on create). */
     private Boolean active;
+    /** Visibility flag — when false, partner is hidden from customers but visible to admin. */
+    private Boolean visible;
 }

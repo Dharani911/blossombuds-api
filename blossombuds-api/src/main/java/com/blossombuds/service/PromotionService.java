@@ -81,6 +81,16 @@ public class PromotionService {
         c.setActive(active);
     }
 
+    @Transactional
+    @PreAuthorize("hasRole('ADMIN')")
+    public void setCouponVisible(Long id, boolean visible) {
+        log.info("[COUPON][VISIBLE] Setting coupon id={} visible={}", id, visible);
+
+        Coupon c = couponRepo.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Coupon not found: " + id));
+        c.setVisible(visible);
+    }
+
     /* =================== Mapping & validation =================== */
 
     private void applyCouponFields(Coupon c, CouponDto dto, boolean isCreate) {
@@ -139,6 +149,9 @@ public class PromotionService {
 
         if (dto.getActive() != null) c.setActive(dto.getActive());
         else if (isCreate) c.setActive(Boolean.TRUE);
+
+        if (dto.getVisible() != null) c.setVisible(dto.getVisible());
+        else if (isCreate) c.setVisible(Boolean.TRUE);
     }
 
     private CouponDto toDto(Coupon c) {
@@ -155,6 +168,7 @@ public class PromotionService {
         dto.setUsageLimit(c.getUsageLimit());
         dto.setPerCustomerLimit(c.getPerCustomerLimit());
         dto.setActive(c.getActive());
+        dto.setVisible(c.getVisible());
         return dto;
     }
 
@@ -162,13 +176,13 @@ public class PromotionService {
 
     /* ======================= Public APIs ======================= */
 
-    /** Returns an active coupon by code, if present. */
+    /** Returns a visible (customer-facing) coupon by code, if present. */
     public Optional<Coupon> getActiveCoupon(String code) {
-        log.debug("[COUPON][LOOKUP] Looking up active coupon for code={}", code);
+        log.debug("[COUPON][LOOKUP] Looking up visible coupon for code={}", code);
 
         String norm = normalize(code);
         if (norm == null || norm.isBlank()) return Optional.empty();
-        return couponRepo.findByCodeIgnoreCaseAndActiveTrue(norm);
+        return couponRepo.findByCodeIgnoreCaseAndVisibleTrue(norm);
     }
 
     /**
@@ -179,8 +193,8 @@ public class PromotionService {
         log.info("[COUPON][PREVIEW] Preview discount code={} customerId={} orderTotal={}",
                 code, customerId, orderTotal);
 
-        Coupon c = couponRepo.findByCodeIgnoreCaseAndActiveTrue(requireNormalize(code))
-                .orElseThrow(() -> new IllegalArgumentException("Coupon not found or inactive"));
+        Coupon c = couponRepo.findByCodeIgnoreCaseAndVisibleTrue(requireNormalize(code))
+                .orElseThrow(() -> new IllegalArgumentException("Coupon not found or hidden"));
         validateUsageAndWindow(c, customerId);
         validateMinTotal(c, orderTotal);
         validateMinItems(c, itemsCount);
@@ -204,8 +218,8 @@ public class PromotionService {
                 .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
         if (customerId == null) customerId = order.getCustomerId();
 
-        Coupon c = couponRepo.findByCodeIgnoreCaseAndActiveTrue(requireNormalize(code))
-                .orElseThrow(() -> new IllegalArgumentException("Coupon not found or inactive"));
+        Coupon c = couponRepo.findByCodeIgnoreCaseAndVisibleTrue(requireNormalize(code))
+                .orElseThrow(() -> new IllegalArgumentException("Coupon not found or hidden"));
 
         // enforce all conditions
         validateUsageAndWindow(c, customerId);

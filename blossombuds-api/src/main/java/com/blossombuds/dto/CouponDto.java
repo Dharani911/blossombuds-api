@@ -38,5 +38,8 @@ public class CouponDto {
     /** Active flag — maps to 'active'. */
     private Boolean active;
 
+    /** Visibility flag — maps to 'visible'. When false, coupon is hidden from customers. */
+    private Boolean visible;
+
 
 }

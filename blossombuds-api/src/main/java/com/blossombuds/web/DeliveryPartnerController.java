@@ -68,19 +68,34 @@ public class DeliveryPartnerController {
         return partners.listAll();
     }
 
-    /** List only active partners (public). */
+    /** List only active partners (for admin dropdown). */
     @GetMapping("/active")
     public List<DeliveryPartner> listActive() {
         return partners.listActive();
     }
 
-    /** Toggle active flag (admin). */
+    /** List only visible partners (for customer-facing features). */
+    @GetMapping("/visible")
+    public List<DeliveryPartner> listVisible() {
+        return partners.listVisible();
+    }
+
+    /** Toggle active flag (soft-delete, admin). */
     @PostMapping("/{id}/active/{active}")
     @PreAuthorize("hasRole('ADMIN')")
     public DeliveryPartner setActive(@PathVariable @Min(1) Long id,
                                      @PathVariable boolean active,
                                      Authentication auth) {
         return partners.setActive(id, active, actor(auth));
+    }
+
+    /** Toggle visibility flag (hide/show from customers, admin). */
+    @PostMapping("/{id}/visible/{visible}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public DeliveryPartner setVisible(@PathVariable @Min(1) Long id,
+                                      @PathVariable boolean visible,
+                                      Authentication auth) {
+        return partners.setVisible(id, visible, actor(auth));
     }
 
     /** Hard delete (admin; prefer setActive(false)). */

@@ -13,6 +13,7 @@ export type Coupon = {
   usageLimit?: number | null;
   perCustomerLimit?: number | null;
   active?: boolean;
+  visible?: boolean;                          // visibility flag (hide from customers)
   minItems?: number | null;                   // maps to "min_items"
 };
 
@@ -40,6 +41,10 @@ export async function updateCoupon(id: number, patch: CouponUpdate): Promise<Cou
 
 export async function setCouponActive(id: number, active: boolean): Promise<void> {
   await adminHttp.post(`/api/promotions/admin/coupons/${id}/active`, null, { params: { active } });
+}
+
+export async function setCouponVisible(id: number, visible: boolean): Promise<void> {
+  await adminHttp.post(`/api/promotions/admin/coupons/${id}/visible`, null, { params: { visible } });
 }
 
 export async function getCoupon(id: number): Promise<Coupon> {
@@ -75,6 +80,7 @@ export function sanitizeCouponPayload(c: Coupon): Partial<Coupon> {
     usageLimit: c.usageLimit ?? undefined,
     perCustomerLimit: c.perCustomerLimit ?? undefined,
     active: c.active ?? undefined,
+    visible: c.visible ?? undefined,
     minItems: typeof c.minItems === "number" ? c.minItems : (c.minItems == null ? undefined : Number(c.minItems)),
   };
 }
@@ -84,6 +90,7 @@ export default {
   createCoupon,
   updateCoupon,
   setCouponActive,
+  setCouponVisible,
   getCoupon,
   sanitizeCouponPayload,
 };

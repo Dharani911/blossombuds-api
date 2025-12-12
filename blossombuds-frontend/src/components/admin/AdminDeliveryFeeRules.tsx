@@ -191,7 +191,7 @@ export default function AdminDeliveryFeeRules() {
   const districtName = (id?: number | null) => (districts.find(d => d.id === id)?.name) || "";
 
   return (
-    <section id="delivery-fee-rules" className="block">
+    <section id="delivery-fee-rules" className="dfr-block">
       <style>{css}</style>
       {toast && (
         <div className={"toast " + toast.kind} onAnimationEnd={() => setToast(null)} style={{ position: "static", marginBottom: 8 }}>
@@ -199,13 +199,13 @@ export default function AdminDeliveryFeeRules() {
         </div>
       )}
 
-      <div className="block-hd">
-        <h3>Delivery Fee Rules</h3>
+      <div className="dfr-hd">
+        <h3><span style={{ fontSize: "24px", color: "initial", marginRight: "12px", WebkitTextFillColor: "initial" }}>🚚</span> Delivery Fee Rules</h3>
         <p className="muted">
           Configure shipping fees by <strong>Default</strong>, <strong>State</strong>, or <strong>District</strong>. Highest specificity wins.
         </p>
       </div>
-      <div className="block-body card" style={{ padding: 10 }}>
+      <div className="dfr-body card" style={{ padding: 10 }}>
         {/* Draft/new row */}
         <div className="trow tgrid">
           <div className="cell">
@@ -382,35 +382,146 @@ export default function AdminDeliveryFeeRules() {
 
 /* local styles for this block only */
 const css = `
-.block{ margin-bottom:14px; color:${PRIMARY}; }
-.block-hd{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding:0 2px 4px; }
-.block-hd h3{ margin:0; font-size:18px; font-weight:900; letter-spacing:.2px; color:${PRIMARY}; }
-.block-body.card{ padding:10px 12px; border:1px solid ${INK}; border-radius:14px; background:#fff; box-shadow:0 12px 36px rgba(0,0,0,.08); }
-
-.trow{ display:grid; align-items:center; padding:12px 14px; border-bottom:1px solid rgba(0,0,0,.06); }
-.trow:last-child{ border-bottom:none; }
-.trow.thead{ font-weight:800; background:rgba(0,0,0,.03); grid-template-columns: 160px 1fr 160px 120px 180px; }
-.trow.tgrid{ grid-template-columns: 160px 1fr 160px 120px 180px; }
-.cell{ min-width:0; }
-.lbl{ font-size:12px; font-weight:800; opacity:.8; margin-bottom:4px; display:block; }
-.in{ height:34px; width:100%; border:1px solid ${INK}; border-radius:8px; padding:0 10px; background:#fff; outline:none; }
-.val{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-
-.muted{ opacity:.75; font-size:12px; }
-.toast{ padding:10px 12px; border-radius:12px; color:#fff; }
-.toast.ok{ background:#4caf50; }
-.toast.bad{ background:#d32f2f; }
-
-/* buttons */
-.ghost{ height:32px; padding:0 10px; border-radius:10px; border:1px solid ${INK}; background:#fff; color:${PRIMARY}; cursor:pointer; }
-.ghost.sm{ height:28px; padding: 0 10px; border-radius:8px; font-size:12.5px; }
-.ghost.ok{ border-color: rgba(89,178,107,.4); }
-.ghost.bad{ border-color: rgba(240,93,139,.5); color:#b0003a; }
-
-@media (max-width: 860px){
-  .trow.thead, .trow.tgrid{ grid-template-columns: 140px 1fr 140px 110px 160px; }
+.dfr-block{
+  margin-bottom:24px; color:${PRIMARY};
+  background:#fff; border-radius:20px;
+  border:1px solid rgba(0,0,0,.08);
+  box-shadow:0 8px 32px rgba(0,0,0,.06);
+  overflow:hidden;
 }
-@media (max-width: 680px){
-  .trow.thead, .trow.tgrid{ grid-template-columns: 120px 1fr 120px 100px 140px; }
+
+/* ─────────────── HEADER ─────────────── */
+.dfr-hd{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:20px 24px;
+  background:linear-gradient(180deg, rgba(246,195,32,.08), #fff);
+  border-bottom:1px solid rgba(0,0,0,.08);
+  position:relative;
+}
+.dfr-hd::after{
+  content:''; position:absolute; bottom:0; left:0; right:0; height:3px;
+  background:linear-gradient(90deg, #F05D8B, #F6C320, #4BE0B0);
+}
+.dfr-hd h3{
+  margin:0; font-size:20px; font-weight:900; letter-spacing:.3px;
+  background:linear-gradient(135deg, #F05D8B, #F6C320);
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+  background-clip:text;
+  display:flex; align-items:center;
+}
+
+.muted{ opacity:.75; font-size:13px; margin:0; }
+.muted strong{ color:#2B2E2A; font-weight:700; }
+
+/* ─────────────── BODY ─────────────── */
+.dfr-body.card{
+  padding:0; border:none; box-shadow:none;
+}
+
+/* ─────────────── TABLE ─────────────── */
+.trow{
+  display:grid; align-items:center;
+  padding:16px 24px;
+  border-bottom:1px solid rgba(0,0,0,.06);
+  transition: all .15s ease;
+}
+.trow:last-child{ border-bottom:none; }
+.trow:hover:not(.thead){
+  background:linear-gradient(90deg, rgba(240,93,139,.02), rgba(246,195,32,.02));
+}
+
+.trow.thead{
+  font-weight:900; text-transform:uppercase; letter-spacing:.8px; font-size:11px;
+  background:#fafafa;
+  border-bottom:1px solid rgba(0,0,0,.08);
+  color:rgba(0,0,0,.6);
+}
+
+/* Grid columns matching the component logic */
+.trow.thead, .trow.tgrid{
+  gap:16px;
+  grid-template-columns: 160px 1fr 140px 120px 160px;
+}
+
+.cell{ min-width:0; }
+.lbl{
+  font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.5px;
+  opacity:.7; margin-bottom:6px; display:block;
+}
+
+/* ─────────────── INPUTS ─────────────── */
+.in{
+  height:40px; width:100%;
+  border:1px solid rgba(0,0,0,.12); border-radius:10px;
+  padding:0 12px; background:#fff; outline:none;
+  font-size:14px;
+  transition: all .12s ease;
+}
+.in:focus{
+  border-color:#F05D8B; box-shadow:0 0 0 3px rgba(240,93,139,.1);
+}
+.in:disabled{ background:#f9f9f9; cursor:not-allowed; opacity:.8; }
+
+.val{
+  font-size:14px; font-weight:600;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  color:#2B2E2A;
+}
+
+/* ─────────────── BUTTONS ─────────────── */
+.ghost{
+  height:34px; padding:0 14px; border-radius:10px;
+  border:1px solid rgba(0,0,0,.12); background:#fff;
+  cursor:pointer; font-weight:700; font-size:13px;
+  display:inline-flex; align-items:center; justify-content:center;
+  transition: all .12s ease;
+}
+.ghost:hover{
+  background:#fafafa; transform:translateY(-1px);
+  box-shadow:0 4px 12px rgba(0,0,0,.06);
+}
+
+/* Success Action */
+.ghost.ok{
+  background:linear-gradient(135deg, #0f5132, #1a7d4e);
+  color:#fff; border:none;
+  box-shadow:0 4px 12px rgba(15,81,50,.2);
+}
+.ghost.ok:hover{
+  background:linear-gradient(135deg, #146c43, #22a566);
+  box-shadow:0 6px 16px rgba(15,81,50,.3);
+}
+
+/* Danger Action */
+.ghost.bad{
+  color:#b00020; border-color:rgba(176,0,32,.2);
+}
+.ghost.bad:hover{
+  background:#fff5f5; border-color:#b00020;
+}
+
+/* ─────────────── TOAST ─────────────── */
+.toast{
+  padding:12px 18px; border-radius:12px;
+  color:#fff; font-weight:600; font-size:14px;
+  box-shadow:0 8px 24px rgba(0,0,0,.15);
+  animation: fadeIn .2s ease-out;
+}
+.toast.ok{ background:linear-gradient(135deg, #0f5132, #1a7d4e); }
+.toast.bad{ background:linear-gradient(135deg, #842029, #a52a33); }
+@keyframes fadeIn { from{ opacity:0; transform:translateY(4px); } to{ opacity:1; transform:translateY(0); } }
+
+/* ─────────────── RESPONSIVE ─────────────── */
+@media (max-width: 900px){
+  .trow.thead, .trow.tgrid{ grid-template-columns: 140px 1fr 120px 100px 140px; gap:12px; }
+  .block-hd{ flex-direction:column; align-items:stretch; gap:12px; }
+}
+@media (max-width: 720px){
+  .trow{ display:flex; flex-direction:column; align-items:stretch; gap:12px; padding:16px; }
+  .trow.thead{ display:none; }
+  .cell{ width:100%; }
+  .val{ font-size:15px; }
+  .in{ height:44px; }
+  .ghost{ width:100%; height:40px; }
 }
 `;

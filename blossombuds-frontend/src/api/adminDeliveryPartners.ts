@@ -6,6 +6,7 @@ export type DeliveryPartner = {
   code: string;
   trackingUrlTemplate?: string | null;
   active?: boolean;
+  visible?: boolean;  // visibility flag (hide from customers)
 };
 
 export async function listPartners(): Promise<DeliveryPartner[]> {
@@ -25,6 +26,11 @@ export async function updatePartner(id: number, payload: DeliveryPartner): Promi
 
 export async function togglePartnerActive(id: number, active: boolean): Promise<DeliveryPartner> {
   const { data } = await adminHttp.post<DeliveryPartner>(`/api/partners/${id}/active/${active}`);
+  return data;
+}
+
+export async function togglePartnerVisible(id: number, visible: boolean): Promise<DeliveryPartner> {
+  const { data } = await adminHttp.post<DeliveryPartner>(`/api/partners/${id}/visible/${visible}`);
   return data;
 }
 

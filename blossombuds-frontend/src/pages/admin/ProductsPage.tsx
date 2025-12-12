@@ -30,10 +30,10 @@ import {
 
 /* ---------- Theme ---------- */
 const PRIMARY = "#2F2F2F";
-const ACCENT  = "#F05D8B";
-const GOLD    = "#F6C320";
-const MINT    = "#73C2A7";
-const INK     = "rgba(0,0,0,.08)";
+const ACCENT = "#F05D8B";
+const GOLD = "#F6C320";
+const MINT = "#73C2A7";
+const INK = "rgba(0,0,0,.08)";
 
 /* ---------- Tiny UI bits ---------- */
 function Toggle({
@@ -60,8 +60,8 @@ function Toggle({
     </button>
   );
 }
-function fmtRange(from:number, to:number, total:number){
-  if (total===0) return "0 results";
+function fmtRange(from: number, to: number, total: number) {
+  if (total === 0) return "0 results";
   return `${from}–${to} of ${new Intl.NumberFormat("en-IN").format(total)}`;
 }
 
@@ -92,17 +92,17 @@ function StarButton({
   );
 }
 
-export default function ProductsPage(){
-  const [page, setPage]   = useState(0);
-  const [size, setSize]   = useState(12);
+export default function ProductsPage() {
+  const [page, setPage] = useState(0);
+  const [size, setSize] = useState(12);
   const [loading, setLoading] = useState(true);
-  const [err, setErr]         = useState<string|null>(null);
-  const [data, setData]       = useState<Page<Product> | null>(null);
-  const [q, setQ]             = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [data, setData] = useState<Page<Product> | null>(null);
+  const [q, setQ] = useState("");
 
-  const [modal, setModal] = useState<null | { mode:"add" | "edit"; data?: Product }>(null);
-  const [busy, setBusy]   = useState(false);
-  const [toast, setToast] = useState<null | { kind:"ok"|"bad", msg:string }>(null);
+  const [modal, setModal] = useState<null | { mode: "add" | "edit"; data?: Product }>(null);
+  const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<null | { kind: "ok" | "bad", msg: string }>(null);
   const dismissToast = () => setToast(null);
 
   // Separate per-row locks
@@ -110,29 +110,30 @@ export default function ProductsPage(){
   const [busyVisible, setBusyVisible] = useState<Record<number, boolean>>({});
   const isLocked = (id: number) => !!busyFeature[id] || !!busyVisible[id];
 
-  useEffect(()=>{ let alive=true;
-    (async()=>{
+  useEffect(() => {
+    let alive = true;
+    (async () => {
       setLoading(true); setErr(null);
-      try{
+      try {
         const pg = await listProducts(page, size);
         if (!alive) return;
         setData(pg);
-      }catch(e:any){
+      } catch (e: any) {
         setErr(e?.response?.data?.message || "Failed to load products.");
-      }finally{
+      } finally {
         if (alive) setLoading(false);
       }
     })();
-    return ()=>{ alive=false; };
+    return () => { alive = false; };
   }, [page, size]);
 
-  const filtered = useMemo(()=>{
+  const filtered = useMemo(() => {
     const items = (data?.content || []);
     const qq = q.toLowerCase().trim();
     return items.filter(p =>
       !qq ||
       p.name.toLowerCase().includes(qq) ||
-      (p.slug||"").toLowerCase().includes(qq)
+      (p.slug || "").toLowerCase().includes(qq)
     );
   }, [data, q]);
 
@@ -143,58 +144,58 @@ export default function ProductsPage(){
     setData(pg);
   }
 
-  async function onDelete(id:number){
+  async function onDelete(id: number) {
     if (!confirm("Delete this product? This is a soft delete (marks as inactive).")) return;
-    try{
+    try {
       await deleteProduct(id);
-      setToast({kind:"ok", msg:"Product deleted"});
+      setToast({ kind: "ok", msg: "Product deleted" });
       await reload();
-    }catch(e:any){
-      setToast({kind:"bad", msg: e?.response?.data?.message || "Delete failed"});
+    } catch (e: any) {
+      setToast({ kind: "bad", msg: e?.response?.data?.message || "Delete failed" });
     }
   }
 
   // Toggle VISIBLE — use updateProduct(id, { visible: ... })
-  async function onToggleVisible(p: Product, nextVisible: boolean){
+  async function onToggleVisible(p: Product, nextVisible: boolean) {
     if (isLocked(p.id)) return;
     setBusyVisible(m => ({ ...m, [p.id]: true }));
     // optimistic
     const prevVisible = Boolean((p as any).visible ?? (p as any).isVisible);
-    setData(d => d ? ({...d, content: d.content.map(x => x.id===p.id ? {...x, visible: nextVisible} : x)}) : d);
-    try{
+    setData(d => d ? ({ ...d, content: d.content.map(x => x.id === p.id ? { ...x, visible: nextVisible } : x) }) : d);
+    try {
       const updated = await updateProduct(p.id, { visible: nextVisible } as any);
       const serverVisible = Boolean((updated as any).visible ?? (updated as any).isVisible ?? nextVisible);
-      setData(d => d ? ({...d, content: d.content.map(x => x.id===p.id ? {...x, visible: serverVisible} : x)}) : d);
-      setToast({kind:"ok", msg: serverVisible ? "Product is now visible" : "Product hidden"});
-    }catch(e:any){
+      setData(d => d ? ({ ...d, content: d.content.map(x => x.id === p.id ? { ...x, visible: serverVisible } : x) }) : d);
+      setToast({ kind: "ok", msg: serverVisible ? "Product is now visible" : "Product hidden" });
+    } catch (e: any) {
       // revert
-      setData(d => d ? ({...d, content: d.content.map(x => x.id===p.id ? {...x, visible: prevVisible} : x)}) : d);
-      setToast({kind:"bad", msg: e?.response?.data?.message || "Failed to toggle visibility"});
+      setData(d => d ? ({ ...d, content: d.content.map(x => x.id === p.id ? { ...x, visible: prevVisible } : x) }) : d);
+      setToast({ kind: "bad", msg: e?.response?.data?.message || "Failed to toggle visibility" });
     } finally {
       setBusyVisible(m => ({ ...m, [p.id]: false }));
     }
   }
 
   // Persist featured flag from the list
-  async function onToggleFeatured(p: Product){
+  async function onToggleFeatured(p: Product) {
     if (isLocked(p.id)) return;
     setBusyFeature(m => ({ ...m, [p.id]: true }));
-    try{
+    try {
       const desired = !p.featured;
       const updated = await setProductFeatured(p.id, desired);
       setData(d =>
         d ? ({ ...d, content: d.content.map(x => x.id === p.id ? { ...x, featured: !!updated.featured } : x) }) : d
       );
-      setToast({ kind:"ok", msg: (!!updated.featured ? "Marked as featured" : "Removed from featured") });
-    }catch(e:any){
-      setToast({ kind:"bad", msg: e?.response?.data?.message || "Failed to update featured flag" });
+      setToast({ kind: "ok", msg: (!!updated.featured ? "Marked as featured" : "Removed from featured") });
+    } catch (e: any) {
+      setToast({ kind: "bad", msg: e?.response?.data?.message || "Failed to update featured flag" });
     } finally {
       setBusyFeature(m => ({ ...m, [p.id]: false }));
     }
   }
-    const total = data?.totalElements ?? 0;
-    const from = total === 0 ? 0 : page*size + 1;
-    const to   = Math.min((page+1)*size, total);
+  const total = data?.totalElements ?? 0;
+  const from = total === 0 ? 0 : page * size + 1;
+  const to = Math.min((page + 1) * size, total);
 
   return (
     <div className="prod-wrap">
@@ -209,19 +210,19 @@ export default function ProductsPage(){
           <div className="search">
             <input
               value={q}
-              onChange={e=>setQ(e.target.value)}
+              onChange={e => setQ(e.target.value)}
               placeholder="Search by name or slug…"
             />
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={PRIMARY} strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={PRIMARY} strokeWidth="2"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
           </div>
-          <button className="btn" onClick={()=>setModal({mode:"add"})}>+ Add product</button>
+          <button className="btn" onClick={() => setModal({ mode: "add" })}>+ Add product</button>
         </div>
       </div>
 
       {err && <div className="alert bad">{err}</div>}
 
       <div className="card">
-        {loading ? <SkeletonTable rows={6}/> : (
+        {loading ? <SkeletonTable rows={6} /> : (
           <table className="grid">
             <thead>
               <tr>
@@ -237,43 +238,43 @@ export default function ProductsPage(){
             </thead>
 
             <tbody>
-            {filtered.map(row => {
-              const isVisible = Boolean((row as any).visible ?? (row as any).isVisible);
-              return (
-                <tr key={row.id}>
-                  <td>#{row.id}</td>
-                  <td className="strong">{row.name}</td>
-                  <td className="muted">{row.slug || "-"}</td>
-                  <td style={{textAlign:"right"}}>₹{new Intl.NumberFormat("en-IN").format(Number(row.price||0))}</td>
-                  <td>
-                    <span className={"pill " + (isVisible ? "ok" : "off")}>
-                      {isVisible ? "Visible" : "Hidden"}
-                    </span>
-                    {!!row.featured && <span className="pill gold">Featured</span>}
-                    {row.active === false && <span className="pill off">Inactive</span>}
-                  </td>
-                  <td className="actions">
-                    <StarButton
-                      on={!!row.featured}
-                      saving={!!busyFeature[row.id]}
-                      onClick={()=>onToggleFeatured(row)}
-                      title={row.featured ? "Unfeature" : "Feature"}
-                    />
-                    <Toggle
-                      checked={isVisible}
-                      onChange={(val)=>onToggleVisible(row, val)}
-                      title={isVisible ? "Hide" : "Show"}
-                      disabled={isLocked(row.id)}
-                    />
-                    <button className="ghost" onClick={()=>setModal({mode:"edit", data: row})}>Edit</button>
-                    <button className="ghost bad" onClick={()=>onDelete(row.id)}>Delete</button>
-                  </td>
-                </tr>
-              );
-            })}
-            {filtered.length === 0 && !loading && (
-              <tr><td colSpan={6} style={{textAlign:"center", padding:"28px 0"}}>No products match your search.</td></tr>
-            )}
+              {filtered.map(row => {
+                const isVisible = Boolean((row as any).visible ?? (row as any).isVisible);
+                return (
+                  <tr key={row.id}>
+                    <td>#{row.id}</td>
+                    <td className="strong">{row.name}</td>
+                    <td className="muted">{row.slug || "-"}</td>
+                    <td style={{ textAlign: "right" }}>₹{new Intl.NumberFormat("en-IN").format(Number(row.price || 0))}</td>
+                    <td>
+                      <span className={"pill " + (isVisible ? "ok" : "off")}>
+                        {isVisible ? "Visible" : "Hidden"}
+                      </span>
+                      {!!row.featured && <span className="pill gold">Featured</span>}
+                      {row.active === false && <span className="pill off">Inactive</span>}
+                    </td>
+                    <td className="actions">
+                      <StarButton
+                        on={!!row.featured}
+                        saving={!!busyFeature[row.id]}
+                        onClick={() => onToggleFeatured(row)}
+                        title={row.featured ? "Unfeature" : "Feature"}
+                      />
+                      <Toggle
+                        checked={isVisible}
+                        onChange={(val) => onToggleVisible(row, val)}
+                        title={isVisible ? "Hide" : "Show"}
+                        disabled={isLocked(row.id)}
+                      />
+                      <button className="ghost" onClick={() => setModal({ mode: "edit", data: row })}>Edit</button>
+                      <button className="ghost bad" onClick={() => onDelete(row.id)}>Delete</button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {filtered.length === 0 && !loading && (
+                <tr><td colSpan={6} style={{ textAlign: "center", padding: "28px 0" }}>No products match your search.</td></tr>
+              )}
             </tbody>
           </table>
         )}
@@ -302,9 +303,9 @@ export default function ProductsPage(){
           initial={modal.data}
           mode={modal.mode}
           busy={busy}
-          onClose={()=>setModal(null)}
+          onClose={() => setModal(null)}
           onReload={reload}
-          onCreated={(p)=> setModal({ mode: "edit", data: p })}
+          onCreated={(p) => setModal({ mode: "edit", data: p })}
           setToast={setToast}
           toast={toast}
           dismissToast={dismissToast}
@@ -325,17 +326,17 @@ export default function ProductsPage(){
 function ProductModal({
   initial, mode, onClose, busy, onReload, onCreated, setToast,
   toast, dismissToast
-}:{
+}: {
   initial?: Product | null;
   mode: "add" | "edit";
   busy?: boolean;
-  onClose: ()=>void;
-  onReload: ()=>Promise<void>;
-  onCreated: (p: Product)=>void;
-  setToast: React.Dispatch<React.SetStateAction<{kind:"ok"|"bad", msg:string} | null>>;
-  toast?: { kind:"ok"|"bad", msg:string } | null;
+  onClose: () => void;
+  onReload: () => Promise<void>;
+  onCreated: (p: Product) => void;
+  setToast: React.Dispatch<React.SetStateAction<{ kind: "ok" | "bad", msg: string } | null>>;
+  toast?: { kind: "ok" | "bad", msg: string } | null;
   dismissToast?: () => void;
-}){
+}) {
   const [tab, setTab] = useState<"details" | "images" | "options">("details");
 
   // DETAILS
@@ -355,13 +356,13 @@ function ProductModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name]);
 
-  async function saveDetails(advanceToImages?: boolean){
+  async function saveDetails(advanceToImages?: boolean) {
     if (mode === "edit" && id) {
       const wasFeatured = !!initial?.featured;
       if (featured !== wasFeatured) {
         try {
           await setProductFeatured(id, featured);
-        } catch (e:any) {
+        } catch (e: any) {
           setToast({ kind: "bad", msg: e?.response?.data?.message || "Failed to update Featured" });
           return;
         }
@@ -380,20 +381,20 @@ function ProductModal({
     } as any;
 
     try {
-      if (mode === "add"){
+      if (mode === "add") {
         const created = await createProduct(dto);
-        setToast({kind:"ok", msg:"Product created"});
+        setToast({ kind: "ok", msg: "Product created" });
         onCreated(created);
         await onReload();
         if (advanceToImages) setTab("images");
-      } else if (id){
+      } else if (id) {
         await updateProduct(id, dto);
-        setToast({kind:"ok", msg:"Product updated"});
+        setToast({ kind: "ok", msg: "Product updated" });
         await onReload();
         if (advanceToImages) setTab("images");
       }
-    } catch (e:any) {
-      setToast({kind:"bad", msg: e?.response?.data?.message || "Save failed"});
+    } catch (e: any) {
+      setToast({ kind: "bad", msg: e?.response?.data?.message || "Save failed" });
     }
   }
 
@@ -411,9 +412,9 @@ function ProductModal({
         </div>
 
         <div className="tabs">
-          <button className={"tab" + (tab==="details" ? " active" : "")} onClick={()=>setTab("details")}>Details</button>
-          <button className={"tab" + (tab==="images"  ? " active" : "")} disabled={!canOpenImages} onClick={()=>setTab("images")}>Images</button>
-          <button className={"tab" + (tab==="options" ? " active" : "")} disabled={!canOpenOptions} onClick={()=>setTab("options")}>Options</button>
+          <button className={"tab" + (tab === "details" ? " active" : "")} onClick={() => setTab("details")}>Details</button>
+          <button className={"tab" + (tab === "images" ? " active" : "")} disabled={!canOpenImages} onClick={() => setTab("images")}>Images</button>
+          <button className={"tab" + (tab === "options" ? " active" : "")} disabled={!canOpenOptions} onClick={() => setTab("options")}>Options</button>
         </div>
 
         {tab === "details" && (
@@ -423,7 +424,7 @@ function ProductModal({
                 <div className="grid2">
                   <label>
                     <span>Name</span>
-                    <input value={name} onChange={e=>setName(e.target.value)} placeholder="eg. Peach Rose Bouquet" />
+                    <input value={name} onChange={e => setName(e.target.value)} placeholder="eg. Peach Rose Bouquet" />
                   </label>
                   <label>
                     <span>Price (₹)</span>
@@ -439,7 +440,7 @@ function ProductModal({
 
                 <label>
                   <span>Description</span>
-                  <textarea value={description} onChange={e=>setDescription(e.target.value)} rows={4} />
+                  <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} />
                 </label>
 
                 <div className="switches">
@@ -449,32 +450,32 @@ function ProductModal({
                   </label>
 
                   <label className="check">
-                    <StarButton on={featured} onClick={()=>setFeatured(!featured)} title={featured ? "Unfeature" : "Feature"} />
+                    <StarButton on={featured} onClick={() => setFeatured(!featured)} title={featured ? "Unfeature" : "Feature"} />
                     <span>Featured</span>
                   </label>
 
                   {featured && (
-                    <label style={{display:"flex", alignItems:"center", gap:8}}>
+                    <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span>Rank</span>
                       <input
                         type="number"
                         min={0}
                         value={featuredRank === "" ? "" : Number(featuredRank)}
-                        onChange={(e)=> setFeaturedRank(e.target.value === "" ? "" : Number(e.target.value))}
-                        style={{width:90}}
+                        onChange={(e) => setFeaturedRank(e.target.value === "" ? "" : Number(e.target.value))}
+                        style={{ width: 90 }}
                       />
                     </label>
                   )}
                 </div>
 
-                <button className="link" type="button" onClick={()=>setShowAdvanced(v=>!v)}>
+                <button className="link" type="button" onClick={() => setShowAdvanced(v => !v)}>
                   {showAdvanced ? "Hide" : "Show"} advanced
                 </button>
 
                 {showAdvanced && (
                   <label>
                     <span>Slug</span>
-                    <input value={slug} onChange={e=>setSlug(e.target.value)} placeholder="auto-generated-from-name" />
+                    <input value={slug} onChange={e => setSlug(e.target.value)} placeholder="auto-generated-from-name" />
                     <small className="muted">Used in SEO & URLs; keep lowercase with hyphens.</small>
                   </label>
                 )}
@@ -484,13 +485,13 @@ function ProductModal({
             <div className="modal-ft">
               <button className="ghost" onClick={onClose}>Close</button>
               {mode === "add" && !initial?.id ? (
-                <button className="btn" disabled={!name.trim()} onClick={()=>saveDetails(true)}>
+                <button className="btn" disabled={!name.trim()} onClick={() => saveDetails(true)}>
                   Create & go to Images
                 </button>
               ) : (
                 <>
-                  <button className="ghost" onClick={()=>saveDetails(false)}>Save details</button>
-                  <button className="btn" onClick={()=>saveDetails(true)}>Save & go to Images</button>
+                  <button className="ghost" onClick={() => saveDetails(false)}>Save details</button>
+                  <button className="btn" onClick={() => saveDetails(true)}>Save & go to Images</button>
                 </>
               )}
             </div>
@@ -679,8 +680,8 @@ export function ImagesTab({ productId, onDone, onChanged, onNext, setToast }: Im
 
 
 
-  function moveUp(idx: number)  { if (!items || idx<=0) return; reorder(idx, idx-1); }
-  function moveDown(idx: number){ if (!items || idx>=items.length-1) return; reorder(idx, idx+1); }
+  function moveUp(idx: number) { if (!items || idx <= 0) return; reorder(idx, idx - 1); }
+  function moveDown(idx: number) { if (!items || idx >= items.length - 1) return; reorder(idx, idx + 1); }
 
   async function reorder(a: number, b: number) {
     if (!items) return;
@@ -751,7 +752,7 @@ export function ImagesTab({ productId, onDone, onChanged, onNext, setToast }: Im
                   >Cancel</button>
                 </div>
                 <div className="meta">
-                  <div className="progress"><div style={{width: `${Math.min(q.pct||1, 100)}%`}}/></div>
+                  <div className="progress"><div style={{ width: `${Math.min(q.pct || 1, 100)}%` }} /></div>
                   <span className="muted">{q.error ? "Failed" : "Uploading…"}</span>
                 </div>
               </div>
@@ -849,7 +850,7 @@ function OptionsTab({
     try {
       const vals = await listOptionValues(optionId);
       setValuesMap((m) => ({ ...m, [optionId]: vals }));
-    } catch {}
+    } catch { }
   }
 
   async function onCreateOption() {
@@ -1000,10 +1001,10 @@ function OptionsTab({
                   {/* Only Visible toggle (Active removed) */}
                   <div className="row-actions">
                     <div title={(o as any)?.visible === false ? "Show option" : "Hide option"}>
-                      <small style={{marginRight:6}}>Visible</small>
+                      <small style={{ marginRight: 6 }}>Visible</small>
                       <Toggle
                         checked={(o as any)?.visible !== false}
-                        onChange={(val)=>onPatchOption(o, { visible: val })}
+                        onChange={(val) => onPatchOption(o, { visible: val })}
                         title={(o as any)?.visible === false ? "Show" : "Hide"}
                       />
                     </div>
@@ -1056,35 +1057,35 @@ function OptionsTab({
                     {(valuesMap[o.id] || []).map((v) => (
                       <div key={v.id} className="trow">
                         <div>
-                          <input defaultValue={v.valueLabel} onBlur={(e)=> patchValue(o.id, v.id, { valueLabel: e.target.value })}/>
+                          <input defaultValue={v.valueLabel} onBlur={(e) => patchValue(o.id, v.id, { valueLabel: e.target.value })} />
                         </div>
                         <div>
-                          <input defaultValue={v.valueCode ?? ""} onBlur={(e)=> patchValue(o.id, v.id, { valueCode: e.target.value || null })}/>
+                          <input defaultValue={v.valueCode ?? ""} onBlur={(e) => patchValue(o.id, v.id, { valueCode: e.target.value || null })} />
                         </div>
                         <div>
                           <input
                             type="number" inputMode="decimal"
                             defaultValue={v.priceDelta ?? ""}
-                            onBlur={(e)=> patchValue(o.id, v.id, { priceDelta: e.target.value === "" ? null : Number(e.target.value) })}
+                            onBlur={(e) => patchValue(o.id, v.id, { priceDelta: e.target.value === "" ? null : Number(e.target.value) })}
                           />
                         </div>
                         <div>
                           <input
                             type="number"
                             defaultValue={v.sortOrder ?? 0}
-                            onBlur={(e)=> patchValue(o.id, v.id, { sortOrder: Number(e.target.value) || 0 })}
+                            onBlur={(e) => patchValue(o.id, v.id, { sortOrder: Number(e.target.value) || 0 })}
                           />
                         </div>
                         {/* Only Visible toggle (Active removed) */}
                         <div>
                           <Toggle
                             checked={(v as any)?.visible !== false}
-                            onChange={(val)=> patchValue(o.id, v.id, { visible: val })}
+                            onChange={(val) => patchValue(o.id, v.id, { visible: val })}
                             title={(v as any)?.visible === false ? "Show value" : "Hide value"}
                           />
                         </div>
                         <div className="right">
-                          <button className="ghost bad" onClick={()=>removeValue(o.id, v.id)}>Delete</button>
+                          <button className="ghost bad" onClick={() => removeValue(o.id, v.id)}>Delete</button>
                         </div>
                       </div>
                     ))}
@@ -1142,192 +1143,423 @@ function OptionsTab({
 }
 
 /* ---------- Skeleton (list) ---------- */
-function SkeletonTable({rows=6}:{rows?:number}){
+function SkeletonTable({ rows = 6 }: { rows?: number }) {
   return (
     <div className="sk-wrap">
-      {Array.from({length: rows}).map((_,i)=>(
+      {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="sk-row">
-          <div className="sk sk-id"/>
-          <div className="sk sk-wide"/>
-          <div className="sk sk-mid"/>
-          <div className="sk sk-price"/>
-          <div className="sk sk-flags"/>
-          <div className="sk sk-actions"/>
+          <div className="sk sk-id" />
+          <div className="sk sk-wide" />
+          <div className="sk sk-mid" />
+          <div className="sk sk-price" />
+          <div className="sk sk-flags" />
+          <div className="sk sk-actions" />
         </div>
       ))}
     </div>
   );
 }
 
-/* ---------------------- Styles ---------------------- */
+/* ═══════════════════════════ PREMIUM PRODUCTS PAGE STYLES ═══════════════════════════ */
 const css = `
 :root { color-scheme: light; }
-.prod-wrap{ color:${PRIMARY}; font-synthesis-weight:none; }
-.bar{
-  display:flex; align-items:end; justify-content:space-between; gap:12px;
-  margin-bottom:12px; padding: 10px 12px; border:1px solid ${INK}; border-radius:16px; background:#fff;
-  box-shadow:0 16px 48px rgba(0,0,0,.08);
+
+/* ═══════════════════════════ PAGE WRAPPER ═══════════════════════════ */
+.prod-wrap {
+  padding: 24px;
+  color: ${PRIMARY};
+  max-width: 1500px;
+  margin: 0 auto;
+  min-height: 100vh;
 }
-.bar h2{ margin:0; font-family:"DM Serif Display", Georgia, serif; }
-.bar p{ margin:6px 0 0; opacity:.9; }
-.bar-right{ display:flex; gap:10px; align-items:center; }
-.search{ position:relative; display:flex; align-items:center; gap:8px; width: 340px; }
-.search input{
-  width:100%; height:38px; border:1px solid rgba(0,0,0,.08);
-  border-radius:12px; padding:0 36px 0 12px; outline:none; background:#fff;
+
+/* ═══════════════════════════ HEADER BAR ═══════════════════════════ */
+.bar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 20px 24px;
+  border: 1px solid ${INK};
+  border-radius: 20px;
+  background: linear-gradient(135deg, #fff 0%, rgba(246,195,32,0.04) 100%);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.08);
+  position: relative;
 }
-.search svg{ position:absolute; right:10px; top:50%; transform: translateY(-50%); opacity:.7; pointer-events:none; }
+
+.bar::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 24px;
+  right: 24px;
+  height: 3px;
+  background: linear-gradient(90deg, ${ACCENT}, ${GOLD}, ${MINT});
+  border-radius: 3px 3px 0 0;
+}
+
+.bar h2 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 800;
+  background: linear-gradient(135deg, ${PRIMARY} 0%, #6b7058 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.bar p {
+  margin: 6px 0 0;
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+.bar-left {
+  display: flex;
+  flex-direction: column;
+}
+
+.bar-right {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+/* ═══════════════════════════ SEARCH INPUT ═══════════════════════════ */
+.search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 360px;
+}
+
+.search input {
+  width: 100%;
+  height: 44px;
+  border: 1px solid ${INK};
+  border-radius: 14px;
+  padding: 0 44px 0 16px;
+  outline: none;
+  background: #fff;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.search input:focus {
+  border-color: ${ACCENT};
+  box-shadow: 0 0 0 3px rgba(240,93,139,0.12);
+}
+
+.search svg {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ═══════════════════════════ BUTTONS ═══════════════════════════ */
 .btn {
-  border: none; background: ${ACCENT}; color: #fff; box-shadow: 0 10px 24px rgba(240,93,139,.30);
-  height:38px; padding:0 14px; border-radius:12px; cursor:pointer;
-}
-.btn:hover { transform: translateY(-1px); box-shadow:0 12px 28px rgba(240,93,139,.36); }
-.ghost{ height:34px; padding:0 12px; border:1px solid ${INK}; background:#fff; border-radius:10px; cursor:pointer; }
-.ghost.bad{ color:#8a0024; border-color: rgba(240,93,139,.3); }
-.ghost.small{ height:28px; padding:0 8px; font-size:12px; }
-.link{ background:transparent; border:none; color:${PRIMARY}; text-decoration:underline; font-weight:800; padding:4px 0; cursor:pointer; width:max-content; }
-.alert.bad{ margin:10px 0; padding:10px; border-radius:12px; background:#fff3f5; border:1px solid rgba(240,93,139,.25); color:#a10039; }
-
-.card{ border:1px solid ${INK}; border-radius:16px; background:#fff; box-shadow:0 18px 60px rgba(0,0,0,.10); overflow:hidden; }
-.grid{ width:100%; border-collapse:separate; border-spacing:0; table-layout: fixed; }
-.grid thead th{
-  position: sticky; top:0; z-index: 1; text-align:left; padding:14px 16px; font-size:12px; letter-spacing:.2px; opacity:.9;
-  background:linear-gradient(180deg, rgba(246,195,32,.10), rgba(255,255,255,.92)); backdrop-filter: blur(2px);
-  border-bottom:1px solid ${INK};
-}
-.grid tbody td{ padding:14px 16px; border-top:1px solid ${INK}; vertical-align: middle; }
-.grid tbody tr:hover{ background: rgba(246,195,32,.06); }
-.strong{ font-weight:800; }
-.muted{ opacity:.8; }
-.pill{ display:inline-flex; align-items:center; height:24px; padding:0 10px; border-radius:999px; font-size:12px; font-weight:800; margin-right:6px; }
-.pill.ok{ background: rgba(155,180,114,.2); color:#2f4b12; }
-.pill.off{ background: rgba(0,0,0,.08); }
-.pill.gold{ background: rgba(246,195,32,.25); }
-
-/* star + toggle */
-.star-btn{
-  position:relative;
-  display:inline-flex; align-items:center; gap:6px;
-  height:32px; min-width:38px; padding:0 10px; border-radius:10px; border:1px solid ${INK}; background:#fff; cursor:pointer; font-weight:900;
-}
-.star-btn .sr{ position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden; }
-.star-btn .star-shape{
-  font-size:16px; line-height:1; color:#b3b3b3;
-  transition: transform .15s ease, color .15s ease, text-shadow .15s ease;
-}
-.star-btn:hover .star-shape{ transform: scale(1.06); }
-.star-btn.on{ border-color: rgba(246,195,32,.6); background: rgba(246,195,32,.12); }
-.star-btn.on .star-shape{ color:#b98500; text-shadow: 0 0 0 currentColor; }
-.star-btn .spin{
-  width:14px; height:14px; margin-left:6px; border-radius:50%;
-  border:2px solid rgba(0,0,0,.12); border-top-color:${GOLD}; animation: rot .7s linear infinite;
-}
-.star-btn.saving{ opacity:.75; cursor:wait; }
-@keyframes rot { to { transform: rotate(360deg); } }
-
-.switch{ position:relative; width:44px; height:24px; border-radius:999px; border:1px solid ${INK}; background:#fff; cursor:pointer; padding:0; display:inline-flex; align-items:center; }
-.switch .knob{ position:absolute; left:2px; top:2px; width:20px; height:20px; border-radius:50%; background:#ccc; transition: transform .18s ease, background .18s ease; }
-.switch.on .knob{ transform: translateX(20px); background:${MINT}; }
-
-.actions { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; align-items:center; }
-.actions .ghost{ height:32px; padding:0 10px; border-radius:10px; }
-
-.pager{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:10px; }
-.pager select{ height:34px; border-radius:10px; border:1px solid ${INK}; }
-.pager .left{ font-size:12px; opacity:.85; }
-
-.modal-wrap{ position: fixed; inset:0; z-index: 100; display:flex; align-items:center; justify-content:center; background: rgba(0,0,0,.28); backdrop-filter: blur(2px); padding: 16px; overflow: auto; }
-.modal{ width: 860px; max-width: calc(100vw - 24px); max-height: calc(100vh - 32px); display:flex; flex-direction:column; border:1px solid rgba(0,0,0,.08); border-radius:16px; background:#fff; box-shadow:0 24px 80px rgba(0,0,0,.22); }
-.modal-bd{ padding:12px; overflow:auto; flex: 1 1 auto; }
-.modal-hd{ display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-bottom:1px solid ${INK}; }
-.modal-hd .title{ font-weight:900; }
-.modal-hd .x{ background:transparent; border:none; font-size:26px; line-height:1; cursor:pointer; }
-.tabs{ display:flex; gap:6px; padding:10px 12px; border-bottom:1px solid ${INK}; background: linear-gradient(180deg, rgba(246,195,32,.10), rgba(255,255,255,.85)); }
-.tab{ height:30px; padding:0 12px; border-radius:999px; border:1px solid transparent; background:#fff; font-weight:800; }
-.tab.active{ background: ${GOLD}; border-color: transparent; }
-.form{ display:grid; gap:12px; }
-.form .grid2{ display:grid; grid-template-columns:1.4fr .6fr; gap:12px; }
-.form label{ display:grid; gap:6px; }
-.form input, .form textarea{ height:38px; padding: 8px 10px; border-radius:10px; border:1px solid ${INK}; outline:none; resize:vertical; }
-.form textarea{ height:auto; }
-.switches{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-.form .check{ display:flex; align-items:center; gap:8px; }
-.form small.muted{ opacity:.75; }
-.modal-ft{ padding:10px 12px; display:flex; justify-content:flex-end; gap:10px; border-top:1px solid ${INK}; position: sticky; bottom: 0; background:#fff; }
-
-/* Images */
-.imgbar{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding: 6px 8px; border:1px dashed ${INK}; border-radius:12px; background:#fff; }
-.imgbar .count{ font-weight:900; }
-.imgbar .hint{ font-size:12px; opacity:.75; }
-.upload{ position:relative; display:inline-flex; align-items:center; justify-content:center; height:34px; padding:0 12px; border-radius:10px; background:${ACCENT}; color:#fff; font-weight:900; cursor:pointer; box-shadow:0 12px 26px rgba(240,93,139,.3); }
-.upload input{ position:absolute; inset:0; opacity:0; cursor:pointer; }
-.upload.disabled{ opacity:.5; pointer-events:none; }
-.gallery{ display:grid; grid-template-columns: repeat(auto-fill, minmax(160px,1fr)); gap:10px; margin-top:12px; }
-.tile{ border:1px solid ${INK}; border-radius:12px; overflow:hidden; background:#fff; box-shadow:0 10px 22px rgba(0,0,0,.08); }
-.thumb{ aspect-ratio: 1 / 1; background:#f7f7f7; line-height:0; }
-.thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
-.tile .row{ display:flex; gap:8px; padding:8px; justify-content:center; }
-.tile .meta{ display:grid; gap:6px; padding:8px; border-top:1px solid ${INK}; }
-.progress{ height:6px; border-radius:999px; background: #eee; overflow:hidden; }
-.progress > div{ height:100%; width:0; background:${ACCENT}; }
-.empty{ text-align:center; padding:18px; opacity:.8; }
-
-/* Options */
-.options-bd{ max-height: calc(80vh - 140px); }
-.optwrap{ border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:10px; background:#fff; margin-bottom:12px; }
-.optcard{ border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:10px; background:#fff; box-shadow:0 12px 32px rgba(0,0,0,.06); }
-.stack{ display:grid; gap:12px; margin-top:12px; }
-.row{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
-.row-actions{ display:flex; gap:6px; align-items:center; }
-.split{ display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap:10px; }
-.inset{ border-top:1px dashed rgba(0,0,0,.08); margin-top:8px; padding-top:10px; }
-.title{ font-weight:900; }
-.micro{ font-size:12px; opacity:.75; }
-.tag{ display:inline-flex; align-items:center; height:22px; padding:0 8px; border-radius:999px; font-size:11px; font-weight:900; margin-left:6px; background:rgba(0,0,0,.06); }
-.tag.off{ background: rgba(0,0,0,.08); }
-.tag.gold{ background: rgba(246,195,32,.25); }
-.values{ margin-top:10px; }
-.table-like{ display:grid; gap:6px; overflow-x:auto; }
-.table-like .thead, .table-like .trow{
-  display:grid;
-  grid-template-columns: 1.4fr .9fr .7fr .5fr .7fr .7fr; /* Label, Code, PriceΔ, Sort, Visible, Actions */
-  gap:8px; align-items:center;
-}
-.table-like .thead{ font-size:12px; opacity:.8; }
-.table-like .trow input{ height:34px; border:1px solid rgba(0,0,0,.08); border-radius:8px; padding:0 8px; min-width: 0; }
-.table-like .right{ display:flex; justify-content:flex-end; }
-
-/* skeleton */
-.sk-wrap{ padding: 10px; }
-.sk-row{
-  display:grid;
-  grid-template-columns: 70px 1.3fr 1fr 120px 200px 340px;
-  gap:10px; align-items:center; padding:8px 12px;
+  border: none;
+  background: linear-gradient(135deg, ${ACCENT} 0%, #ff8ba7 100%);
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(240,93,139,0.3);
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 14px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  white-space: nowrap;
 }
 
-.sk{ height:18px; border-radius:8px; background: linear-gradient(90deg,#eee,#f8f8f8,#eee); background-size: 200% 100%; animation: wave 1.2s linear infinite; }
-.sk-id{ width:44px; }
-.sk-wide{ height:20px; }
-.sk-mid{ width:60%; }
-.sk-price{ width:80px; margin-left:auto; }
-.sk-flags{ width:200px; }
-.sk-actions{ height:28px; }
-@keyframes wave{ 0%{background-position: 200% 0} 100%{background-position:-200% 0} }
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(240,93,139,0.4);
+}
 
-/* toast */
-.toast{ position: fixed; right: 16px; bottom: 16px; padding: 10px 12px; border-radius:12px; color:#fff; animation: slide 2.6s ease forwards; }
-.toast.ok{ background: ${ACCENT}; box-shadow: 0 12px 30px rgba(240,93,139,.4); }
-.toast.bad{ background: #8a0024; box-shadow: 0 12px 30px rgba(138,0,36,.35); }
-@keyframes slide{ 0%{ transform: translateY(20px); opacity:0; } 10%{ transform: translateY(0); opacity:1; } 80%{ transform: translateY(0); opacity:1; } 100%{ transform: translateY(10px); opacity:0; }
+.ghost {
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid ${INK};
+  background: #fff;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  transition: all 0.15s ease;
+}
 
-.toast.in-modal{ position: absolute; right: 12px; bottom: 12px; z-index: 101; }
+.ghost:hover {
+  background: #fafafa;
+  border-color: rgba(0,0,0,0.15);
+}
+
+.ghost.bad {
+  color: #c62828;
+  border-color: rgba(198,40,40,0.25);
+}
+
+.ghost.bad:hover {
+  background: rgba(198,40,40,0.06);
+}
+
+.ghost.small {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.ghost.sm {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.link {
+  background: transparent;
+  border: none;
+  color: ${ACCENT};
+  text-decoration: none;
+  font-weight: 700;
+  padding: 4px 0;
+  cursor: pointer;
+  width: max-content;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+/* ═══════════════════════════ ALERTS ═══════════════════════════ */
+.alert.bad {
+  margin: 12px 0;
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #fff5f5 0%, #ffe8e8 100%);
+  border: 1px solid rgba(198,40,40,0.2);
+  color: #b71c1c;
+  font-weight: 500;
+}
+
+/* ═══════════════════════════ CARD / TABLE CONTAINER ═══════════════════════════ */
+.card {
+  border: 1px solid ${INK};
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.08);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+/* ═══════════════════════════ TABLE ═══════════════════════════ */
+.grid {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+
+.grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  padding: 16px 18px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #666;
+  background: linear-gradient(180deg, #fafafa 0%, #fff 100%);
+  border-bottom: 1px solid ${INK};
+}
+
+.grid tbody td {
+  padding: 16px 18px;
+  border-top: 1px solid ${INK};
+  vertical-align: middle;
+  font-size: 14px;
+}
+
+.grid tbody tr {
+  transition: background 0.15s ease;
+}
+
+.grid tbody tr:hover {
+  background: linear-gradient(90deg, rgba(246,195,32,0.04) 0%, rgba(255,255,255,0) 100%);
+}
+
+.strong {
+  font-weight: 700;
+  color: ${PRIMARY};
+}
+
+.muted {
+  opacity: 0.6;
+  font-size: 13px;
+}
+
+/* ═══════════════════════════ STATUS PILLS ═══════════════════════════ */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 12px;
+  border-radius: 13px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-right: 6px;
+}
+
+.pill.ok {
+  background: linear-gradient(135deg, rgba(67,233,123,0.15) 0%, rgba(56,249,215,0.15) 100%);
+  color: #065f46;
+}
+
+.pill.off {
+  background: rgba(0,0,0,0.06);
+  color: #666;
+}
+
+.pill.gold {
+  background: linear-gradient(135deg, rgba(246,195,32,0.25) 0%, rgba(255,215,0,0.2) 100%);
+  color: #92400e;
+}
+
+/* ═══════════════════════════ STAR BUTTON ═══════════════════════════ */
+.star-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  min-width: 42px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid ${INK};
+  background: #fff;
+  cursor: pointer;
+  font-weight: 900;
+  transition: all 0.15s ease;
+}
+
+.star-btn:hover {
+  border-color: rgba(246,195,32,0.4);
+  background: rgba(246,195,32,0.04);
+}
+
+.star-btn .sr {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.star-btn .star-shape {
+  font-size: 18px;
+  line-height: 1;
+  color: #ccc;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.star-btn:hover .star-shape {
+  transform: scale(1.1);
+}
+
+.star-btn.on {
+  border-color: rgba(246,195,32,0.6);
+  background: linear-gradient(135deg, rgba(246,195,32,0.12) 0%, rgba(255,215,0,0.08) 100%);
+}
+
+.star-btn.on .star-shape {
+  color: #d4a500;
+}
+
+.star-btn .spin {
+  width: 14px;
+  height: 14px;
+  margin-left: 6px;
+  border-radius: 50%;
+  border: 2px solid rgba(0,0,0,0.08);
+  border-top-color: ${GOLD};
+  animation: rot 0.7s linear infinite;
+}
+
+.star-btn.saving {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+@keyframes rot {
+  to { transform: rotate(360deg); }
+}
+
+/* ═══════════════════════════ TOGGLE SWITCH ═══════════════════════════ */
+.switch {
+  position: relative;
+  width: 48px;
+  height: 26px;
+  border-radius: 13px;
+  border: 1px solid ${INK};
+  background: #f0f0f0;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  transition: all 0.2s ease;
+}
+
+.switch .knob {
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #aaa;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.switch.on {
+  background: linear-gradient(135deg, rgba(115,194,167,0.2) 0%, rgba(115,194,167,0.1) 100%);
+  border-color: rgba(115,194,167,0.4);
+}
+
+.switch.on .knob {
+  transform: translateX(22px);
+  background: ${MINT};
+}
+
+/* ═══════════════════════════ ACTIONS COLUMN ═══════════════════════════ */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.actions .ghost {
+  height: 34px;
+  padding: 0 12px;
+}
+
+/* ═══════════════════════════ PAGINATION ═══════════════════════════ */
 .pager {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
-  border-top: 1px solid rgba(0, 0, 0, 0.08); /* INK */
+  gap: 12px;
+  padding: 14px 18px;
+  border-top: 1px solid ${INK};
+  background: #fafafa;
 }
 
 .pgbtns {
@@ -1336,42 +1568,706 @@ const css = `
   gap: 8px;
 }
 
-.ghost {
-  height: 32px;
-  padding: 0 10px;
+.pager select {
+  height: 36px;
+  border: 1px solid ${INK};
   border-radius: 10px;
-  border: 1px solid rgba(0, 0, 0, 0.08); /* INK */
+  padding: 0 12px;
   background: #fff;
-  color: #4A4F41; /* PRIMARY */
+  font-size: 13px;
   cursor: pointer;
 }
 
-.ghost.sm {
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 8px;
-  font-size: 12.5px;
+/* ═══════════════════════════ MODAL ═══════════════════════════ */
+.modal-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(6px);
+  padding: 20px;
+  overflow: auto;
 }
 
-select {
-  height: 32px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 10px;
-  padding: 0 10px;
+.modal {
+  width: 920px;
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 60px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid ${INK};
+  border-radius: 24px;
   background: #fff;
+  box-shadow: 0 40px 120px rgba(0,0,0,0.3);
+  animation: modalIn 0.3s ease-out;
+  overflow: hidden;
 }
-.card .pager {
+
+@keyframes modalIn {
+  from { transform: scale(0.92) translateY(30px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+/* ═══════════════════════════ MODAL HEADER ═══════════════════════════ */
+.modal-hd {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  padding: 20px 24px;
+  border-bottom: 1px solid ${INK};
+  background: linear-gradient(135deg, rgba(246,195,32,0.1) 0%, rgba(255,255,255,0.98) 100%);
+  position: relative;
 }
 
-.card .pgbtns {
+.modal-hd::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 24px;
+  right: 24px;
+  height: 2px;
+  background: linear-gradient(90deg, ${ACCENT}, ${GOLD}, ${MINT});
+  border-radius: 2px 2px 0 0;
+}
+
+.modal-hd .title {
+  font-weight: 800;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.modal-hd .title::before {
+  content: "🌸";
+  font-size: 22px;
+}
+
+.modal-hd .x {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f5f5f5;
+  border: none;
+  border-radius: 12px;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  color: #888;
+  transition: all 0.2s ease;
+}
+
+.modal-hd .x:hover {
+  background: ${ACCENT};
+  color: #fff;
+  transform: rotate(90deg);
+}
+
+/* ═══════════════════════════ MODAL BODY ═══════════════════════════ */
+.modal-bd {
+  padding: 24px;
+  overflow: auto;
+  flex: 1 1 auto;
+  background: linear-gradient(180deg, #fafafa 0%, #fff 50px);
+}
+
+/* ═══════════════════════════ MODAL FOOTER ═══════════════════════════ */
+.modal-ft {
+  padding: 16px 24px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  border-top: 1px solid ${INK};
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(180deg, #fff 0%, #fafafa 100%);
+}
+
+.modal-ft .ghost {
+  height: 42px;
+  padding: 0 18px;
+  border-radius: 14px;
+}
+
+.modal-ft .btn {
+  height: 42px;
+  padding: 0 22px;
+}
+
+/* ═══════════════════════════ TABS ═══════════════════════════ */
+.tabs {
+  display: flex;
+  gap: 6px;
+  padding: 16px 24px;
+  border-bottom: 1px solid ${INK};
+  background: linear-gradient(180deg, #fafafa 0%, #fff 100%);
+}
+
+.tab {
+  height: 40px;
+  padding: 0 20px;
+  border-radius: 20px;
+  border: 1px solid ${INK};
+  background: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
+.tab::before {
+  font-size: 14px;
+}
+
+.tab:first-child::before { content: "📝"; }
+.tab:nth-child(2)::before { content: "🖼️"; }
+.tab:nth-child(3)::before { content: "⚙️"; }
+
+.tab:hover {
+  background: #f5f5f5;
+  border-color: rgba(0,0,0,0.12);
+  transform: translateY(-1px);
+}
+
+.tab.active {
+  background: linear-gradient(135deg, ${GOLD} 0%, #ffe066 100%);
+  border-color: transparent;
+  color: #5d4800;
+  box-shadow: 0 4px 16px rgba(246,195,32,0.3);
+}
+
+.tab:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.tab:disabled:hover {
+  background: #fff;
+  border-color: ${INK};
+}
+
+/* ═══════════════════════════ FORM ═══════════════════════════ */
+.form {
+  display: grid;
+  gap: 20px;
+}
+
+.form .grid2 {
+  display: grid;
+  grid-template-columns: 1.5fr 0.5fr;
+  gap: 20px;
+}
+
+.form label {
+  display: grid;
+  gap: 10px;
+}
+
+.form label > span {
+  font-size: 12px;
+  font-weight: 700;
+  color: #444;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.form label > span::before {
+  content: "";
+  width: 3px;
+  height: 12px;
+  background: linear-gradient(180deg, ${ACCENT}, ${GOLD});
+  border-radius: 2px;
+}
+
+.form input,
+.form textarea {
+  height: 46px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 1px solid ${INK};
+  outline: none;
+  resize: vertical;
+  font-size: 15px;
+  transition: all 0.2s ease;
+  background: #fff;
+}
+
+.form input::placeholder,
+.form textarea::placeholder {
+  color: #aaa;
+}
+
+.form input:hover,
+.form textarea:hover {
+  border-color: rgba(0,0,0,0.15);
+}
+
+.form input:focus,
+.form textarea:focus {
+  border-color: ${ACCENT};
+  box-shadow: 0 0 0 4px rgba(240,93,139,0.1);
+  background: #fff;
+}
+
+.form textarea {
+  height: auto;
+  min-height: 120px;
+  line-height: 1.6;
+}
+
+/* ═══════════════════════════ SWITCHES SECTION ═══════════════════════════ */
+.switches {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(246,195,32,0.06) 0%, rgba(115,194,167,0.04) 100%);
+  border-radius: 16px;
+  border: 1px dashed ${INK};
+}
+
+.form .check {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.form .check > span {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.form small.muted {
+  opacity: 0.55;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* ═══════════════════════════ ADVANCED SECTION ═══════════════════════════ */
+.link {
+  background: transparent;
+  border: none;
+  color: ${ACCENT};
+  font-weight: 700;
+  font-size: 13px;
+  padding: 8px 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.link::before {
+  content: "⚙️";
+  font-size: 14px;
+}
+
+.link:hover {
+  color: #d4466e;
+  text-decoration: underline;
+}
+
+/* ═══════════════════════════ IMAGES TAB ═══════════════════════════ */
+.imgbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px dashed ${INK};
+  border-radius: 14px;
+  background: #fafafa;
+}
+
+.imgbar .count {
+  font-weight: 800;
+  font-size: 16px;
+}
+
+.imgbar .hint {
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.upload {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, ${ACCENT} 0%, #ff8ba7 100%);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(240,93,139,0.3);
+  transition: all 0.2s ease;
+}
+
+.upload:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 28px rgba(240,93,139,0.35);
+}
+
+.upload input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.upload.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.tile {
+  border: 1px solid ${INK};
+  border-radius: 14px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  transition: all 0.2s ease;
+}
+
+.tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.1);
+}
+
+.thumb {
+  aspect-ratio: 1 / 1;
+  background: #f5f5f5;
+  line-height: 0;
+}
+
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.tile .row {
+  display: flex;
+  gap: 6px;
+  padding: 10px;
+  justify-content: center;
+  background: #fafafa;
+}
+
+.tile .meta {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border-top: 1px solid ${INK};
+}
+
+.progress {
+  height: 6px;
+  border-radius: 3px;
+  background: #e0e0e0;
+  overflow: hidden;
+}
+
+.progress > div {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, ${ACCENT}, ${GOLD});
+  transition: width 0.3s ease;
+}
+
+.empty {
+  text-align: center;
+  padding: 32px;
+  opacity: 0.6;
+  font-size: 14px;
+}
+
+.loading {
+  padding: 32px;
+  text-align: center;
+}
+
+.loading .bar {
+  width: 60px;
+  height: 4px;
+  margin: 0 auto;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #e0e0e0, ${ACCENT}, #e0e0e0);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ═══════════════════════════ OPTIONS TAB ═══════════════════════════ */
+.options-bd {
+  max-height: calc(80vh - 160px);
+}
+
+.optwrap {
+  border: 1px solid ${INK};
+  border-radius: 14px;
+  padding: 16px;
+  background: #fff;
+  margin-bottom: 16px;
+}
+
+.optcard {
+  border: 1px solid ${INK};
+  border-radius: 14px;
+  padding: 16px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.04);
+}
+
+.stack {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.row-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.inset {
+  border-top: 1px dashed ${INK};
+  margin-top: 12px;
+  padding-top: 14px;
+}
+
+.title {
+  font-weight: 800;
+}
+
+.micro {
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 11px;
+  font-size: 11px;
+  font-weight: 700;
+  margin-left: 8px;
+  background: rgba(0,0,0,0.05);
+}
+
+.tag.off {
+  background: rgba(0,0,0,0.08);
+}
+
+.tag.gold {
+  background: rgba(246,195,32,0.2);
+}
+
+.values {
+  margin-top: 12px;
+}
+
+.table-like {
+  display: grid;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.table-like .thead,
+.table-like .trow {
+  display: grid;
+  grid-template-columns: 1.4fr 0.9fr 0.7fr 0.5fr 0.7fr 0.7fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.table-like .thead {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: #888;
+  padding: 8px 0;
+}
+
+.table-like .trow input {
+  height: 36px;
+  border: 1px solid ${INK};
+  border-radius: 10px;
+  padding: 0 10px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.table-like .right {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ═══════════════════════════ SKELETON ═══════════════════════════ */
+.sk-wrap {
+  padding: 16px;
+}
+
+.sk-row {
+  display: grid;
+  grid-template-columns: 70px 1.3fr 1fr 120px 200px 340px;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0;
+}
+
+.sk {
+  height: 20px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, #eee, #f8f8f8, #eee);
+  background-size: 200% 100%;
+  animation: wave 1.2s linear infinite;
+}
+
+.sk-id { width: 48px; }
+.sk-wide { height: 22px; }
+.sk-mid { width: 60%; }
+.sk-price { width: 80px; margin-left: auto; }
+.sk-flags { width: 180px; }
+.sk-actions { height: 32px; width: 200px; margin-left: auto; }
+
+@keyframes wave {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ═══════════════════════════ TOAST ═══════════════════════════ */
+.toast {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  padding: 14px 20px;
+  border-radius: 14px;
+  color: #fff;
+  font-weight: 600;
+  animation: toastSlide 2.8s ease forwards;
+  z-index: 200;
+}
+
+.toast.ok {
+  background: linear-gradient(135deg, ${ACCENT} 0%, #ff8ba7 100%);
+  box-shadow: 0 10px 32px rgba(240,93,139,0.4);
+}
+
+.toast.bad {
+  background: linear-gradient(135deg, #c62828 0%, #e53935 100%);
+  box-shadow: 0 10px 32px rgba(198,40,40,0.35);
+}
+
+.toast.in-modal {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 101;
+}
+
+@keyframes toastSlide {
+  0% { transform: translateY(24px); opacity: 0; }
+  10% { transform: translateY(0); opacity: 1; }
+  85% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(12px); opacity: 0; }
+}
+
+/* ═══════════════════════════ RESPONSIVE ═══════════════════════════ */
+@media (max-width: 1024px) {
+  .prod-wrap {
+    padding: 16px;
+  }
+
+  .bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+
+  .bar-right {
+    flex-wrap: wrap;
+  }
+
+  .search {
+    width: 100%;
+    max-width: 400px;
+  }
+
+  .grid thead th,
+  .grid tbody td {
+    padding: 12px 14px;
+  }
+
+  .form .grid2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .modal {
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: 0;
+  }
+
+  .gallery {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal,
+  .toast,
+  .btn,
+  .tile {
+    animation: none !important;
+    transition: none !important;
+  }
+}
 `;

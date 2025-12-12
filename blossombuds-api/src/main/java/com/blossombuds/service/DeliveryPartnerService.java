@@ -34,6 +34,7 @@ public class DeliveryPartnerService {
         p.setName(safeTrim(dto.getName()));
         p.setTrackingUrlTemplate(safeTrim(dto.getTrackingUrlTemplate()));
         p.setActive(dto.getActive() != null ? dto.getActive() : Boolean.TRUE);
+        p.setVisible(dto.getVisible() != null ? dto.getVisible() : Boolean.TRUE);
         //p.setCreatedBy(actor);
         //p.setCreatedAt(OffsetDateTime.now());
         log.info("[DELIVERY_PARTNER][CREATE] Partner created: code={}, name={}, actor={}", p.getCode(), p.getName(), actor);
@@ -54,6 +55,7 @@ public class DeliveryPartnerService {
         if (dto.getName() != null)               p.setName(safeTrim(dto.getName()));
         if (dto.getTrackingUrlTemplate() != null)p.setTrackingUrlTemplate(safeTrim(dto.getTrackingUrlTemplate()));
         if (dto.getActive() != null)             p.setActive(dto.getActive());
+        if (dto.getVisible() != null)            p.setVisible(dto.getVisible());
 
         log.info("[DELIVERY_PARTNER][UPDATE] Partner updated: id={}, actor={}", id, actor);
         return p;
@@ -78,12 +80,17 @@ public class DeliveryPartnerService {
         return partnerRepo.findAll();
     }
 
-    /** Lists only active partners. */
+    /** Lists only active partners (for admin). */
     public List<DeliveryPartner> listActive() {
         return partnerRepo.findByActiveTrue();
     }
 
-    /** Soft-disables or enables a partner. */
+    /** Lists only visible partners (for customer-facing features). */
+    public List<DeliveryPartner> listVisible() {
+        return partnerRepo.findByVisibleTrue();
+    }
+
+    /** Soft-disables or enables a partner (soft-delete). */
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public DeliveryPartner setActive(Long id, boolean active, String actor) {
@@ -91,6 +98,17 @@ public class DeliveryPartnerService {
         DeliveryPartner p = get(id);
         p.setActive(active);
         log.info("[DELIVERY_PARTNER][ACTIVE] Set active={} for id={}, actor={}", active, id, actor);
+        return p;
+    }
+
+    /** Toggles visibility (hide/show from customers). */
+    @Transactional
+    @PreAuthorize("hasRole('ADMIN')")
+    public DeliveryPartner setVisible(Long id, boolean visible, String actor) {
+        if (id == null) throw new IllegalArgumentException("id is required");
+        DeliveryPartner p = get(id);
+        p.setVisible(visible);
+        log.info("[DELIVERY_PARTNER][VISIBLE] Set visible={} for id={}, actor={}", visible, id, actor);
         return p;
     }
 

@@ -114,13 +114,22 @@ public class PromotionController {
         return promos.updateCoupon(id, dto);
     }
 
-    /** Toggle coupon active flag (admin). */
+    /** Toggle coupon active flag (soft-delete, admin). */
     @PostMapping("/admin/coupons/{id}/active")
     @PreAuthorize("hasRole('ADMIN')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void setCouponActive(@PathVariable @Min(1) Long id,
                                 @RequestParam("active") boolean active) {
         promos.setCouponActive(id, active);
+    }
+
+    /** Toggle coupon visibility flag (hide/show from customers, admin). */
+    @PostMapping("/admin/coupons/{id}/visible")
+    @PreAuthorize("hasRole('ADMIN')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void setCouponVisible(@PathVariable @Min(1) Long id,
+                                 @RequestParam("visible") boolean visible) {
+        promos.setCouponVisible(id, visible);
     }
 
     // ── DTOs for request bodies ──────────────────────────────────────────────
@@ -159,6 +168,7 @@ public class PromotionController {
         dto.setUsageLimit(c.getUsageLimit());              // 'usage_limit'
         dto.setPerCustomerLimit(c.getPerCustomerLimit());  // 'per_customer_limit'
         dto.setActive(c.getActive());
+        dto.setVisible(c.getVisible());
         return dto;
     }
 }

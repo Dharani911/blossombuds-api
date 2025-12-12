@@ -45,9 +45,13 @@ public class DeliveryPartner {
     @Column(name = "tracking_url_template", columnDefinition = "text")
     private String trackingUrlTemplate;
 
-    /** Soft-visibility/activation flag. */
+    /** Soft-delete flag (when false, record is considered deleted). */
     @Column(name = "active", nullable = false)
     private Boolean active = Boolean.TRUE;
+
+    /** Visibility flag (when false, partner is hidden from customers but visible to admin). */
+    @Column(name = "visible", nullable = false)
+    private Boolean visible = Boolean.TRUE;
 
     /** Audit: created by whom. */
     @Column(name = "created_by", length = 120)
