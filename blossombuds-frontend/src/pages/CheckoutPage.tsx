@@ -548,7 +548,7 @@ export default function CheckoutPage() {
 
       // delivery partners (domestic)
       try {
-        const { data } = await http.get<DeliveryPartnerLite[]>(`/api/partners/active`);
+        const { data } = await http.get<DeliveryPartnerLite[]>(`/api/partners/visible`);
         if (!alive) return;
         setPartners(data ?? []);
       } catch { /* ignore */ }
@@ -612,6 +612,10 @@ export default function CheckoutPage() {
     setCouponAmt(0);
     const code = coupon.trim();
     if (!code) return;
+    if (code.length < 3) {
+      setCouponErr("Invalid coupon code");
+      return;
+    }
     try {
       const { data } = await http.post(
         `/api/promotions/coupons/${encodeURIComponent(code)}/preview`,

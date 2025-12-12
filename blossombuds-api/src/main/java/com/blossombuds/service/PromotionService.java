@@ -193,8 +193,12 @@ public class PromotionService {
         log.info("[COUPON][PREVIEW] Preview discount code={} customerId={} orderTotal={}",
                 code, customerId, orderTotal);
 
-        Coupon c = couponRepo.findByCodeIgnoreCaseAndVisibleTrue(requireNormalize(code))
-                .orElseThrow(() -> new IllegalArgumentException("Coupon not found or hidden"));
+        Coupon c = couponRepo.findByCodeIgnoreCase(requireNormalize(code))
+                .orElseThrow(() -> new IllegalArgumentException("Invalid coupon code"));
+
+        if (!Boolean.TRUE.equals(c.getVisible())) {
+            throw new IllegalArgumentException("Invalid coupon code");
+        }
         validateUsageAndWindow(c, customerId);
         validateMinTotal(c, orderTotal);
         validateMinItems(c, itemsCount);
@@ -218,8 +222,12 @@ public class PromotionService {
                 .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
         if (customerId == null) customerId = order.getCustomerId();
 
-        Coupon c = couponRepo.findByCodeIgnoreCaseAndVisibleTrue(requireNormalize(code))
-                .orElseThrow(() -> new IllegalArgumentException("Coupon not found or hidden"));
+        Coupon c = couponRepo.findByCodeIgnoreCase(requireNormalize(code))
+                .orElseThrow(() -> new IllegalArgumentException("Invalid coupon code"));
+
+        if (!Boolean.TRUE.equals(c.getVisible())) {
+            throw new IllegalArgumentException("Invalid coupon code");
+        }
 
         // enforce all conditions
         validateUsageAndWindow(c, customerId);

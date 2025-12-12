@@ -88,7 +88,7 @@ function deriveUnitPrice(basePrice: number, selected?: SelectedValue[] | null): 
 // Minimal admin helpers
 // ─────────────────────────────────────────────────────────────────────────────
 async function listActivePartners(): Promise<DeliveryPartnerLite[]> {
-  const res = await authFetch("/api/partners/active");
+  const res = await authFetch("/api/partners/visible");
   if (!res.ok) throw new Error(await res.text());
   return (await res.json()) ?? [];
 }
@@ -558,6 +558,10 @@ export default function CreateOrderPage() {
     const code = coupon.trim();
     setCouponErr(null); setCouponAmt(0); setCouponId(null);
     if (!code) return;
+    if (code.length < 3) {
+      setCouponErr("Invalid coupon code");
+      return;
+    }
     if (!customer?.id) { setCouponErr("Choose a customer first."); return; }
 
     try {
