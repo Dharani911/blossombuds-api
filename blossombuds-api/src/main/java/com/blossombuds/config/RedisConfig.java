@@ -6,9 +6,11 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -19,22 +21,30 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 import java.time.Duration;
 
-/** Redis configuration for Spring Cache + RedisTemplate using safe JSON serialization for DTO caching. */
+/** Redis configuration: normal JSON for HTTP, typed JSON only for Redis cache. */
 @Configuration
 @EnableCaching
 public class RedisConfig {
 
-    /** Builds a safe ObjectMapper for Redis JSON serialization (Java time + restricted polymorphic typing). */
+    /** Web/API ObjectMapper (NO default typing) so your HTTP responses stay clean. */
     @Bean
+    @Primary
+    public ObjectMapper webObjectMapper() {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        return mapper;
+    }
+
+    /** Redis ObjectMapper (restricted default typing) used ONLY for Redis serialization. */
+    @Bean(name = "redisObjectMapper")
     public ObjectMapper redisObjectMapper() {
         ObjectMapper mapper = new ObjectMapper();
-
         mapper.registerModule(new JavaTimeModule());
         mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
-        // Restrict type info to only safe packages you control + common JDK value types.
         PolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator.builder()
-                .allowIfSubType("com.blossombuds")  // your DTOs, views, records, etc.
+                .allowIfSubType("com.blossombuds")  // your DTOs etc
                 .allowIfSubType("java.util")
                 .allowIfSubType("java.time")
                 .allowIfSubType("java.math")
@@ -44,11 +54,10 @@ public class RedisConfig {
         return mapper;
     }
 
-    /** Creates a RedisTemplate with String keys and JSON values. */
     @Bean
     public RedisTemplate<String, Object> redisTemplate(
             RedisConnectionFactory connectionFactory,
-            ObjectMapper redisObjectMapper
+            @Qualifier("redisObjectMapper") ObjectMapper redisObjectMapper
     ) {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
@@ -65,11 +74,10 @@ public class RedisConfig {
         return template;
     }
 
-    /** Creates a RedisCacheManager for @Cacheable using the same serializers and a default TTL. */
     @Bean
     public RedisCacheManager cacheManager(
             RedisConnectionFactory connectionFactory,
-            ObjectMapper redisObjectMapper
+            @Qualifier("redisObjectMapper") ObjectMapper redisObjectMapper
     ) {
         StringRedisSerializer keySer = new StringRedisSerializer();
         GenericJackson2JsonRedisSerializer valSer = new GenericJackson2JsonRedisSerializer(redisObjectMapper);
