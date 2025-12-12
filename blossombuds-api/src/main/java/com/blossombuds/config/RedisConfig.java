@@ -35,6 +35,12 @@ public class RedisConfig {
             com.fasterxml.jackson.annotation.JsonTypeInfo.As.PROPERTY
         );
         mapper.addMixIn(org.springframework.data.domain.PageImpl.class, PageImplMixin.class);
+        
+        com.fasterxml.jackson.databind.module.SimpleModule pageModule = new com.fasterxml.jackson.databind.module.SimpleModule();
+        pageModule.addDeserializer(org.springframework.data.domain.Pageable.class, new PageableDeserializer());
+        pageModule.addDeserializer(org.springframework.data.domain.PageRequest.class, new PageableDeserializer());
+        mapper.registerModule(pageModule);
+
         GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(mapper);
 
         // Use JSON serializer for values
@@ -56,6 +62,12 @@ public class RedisConfig {
             com.fasterxml.jackson.annotation.JsonTypeInfo.As.PROPERTY
         );
         mapper.addMixIn(org.springframework.data.domain.PageImpl.class, PageImplMixin.class);
+
+        com.fasterxml.jackson.databind.module.SimpleModule pageModule = new com.fasterxml.jackson.databind.module.SimpleModule();
+        pageModule.addDeserializer(org.springframework.data.domain.Pageable.class, new PageableDeserializer());
+        pageModule.addDeserializer(org.springframework.data.domain.PageRequest.class, new PageableDeserializer());
+        mapper.registerModule(pageModule);
+
         GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(mapper);
 
         RedisCacheConfiguration config = RedisCacheConfiguration.defaultCacheConfig()
@@ -76,6 +88,19 @@ public class RedisConfig {
                 @com.fasterxml.jackson.annotation.JsonProperty("content") java.util.List<?> content,
                 @com.fasterxml.jackson.annotation.JsonProperty("pageable") org.springframework.data.domain.Pageable pageable,
                 @com.fasterxml.jackson.annotation.JsonProperty("totalElements") long total) {
+        }
+    }
+
+    static class PageableDeserializer extends com.fasterxml.jackson.databind.JsonDeserializer<org.springframework.data.domain.Pageable> {
+        @Override
+        public org.springframework.data.domain.Pageable deserialize(com.fasterxml.jackson.core.JsonParser p, com.fasterxml.jackson.databind.DeserializationContext ctxt) throws java.io.IOException {
+            com.fasterxml.jackson.databind.JsonNode node = p.getCodec().readTree(p);
+            if (node.has("pageNumber") && node.has("pageSize")) {
+                int page = node.get("pageNumber").asInt();
+                int size = node.get("pageSize").asInt();
+                return org.springframework.data.domain.PageRequest.of(page, size, org.springframework.data.domain.Sort.unsorted());
+            }
+            return org.springframework.data.domain.Pageable.unpaged();
         }
     }
 }
