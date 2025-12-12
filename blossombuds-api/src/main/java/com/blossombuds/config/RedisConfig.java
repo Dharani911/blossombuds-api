@@ -34,6 +34,7 @@ public class RedisConfig {
             com.fasterxml.jackson.databind.ObjectMapper.DefaultTyping.NON_FINAL,
             com.fasterxml.jackson.annotation.JsonTypeInfo.As.PROPERTY
         );
+        mapper.addMixIn(org.springframework.data.domain.PageImpl.class, PageImplMixin.class);
         GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(mapper);
 
         // Use JSON serializer for values
@@ -54,6 +55,7 @@ public class RedisConfig {
             com.fasterxml.jackson.databind.ObjectMapper.DefaultTyping.NON_FINAL,
             com.fasterxml.jackson.annotation.JsonTypeInfo.As.PROPERTY
         );
+        mapper.addMixIn(org.springframework.data.domain.PageImpl.class, PageImplMixin.class);
         GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(mapper);
 
         RedisCacheConfiguration config = RedisCacheConfiguration.defaultCacheConfig()
@@ -65,5 +67,15 @@ public class RedisConfig {
         return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(config)
                 .build();
+    }
+
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
+    static class PageImplMixin {
+        @com.fasterxml.jackson.annotation.JsonCreator
+        public PageImplMixin(
+                @com.fasterxml.jackson.annotation.JsonProperty("content") java.util.List<?> content,
+                @com.fasterxml.jackson.annotation.JsonProperty("pageable") com.fasterxml.jackson.databind.JsonNode pageable,
+                @com.fasterxml.jackson.annotation.JsonProperty("totalElements") long total) {
+        }
     }
 }
