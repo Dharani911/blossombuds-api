@@ -3,9 +3,13 @@ package com.blossombuds.service;
 import com.amazonaws.services.s3.model.*;
 import com.blossombuds.domain.*;
 import com.blossombuds.dto.*;
+import com.blossombuds.dto.*;
 import com.blossombuds.repository.*;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching; // Added
 
 import com.blossombuds.util.ImageUtil;
 
@@ -91,6 +95,7 @@ public class CatalogService {
     /** Creates a category from the given DTO. */
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
+    @CacheEvict(value = "categories", allEntries = true)
     public Category createCategory(CategoryDto dto) {
         log.info("Creating new category: {}", dto.getName());
         if (dto == null) throw new IllegalArgumentException("CategoryDto is required");
@@ -150,6 +155,7 @@ public class CatalogService {
     }
 
     /** Lists all active categories. */
+    @Cacheable(value = "categories")
     public List<Category> listCategories() {
         log.info("[CATEGORY][LIST]");
         List<Category> all = categoryRepo.findAll();
@@ -173,6 +179,7 @@ public class CatalogService {
     /** Updates a category’s mutable fields. */
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
+    @CacheEvict(value = "categories", allEntries = true)
     public Category updateCategory(Long id, CategoryDto dto) {
         log.info("[CATEGORY][UPDATE] id={} name='{}'", id, (dto!=null?dto.getName():null));
         if (id == null) throw new IllegalArgumentException("Category id is required");
@@ -242,6 +249,7 @@ public class CatalogService {
     /** Soft-deletes a category (active=false via @SQLDelete). */
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
+    @CacheEvict(value = "categories", allEntries = true)
     public void deleteCategory(Long id) {
         log.info("[CATEGORY][DELETE] id={}", id);
         if (id == null) throw new IllegalArgumentException("Category id is required");
@@ -256,6 +264,7 @@ public class CatalogService {
     /** Creates a product from the given DTO. */
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
+    @CacheEvict(value = "newArrivals", allEntries = true)
     public Product createProduct(ProductDto dto) {
         log.info("[PRODUCT][CREATE] name='{}' slug='{}'", (dto!=null?dto.getName():null), (dto!=null?dto.getSlug():null));
         if (dto == null) throw new IllegalArgumentException("ProductDto is required");
@@ -292,6 +301,7 @@ public class CatalogService {
     }
 
     /** Retrieves a product by id or throws if not found. */
+    @Cacheable(value = "product", key = "#id")
     public Product getProduct(Long id) {
         log.info("[PRODUCT][GET] id={}", id);
         if (id == null) throw new IllegalArgumentException("Product id is required");
@@ -306,6 +316,11 @@ public class CatalogService {
     /** Updates a product’s mutable fields. */
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
+    @Caching(evict = {
+        @CacheEvict(value = "product", key = "#id"),
+        @CacheEvict(value = "newArrivals", allEntries = true),
+        @CacheEvict(value = "productsByCategory", allEntries = true)
+    })
     public Product updateProduct(Long id, ProductDto dto) {
         log.info("[PRODUCT][UPDATE] id={} name='{}'", id, (dto!=null?dto.getName():null));
         if (id == null) throw new IllegalArgumentException("Product id is required");
@@ -342,6 +357,11 @@ public class CatalogService {
     /** Soft-deletes a product (active=false via @SQLDelete). */
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
+    @Caching(evict = {
+        @CacheEvict(value = "product", key = "#id"),
+        @CacheEvict(value = "newArrivals", allEntries = true),
+        @CacheEvict(value = "productsByCategory", allEntries = true)
+    })
     public void deleteProduct(Long id) {
         log.info("[PRODUCT][DELETE] id={}", id);
         if (id == null) throw new IllegalArgumentException("Product id is required");
@@ -352,6 +372,7 @@ public class CatalogService {
     }
 
     /** Pages active products belonging to a specific category. */
+    @Cacheable(value = "productsByCategory", key = "{#categoryId, #page, #size}")
     public Page<Product> listProductsByCategory(Long categoryId, int page, int size) {
         log.info("[PRODUCT][LIST_BY_CATEGORY] categoryId={} page={} size={}", categoryId, page, size);
         if (categoryId == null) throw new IllegalArgumentException("categoryId is required");
@@ -370,6 +391,7 @@ public class CatalogService {
     }
 
     /** NEW: New Arrivals — newest products first (active=true via @Where). */
+    @Cacheable(value = "newArrivals", key = "#limit")
     public List<Product> listNewArrivals(int limit) {
         int lim = Math.max(1, Math.min(100, limit)); // sanity cap
         log.info("[PRODUCT][NEW_ARRIVALS] limit={}", lim);
@@ -386,6 +408,7 @@ public class CatalogService {
     /** Links a product to a category (idempotent). */
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
+    @CacheEvict(value = "productsByCategory", allEntries = true)
     public void linkProductToCategory(Long productId, Long categoryId) {
         log.info("[LINK][PRODUCT_CATEGORY][CREATE] productId={} categoryId={}", productId, categoryId);
         if (productId == null || categoryId == null) {
@@ -416,6 +439,7 @@ public class CatalogService {
 
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
+    @CacheEvict(value = "productsByCategory", allEntries = true)
     public void unlinkProductFromCategory(Long productId, Long categoryId) {
         log.info("[LINK][PRODUCT_CATEGORY][DELETE] productId={} categoryId={}", productId, categoryId);
         if (productId == null || categoryId == null) {

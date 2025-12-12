@@ -29,6 +29,7 @@ public class DeliveryFeeRulesService {
     /* ============================ FEE LOOKUP ============================ */
 
     /** Finds the most specific *active* fee (district → state → default), if any. */
+    @org.springframework.cache.annotation.Cacheable(value = "deliveryFees", key = "{#stateId, #districtId}")
     public Optional<BigDecimal> findEffectiveFee(Long stateId, Long districtId) {
         // District-specific rule (active)
         if (districtId != null) {
@@ -92,6 +93,7 @@ public class DeliveryFeeRulesService {
 
     /** Create a new rule. */
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = "deliveryFees", allEntries = true)
     public DeliveryFeeRules createRule(DeliveryFeeRules dto) {
         DeliveryFeeRules r = new DeliveryFeeRules();
         applyInto(r, dto);
@@ -101,6 +103,7 @@ public class DeliveryFeeRulesService {
 
     /** Update an existing rule. */
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = "deliveryFees", allEntries = true)
     public DeliveryFeeRules updateRule(Long id, DeliveryFeeRules dto) {
         DeliveryFeeRules r = ruleRepo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Rule not found: " + id));
@@ -110,7 +113,9 @@ public class DeliveryFeeRulesService {
     }
 
     /** Delete a rule. */
+    /** Delete a rule. */
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = "deliveryFees", allEntries = true)
     public void deleteRule(Long id) {
         if (id != null) {
             log.warn("[DELIVERY][DELETE] Deleting rule id={}", id);
