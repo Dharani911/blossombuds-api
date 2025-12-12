@@ -1,5 +1,11 @@
 package com.blossombuds.config;
 
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -13,92 +19,69 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 import java.time.Duration;
 
+/** Redis configuration for Spring Cache + RedisTemplate using safe JSON serialization for DTO caching. */
 @Configuration
 @EnableCaching
 public class RedisConfig {
 
+    /** Builds a safe ObjectMapper for Redis JSON serialization (Java time + restricted polymorphic typing). */
     @Bean
-    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {
+    public ObjectMapper redisObjectMapper() {
+        ObjectMapper mapper = new ObjectMapper();
+
+        mapper.registerModule(new JavaTimeModule());
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
+        // Restrict type info to only safe packages you control + common JDK value types.
+        PolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator.builder()
+                .allowIfSubType("com.blossombuds")  // your DTOs, views, records, etc.
+                .allowIfSubType("java.util")
+                .allowIfSubType("java.time")
+                .allowIfSubType("java.math")
+                .build();
+
+        mapper.activateDefaultTyping(ptv, ObjectMapper.DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY);
+        return mapper;
+    }
+
+    /** Creates a RedisTemplate with String keys and JSON values. */
+    @Bean
+    public RedisTemplate<String, Object> redisTemplate(
+            RedisConnectionFactory connectionFactory,
+            ObjectMapper redisObjectMapper
+    ) {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
 
-        // Use String serializer for keys
-        template.setKeySerializer(new StringRedisSerializer());
-        template.setHashKeySerializer(new StringRedisSerializer());
+        StringRedisSerializer keySer = new StringRedisSerializer();
+        GenericJackson2JsonRedisSerializer valSer = new GenericJackson2JsonRedisSerializer(redisObjectMapper);
 
-        // Configure ObjectMapper with JavaTimeModule
-        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-        mapper.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
-        mapper.activateDefaultTyping(
-            mapper.getPolymorphicTypeValidator(),
-            com.fasterxml.jackson.databind.ObjectMapper.DefaultTyping.NON_FINAL,
-            com.fasterxml.jackson.annotation.JsonTypeInfo.As.PROPERTY
-        );
-        mapper.addMixIn(org.springframework.data.domain.PageImpl.class, PageImplMixin.class);
-        
-        com.fasterxml.jackson.databind.module.SimpleModule pageModule = new com.fasterxml.jackson.databind.module.SimpleModule();
-        pageModule.addDeserializer(org.springframework.data.domain.Pageable.class, new PageableDeserializer());
-        mapper.registerModule(pageModule);
-
-        GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(mapper);
-
-        // Use JSON serializer for values
-        template.setValueSerializer(serializer);
-        template.setHashValueSerializer(serializer);
+        template.setKeySerializer(keySer);
+        template.setHashKeySerializer(keySer);
+        template.setValueSerializer(valSer);
+        template.setHashValueSerializer(valSer);
 
         template.afterPropertiesSet();
         return template;
     }
 
+    /** Creates a RedisCacheManager for @Cacheable using the same serializers and a default TTL. */
     @Bean
-    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
-        // Configure ObjectMapper with JavaTimeModule
-        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-        mapper.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
-        mapper.activateDefaultTyping(
-            mapper.getPolymorphicTypeValidator(),
-            com.fasterxml.jackson.databind.ObjectMapper.DefaultTyping.NON_FINAL,
-            com.fasterxml.jackson.annotation.JsonTypeInfo.As.PROPERTY
-        );
-        mapper.addMixIn(org.springframework.data.domain.PageImpl.class, PageImplMixin.class);
-
-        com.fasterxml.jackson.databind.module.SimpleModule pageModule = new com.fasterxml.jackson.databind.module.SimpleModule();
-        pageModule.addDeserializer(org.springframework.data.domain.Pageable.class, new PageableDeserializer());
-        mapper.registerModule(pageModule);
-
-        GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(mapper);
+    public RedisCacheManager cacheManager(
+            RedisConnectionFactory connectionFactory,
+            ObjectMapper redisObjectMapper
+    ) {
+        StringRedisSerializer keySer = new StringRedisSerializer();
+        GenericJackson2JsonRedisSerializer valSer = new GenericJackson2JsonRedisSerializer(redisObjectMapper);
 
         RedisCacheConfiguration config = RedisCacheConfiguration.defaultCacheConfig()
-                .entryTtl(Duration.ofHours(1)) // Default TTL 1 hour
+                .entryTtl(Duration.ofHours(1))
                 .disableCachingNullValues()
-                .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
-                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(serializer));
+                .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(keySer))
+                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(valSer));
 
         return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(config)
                 .build();
-    }
-
-    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
-    static class PageImplMixin {
-        @com.fasterxml.jackson.annotation.JsonCreator
-        public PageImplMixin(
-                @com.fasterxml.jackson.annotation.JsonProperty("content") java.util.List<?> content,
-                @com.fasterxml.jackson.annotation.JsonProperty("pageable") org.springframework.data.domain.Pageable pageable,
-                @com.fasterxml.jackson.annotation.JsonProperty("totalElements") long total) {
-        }
-    }
-
-    static class PageableDeserializer extends com.fasterxml.jackson.databind.JsonDeserializer<org.springframework.data.domain.Pageable> {
-        @Override
-        public org.springframework.data.domain.Pageable deserialize(com.fasterxml.jackson.core.JsonParser p, com.fasterxml.jackson.databind.DeserializationContext ctxt) throws java.io.IOException {
-            com.fasterxml.jackson.databind.JsonNode node = p.getCodec().readTree(p);
-            if (node.has("pageNumber") && node.has("pageSize")) {
-                int page = node.get("pageNumber").asInt();
-                int size = node.get("pageSize").asInt();
-                return org.springframework.data.domain.PageRequest.of(page, size, org.springframework.data.domain.Sort.unsorted());
-            }
-            return org.springframework.data.domain.Pageable.unpaged();
-        }
     }
 }

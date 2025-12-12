@@ -92,14 +92,14 @@ public class CatalogController {
 
     /** Get product by id (read: public). */
     @GetMapping("/products/{id}")
-    public Product getProduct(@PathVariable Long id) {
+    public ProductDto getProduct(@PathVariable Long id) {
         return catalog.getProduct(id);
     }
 
     /** Update product. */
     @PutMapping("/products/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public Product updateProduct(@PathVariable Long id, @Valid @RequestBody ProductDto dto) {
+    public ProductDto updateProduct(@PathVariable Long id, @Valid @RequestBody ProductDto dto) {
         return catalog.updateProduct(id, dto);
     }
 
@@ -392,7 +392,7 @@ public class CatalogController {
     // Mark featured = true
     @PostMapping("/products/{id}/featured")
     @PreAuthorize("hasRole('ADMIN')")
-    public Product markFeatured(@PathVariable Long id) {
+    public ProductDto markFeatured(@PathVariable Long id) {
         return catalog.setProductFeatured(id, true);
     }
 

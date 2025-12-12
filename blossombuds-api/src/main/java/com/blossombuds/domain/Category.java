@@ -90,5 +90,9 @@ public class Category {
     public Long getParentId() { return parent != null ? parent.getId() : null; }
 
     @Transient @JsonProperty("parentName")
-    public String getParentName() { return parent != null ? parent.getName() : null; }
+    public String getParentName() {
+        if (parent == null) return null;
+        if (org.hibernate.Hibernate.isInitialized(parent)) return parent.getName();
+        return null;
+    }
 }

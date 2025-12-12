@@ -301,19 +301,33 @@ public class CatalogService {
     }
 
     /** Retrieves a product by id or throws if not found. */
+    /** Gets a product for storefront (cache-safe DTO; avoids caching JPA entity + Hibernate proxies). */
+    /** Gets a product by id (cache-safe DTO; avoids caching JPA entity/proxies). */
     @Cacheable(value = "product", key = "#id")
-    public Product getProduct(Long id) {
+    public ProductDto getProduct(Long id) {
         log.info("[PRODUCT][GET] id={}", id);
         if (id == null) throw new IllegalArgumentException("Product id is required");
-        Optional<Product> opt = productRepo.findById(id);
-        if (opt.isEmpty()) {
+
+        Product p = productRepo.findById(id).orElseThrow(() -> {
             log.warn("[PRODUCT][GET][MISS] id={}", id);
-            throw new IllegalArgumentException("Product not found: " + id);
-        }
-        Product p = opt.get();
-        org.hibernate.Hibernate.initialize(p.getImages());
-        return p;
+            return new IllegalArgumentException("Product not found: " + id);
+        });
+
+        ProductDto dto = new ProductDto();
+        dto.setId(p.getId());
+        dto.setSlug(p.getSlug());
+        dto.setName(p.getName());
+        dto.setDescription(p.getDescription());
+        dto.setPrice(p.getPrice());
+        dto.setActive(p.getActive());
+        dto.setVisible(p.getVisible());
+        dto.setFeatured(p.getFeatured());
+        dto.setCreatedAt(p.getCreatedAt());
+
+        log.info("[PRODUCT][GET][OK] id={} slug='{}'", dto.getId(), dto.getSlug());
+        return dto;
     }
+
 
     /** Updates a product’s mutable fields. */
     @Transactional
@@ -323,11 +337,11 @@ public class CatalogService {
         @CacheEvict(value = "newArrivals", allEntries = true),
         @CacheEvict(value = "productsByCategory", allEntries = true)
     })
-    public Product updateProduct(Long id, ProductDto dto) {
+    public ProductDto updateProduct(Long id, ProductDto dto) {
         log.info("[PRODUCT][UPDATE] id={} name='{}'", id, (dto!=null?dto.getName():null));
         if (id == null) throw new IllegalArgumentException("Product id is required");
         if (dto == null) throw new IllegalArgumentException("ProductDto is required");
-        Product p = getProduct(id);
+        ProductDto p = getProduct(id);
         if (dto.getSlug() != null) {
             String normalized = slugify(dto.getSlug());
             if (!normalized.equalsIgnoreCase(p.getSlug())) {
@@ -374,14 +388,54 @@ public class CatalogService {
     }
 
     /** Pages active products belonging to a specific category. */
+    /** Pages active products belonging to a specific category (cache-safe DTO page). */
     @Cacheable(value = "productsByCategory", key = "{#categoryId, #page, #size}")
-    public Page<Product> listProductsByCategory(Long categoryId, int page, int size) {
+    public com.blossombuds.dto.CachedPage<com.blossombuds.dto.ProductListItemDto>
+    listProductsByCategory(Long categoryId, int page, int size) {
+
         log.info("[PRODUCT][LIST_BY_CATEGORY] categoryId={} page={} size={}", categoryId, page, size);
         if (categoryId == null) throw new IllegalArgumentException("categoryId is required");
-        Page<Product> result = productRepo.findActiveByCategoryId(categoryId, PageRequest.of(page, size));
-        result.forEach(p -> org.hibernate.Hibernate.initialize(p.getImages()));
-        log.info("[PRODUCT][LIST_BY_CATEGORY][OK] categoryId={} returned={}", categoryId, result.getNumberOfElements());
-        return result;
+
+        int safePage = Math.max(0, page);
+        int safeSize = Math.max(1, Math.min(100, size)); // cap to avoid giant cache entries
+
+        org.springframework.data.domain.Page<Product> pg = productRepo.findActiveByCategoryId(
+                categoryId,
+                PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"))
+        );
+
+        List<ProductListItemDto> items = pg.getContent().stream().map(p -> {
+            ProductListItemDto dto = new ProductListItemDto();
+            dto.setId(p.getId());
+            dto.setSlug(p.getSlug());
+            dto.setName(p.getName());
+            dto.setPrice(p.getPrice());
+            dto.setActive(p.getActive());
+            dto.setVisible(p.getVisible());
+            dto.setFeatured(p.getFeatured());
+            dto.setCreatedAt(p.getCreatedAt());
+            return dto;
+        }).toList();
+
+        log.info("[PRODUCT][LIST_BY_CATEGORY][OK] categoryId={} returned={} total={}",
+                categoryId, items.size(), pg.getTotalElements());
+
+        return new com.blossombuds.dto.CachedPage<>(items, safePage, safeSize, pg.getTotalElements());
+    }
+
+
+    /** Maps Product entity to a cache-safe DTO for storefront listing. */
+    private ProductDto toProductDtoForStorefront(Product p) {
+        ProductDto dto = new ProductDto();
+        dto.setId(p.getId());
+        dto.setSlug(p.getSlug());
+        dto.setName(p.getName());
+        dto.setDescription(p.getDescription());
+        dto.setPrice(p.getPrice());
+        dto.setVisible(p.getVisible());
+        dto.setFeatured(p.getFeatured());
+        // IMPORTANT: don't attach lazy collections here
+        return dto;
     }
 
     /** Lists active categories linked to a product. */
@@ -1199,9 +1253,9 @@ public class CatalogService {
         return out;
     }
     @Transactional
-    public Product setProductFeatured(Long id, boolean featured) {
+    public ProductDto setProductFeatured(Long id, boolean featured) {
         log.info("[PRODUCT][FEATURED][SET] id={} featured={}", id, featured);
-        Product p = getProduct(id);
+        ProductDto p = getProduct(id);
         p.setFeatured(featured);
         log.info("[PRODUCT][FEATURED][SET][OK] id={} featured={}", id, featured);
         return p; // dirty checking persists

@@ -2,6 +2,7 @@ package com.blossombuds.web;
 
 import com.blossombuds.domain.Category;
 import com.blossombuds.domain.Product;
+import com.blossombuds.dto.CachedPage;
 import com.blossombuds.dto.CategoryDto;
 import com.blossombuds.dto.ProductListItemDto;
 import com.blossombuds.service.CatalogService;
@@ -40,18 +41,10 @@ public class CategoryController {
 
     /** List products under a category with pagination (public). */
     @GetMapping("/{id}/products")
-    public Page<ProductListItemDto> listProducts(@PathVariable Long id,
-                                                 @RequestParam(defaultValue = "0") @Min(0) int page,
-                                                 @RequestParam(defaultValue = "12") @Min(1) int size) {
-        Page<Product> products = catalog.listProductsByCategory(id, page, size);
-        return products.map(p -> {
-            ProductListItemDto dto = new ProductListItemDto();
-            dto.setId(p.getId());
-            dto.setSlug(p.getSlug());
-            dto.setName(p.getName());
-            dto.setVisible(p.getVisible());
-            dto.setPrice(p.getPrice());
-            return dto;
-        });
+
+    public CachedPage<ProductListItemDto> listProducts(@PathVariable Long id,
+                                                       @RequestParam(defaultValue = "0") @Min(0) int page,
+                                                       @RequestParam(defaultValue = "12") @Min(1) int size) {
+        return catalog.listProductsByCategory(id, page, size);
     }
 }
