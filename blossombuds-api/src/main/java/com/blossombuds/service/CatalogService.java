@@ -310,7 +310,9 @@ public class CatalogService {
             log.warn("[PRODUCT][GET][MISS] id={}", id);
             throw new IllegalArgumentException("Product not found: " + id);
         }
-        return opt.get();
+        Product p = opt.get();
+        org.hibernate.Hibernate.initialize(p.getImages());
+        return p;
     }
 
     /** Updates a product’s mutable fields. */
@@ -377,6 +379,7 @@ public class CatalogService {
         log.info("[PRODUCT][LIST_BY_CATEGORY] categoryId={} page={} size={}", categoryId, page, size);
         if (categoryId == null) throw new IllegalArgumentException("categoryId is required");
         Page<Product> result = productRepo.findActiveByCategoryId(categoryId, PageRequest.of(page, size));
+        result.forEach(p -> org.hibernate.Hibernate.initialize(p.getImages()));
         log.info("[PRODUCT][LIST_BY_CATEGORY][OK] categoryId={} returned={}", categoryId, result.getNumberOfElements());
         return result;
     }
@@ -399,6 +402,7 @@ public class CatalogService {
                 PageRequest.of(0, lim, Sort.by(Sort.Direction.DESC, "createdAt"))
         );
         List<Product> out = page.getContent();
+        out.forEach(p -> org.hibernate.Hibernate.initialize(p.getImages()));
         log.info("[PRODUCT][NEW_ARRIVALS][OK] returned={}", out.size());
         return out;
     }
