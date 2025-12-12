@@ -1,6 +1,7 @@
 package com.blossombuds.domain;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.SQLDelete;
@@ -97,3 +98,4 @@ public class Product {
         }
         return null;
     }
+}
