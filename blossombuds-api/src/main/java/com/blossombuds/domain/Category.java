@@ -34,8 +34,7 @@ public class Category {
      *  Serialize as just the ID to avoid deep graphs & lazy hits. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "parent_id")
-    @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id")
-    @JsonIdentityReference(alwaysAsId = true) // <-- parent -> 5 (id only) in JSON
+    @JsonIgnore
     @ToString.Exclude @EqualsAndHashCode.Exclude
     private Category parent;
 
