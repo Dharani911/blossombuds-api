@@ -26,7 +26,7 @@ import java.util.Set;
 // Soft-delete = hide from lists (visible=false), but keep the row.
 @SQLDelete(sql = "UPDATE products SET active = false, modified_at = now() WHERE id = ?")
 @Where(clause = "active = true") //
-
+@com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
 public class Product {
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)

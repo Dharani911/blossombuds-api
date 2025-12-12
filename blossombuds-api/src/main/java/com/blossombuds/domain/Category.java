@@ -23,7 +23,7 @@ import java.util.Set;
 @EntityListeners(AuditingEntityListener.class) // <-- enable Spring Data auditing
 @SQLDelete(sql = "UPDATE categories SET active = false, modified_at = now() WHERE id = ?")
 @Where(clause = "active = true")
-@JsonIgnoreProperties({"hibernateLazyInitializer","handler"}) // safety
+@JsonIgnoreProperties(value = {"hibernateLazyInitializer", "handler"}, ignoreUnknown = true) // safety
 public class Category {
 
     /** Surrogate primary key for categories. */
