@@ -38,6 +38,10 @@ public class Category {
     @ToString.Exclude @EqualsAndHashCode.Exclude
     private Category parent;
 
+    @JsonIgnore
+    @Column(name = "parent_id", insertable = false, updatable = false)
+    private Long parentId;
+
     /** Human-friendly category name. */
     @Column(length = 100)
     private String name;
@@ -87,12 +91,8 @@ public class Category {
 
     // Optional: convenience read-only scalars for the frontend
     @Transient @JsonProperty("parentId")
-    public Long getParentId() { return parent != null ? parent.getId() : null; }
+    public Long getParentId() { return parentId; }
 
-    @Transient @JsonProperty("parentName")
-    public String getParentName() {
-        if (parent == null) return null;
-        if (org.hibernate.Hibernate.isInitialized(parent)) return parent.getName();
-        return null;
-    }
+
+
 }
