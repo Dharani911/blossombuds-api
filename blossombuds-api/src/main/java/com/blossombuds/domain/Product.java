@@ -98,4 +98,9 @@ public class Product {
         }
         return null;
     }
+
+    @JsonProperty("images")
+    public void setImagesSafe(java.util.List<ProductImage> list) {
+        this.images = list == null ? new LinkedHashSet<>() : new LinkedHashSet<>(list);
+    }
 }

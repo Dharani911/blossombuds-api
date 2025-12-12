@@ -38,7 +38,6 @@ public class RedisConfig {
         
         com.fasterxml.jackson.databind.module.SimpleModule pageModule = new com.fasterxml.jackson.databind.module.SimpleModule();
         pageModule.addDeserializer(org.springframework.data.domain.Pageable.class, new PageableDeserializer());
-        pageModule.addDeserializer(org.springframework.data.domain.PageRequest.class, new PageableDeserializer());
         mapper.registerModule(pageModule);
 
         GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(mapper);
@@ -65,7 +64,6 @@ public class RedisConfig {
 
         com.fasterxml.jackson.databind.module.SimpleModule pageModule = new com.fasterxml.jackson.databind.module.SimpleModule();
         pageModule.addDeserializer(org.springframework.data.domain.Pageable.class, new PageableDeserializer());
-        pageModule.addDeserializer(org.springframework.data.domain.PageRequest.class, new PageableDeserializer());
         mapper.registerModule(pageModule);
 
         GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(mapper);

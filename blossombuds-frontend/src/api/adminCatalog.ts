@@ -56,6 +56,7 @@ export type ProductOption = {
   maxSelect?: number | null;
   sortOrder?: number | null;
   active?: boolean;
+  visible?: boolean;
 };
 
 export type ProductOptionValue = {
@@ -66,6 +67,7 @@ export type ProductOptionValue = {
   priceDelta?: number | null;
   sortOrder?: number | null;
   active?: boolean;
+  visible?: boolean;
 };
 
 export type Category = {
@@ -211,15 +213,15 @@ export async function uploadProductImage(
   altText?: string,
   sortOrder?: number,
   onProgress?: (pct: number) => void
-){
-const err = validateImageFile(file);
+) {
+  const err = validateImageFile(file);
   if (err) {
     // Surface as a rejected Promise so calling UI can show the message
     return Promise.reject(new Error(err));
   }
   const fd = new FormData();
   fd.append("file", file, file.name);
-  if (altText != null)  fd.append("altText", String(altText));
+  if (altText != null) fd.append("altText", String(altText));
   if (sortOrder != null) fd.append("sortOrder", String(sortOrder));
 
   const res = await adminHttp.post(`/api/catalog/products/${productId}/images`, fd, {

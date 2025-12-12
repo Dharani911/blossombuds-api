@@ -38,7 +38,7 @@ export default function AdminDeliveryFeeRules() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [rules, setRules] = useState<DeliveryFeeRule[]>([]);
-  const [savingIds, setSavingIds] = useState<Record<number | "new", boolean>>({});
+  const [savingIds, setSavingIds] = useState<Record<string | number, boolean>>({});
   const [toast, setToast] = useState<{ kind: "ok" | "bad"; msg: string } | null>(null);
 
   // Lookups
