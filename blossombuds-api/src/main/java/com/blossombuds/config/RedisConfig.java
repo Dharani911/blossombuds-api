@@ -22,7 +22,7 @@ import java.util.Map;
 public class RedisConfig {
 
     /** Creates an ObjectMapper used only for Redis value serialization. */
-    @Bean
+    /*@Bean
     public ObjectMapper redisObjectMapper() {
         BasicPolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator.builder()
                 .allowIfSubType("com.blossombuds.dto")
@@ -37,7 +37,7 @@ public class RedisConfig {
         // Type info needed for generic DTOs like CachedPage<T> (stored only in Redis JSON)
         om.activateDefaultTyping(ptv, ObjectMapper.DefaultTyping.NON_FINAL);
         return om;
-    }
+    }*/
 
     /** Builds a RedisCacheManager with JSON values and string keys. */
     @Bean
