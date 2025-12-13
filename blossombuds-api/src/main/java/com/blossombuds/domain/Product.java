@@ -81,26 +81,5 @@ public class Product {
     @ToString.Exclude @EqualsAndHashCode.Exclude
     private Set<ProductCategory> categoryLinks = new LinkedHashSet<>();
 
-    @OneToMany(mappedBy = "product", fetch = FetchType.LAZY)
-    @OrderBy("sortOrder ASC")
-    @JsonIgnore
-    private Set<ProductImage> images = new LinkedHashSet<>();
 
-    /**
-     * Safer accessor for Jackson that avoids touching the proxy if not initialized,
-     * OR simply returns null if we want to force explicit loading.
-     * Ideally, for caching entities, we should cache DTOs, but for now we safeguard the Entity.
-     */
-    @JsonProperty("images")
-    public java.util.List<ProductImage> getImagesSafe() {
-        if (org.hibernate.Hibernate.isInitialized(images)) {
-            return new java.util.ArrayList<>(images);
-        }
-        return null;
-    }
-
-    @JsonProperty("images")
-    public void setImagesSafe(java.util.List<ProductImage> list) {
-        this.images = list == null ? new LinkedHashSet<>() : new LinkedHashSet<>(list);
-    }
 }

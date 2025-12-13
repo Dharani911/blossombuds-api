@@ -34,14 +34,12 @@ public class ProductCategory {
     @ManyToOne(fetch = FetchType.LAZY) @MapsId("productId")
     @JoinColumn(name = "product_id")
     @ToString.Exclude @EqualsAndHashCode.Exclude
-    @com.fasterxml.jackson.annotation.JsonIgnore
     private Product product;
 
     /** Linked category side of the association. */
     @ManyToOne(fetch = FetchType.LAZY) @MapsId("categoryId")
     @JoinColumn(name = "category_id")
     @ToString.Exclude @EqualsAndHashCode.Exclude
-    @com.fasterxml.jackson.annotation.JsonIgnore
     private Category category;
 
     /** Soft-visibility flag for this mapping row. */
