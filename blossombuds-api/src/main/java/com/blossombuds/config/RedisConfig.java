@@ -43,10 +43,11 @@ public class RedisConfig {
     @Bean
     public RedisCacheManager cacheManager(
             RedisConnectionFactory connectionFactory,
-            ObjectMapper redisObjectMapper,
+
             @Value("${app.cache.default-ttl:PT6H}") Duration defaultTtl
     ) {
-        var valueSerializer = new GenericJackson2JsonRedisSerializer(redisObjectMapper);
+        ObjectMapper redisOm = new ObjectMapper().findAndRegisterModules();
+        var valueSerializer = new GenericJackson2JsonRedisSerializer(redisOm);
 
         RedisCacheConfiguration base = RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(defaultTtl)
