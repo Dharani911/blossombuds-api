@@ -37,6 +37,10 @@ import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
+
 
 import static com.blossombuds.util.ImageUtil.*;
 
@@ -58,6 +62,14 @@ public class CatalogService {
     private final ProductOptionRepository optionRepo;
     private final ProductOptionValueRepository valueRepo;
 
+    private static final String CATEGORIES = "catalog.categories";
+    private static final String PRODUCT_BY_ID = "catalog.productById";
+    private static final String PRODUCTS_PAGE = "catalog.products.page";
+    private static final String PRODUCTS_BY_CATEGORY = "catalog.products.byCategory";
+    private static final String FEATURED_PAGE = "catalog.featured.page";
+    private static final String FEATURED_TOP = "catalog.featured.top";
+    private static final String NEW_ARRIVALS = "catalog.newArrivals";
+    //private static final String PRODUCT_IMAGES = "catalog.productImages"; // keep TTL short if you cache
 
     private final AmazonS3 r2Client;
     @Value("${cloudflare.r2.bucket}")
@@ -89,11 +101,15 @@ public class CatalogService {
     // ────────────────────────────── Categories ────────────────────────────────
 
     /** Creates a category from the given DTO. */
+    @Caching(evict = {
+            @CacheEvict(cacheNames = CATEGORIES, allEntries = true),
+            @CacheEvict(cacheNames = {PRODUCTS_BY_CATEGORY, PRODUCTS_PAGE}, allEntries = true)
+    })
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
-    public Category createCategory(CategoryDto dto) {
-        log.info("Creating new category: {}", dto.getName());
+    public CategoryDto createCategory(CategoryDto dto) {
         if (dto == null) throw new IllegalArgumentException("CategoryDto is required");
+        log.info("Creating new category: {}", dto.getName());
         if (dto.getName() == null || dto.getName().isBlank()) {
             log.warn("[CATEGORY][CREATE][FAIL] Missing name");
             throw new IllegalArgumentException("Category name is required");
@@ -110,6 +126,7 @@ public class CatalogService {
                         log.warn("[CATEGORY][CREATE][FAIL] Parent not found: {}", dto.getParentId());
                         return new IllegalArgumentException("Parent category not found: " + dto.getParentId());
                     });
+            c.setParent(parent);
         } else {
             c.setParent(null);
         }
@@ -136,7 +153,7 @@ public class CatalogService {
 
         Category saved = categoryRepo.save(c);
         log.info("[CATEGORY][CREATE][OK] id={} slug='{}'", saved.getId(), saved.getSlug());
-        return saved;
+        return toDto(saved);
     }
 
     /** Naive slugify mirroring your frontend logic. */
@@ -171,9 +188,13 @@ public class CatalogService {
     }
 
     /** Updates a category’s mutable fields. */
+    @Caching(evict = {
+            @CacheEvict(cacheNames = CATEGORIES, allEntries = true),
+            @CacheEvict(cacheNames = {PRODUCTS_BY_CATEGORY, PRODUCTS_PAGE}, allEntries = true)
+    })
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
-    public Category updateCategory(Long id, CategoryDto dto) {
+    public CategoryDto updateCategory(Long id, CategoryDto dto) {
         log.info("[CATEGORY][UPDATE] id={} name='{}'", id, (dto!=null?dto.getName():null));
         if (id == null) throw new IllegalArgumentException("Category id is required");
         if (dto == null) throw new IllegalArgumentException("CategoryDto is required");
@@ -226,7 +247,7 @@ public class CatalogService {
         }
 
         log.info("[CATEGORY][UPDATE][OK] id={}", id);
-        return c; // dirty checking
+        return toDto(c); // dirty checking
     }
 
     /** Walk up the chain to ensure 'parent' is not a descendant of 'node'. */
@@ -240,6 +261,10 @@ public class CatalogService {
     }
 
     /** Soft-deletes a category (active=false via @SQLDelete). */
+    @Caching(evict = {
+            @CacheEvict(cacheNames = CATEGORIES, allEntries = true),
+            @CacheEvict(cacheNames = {PRODUCTS_BY_CATEGORY, PRODUCTS_PAGE}, allEntries = true)
+    })
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void deleteCategory(Long id) {
@@ -254,9 +279,13 @@ public class CatalogService {
     // ─────────────────────────────── Products ────────────────────────────────
 
     /** Creates a product from the given DTO. */
+    @Caching(evict = {
+            @CacheEvict(cacheNames = {PRODUCTS_PAGE, PRODUCTS_BY_CATEGORY, FEATURED_PAGE, FEATURED_TOP, NEW_ARRIVALS}, allEntries = true),
+            @CacheEvict(cacheNames = PRODUCT_BY_ID, allEntries = true)
+    })
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
-    public Product createProduct(ProductDto dto) {
+    public ProductDto createProduct(ProductDto dto) {
         log.info("[PRODUCT][CREATE] name='{}' slug='{}'", (dto!=null?dto.getName():null), (dto!=null?dto.getSlug():null));
         if (dto == null) throw new IllegalArgumentException("ProductDto is required");
         Product p = new Product();
@@ -280,7 +309,7 @@ public class CatalogService {
         p.setActive(dto.getActive() != null ? dto.getActive() : Boolean.TRUE);
         Product saved = productRepo.save(p);
         log.info("[PRODUCT][CREATE][OK] id={} visible={} featured={}", saved.getId(), saved.getVisible(), saved.getFeatured());
-        return saved;
+        return toDto(saved);
     }
 
     /** Pages through active products. */
@@ -304,9 +333,13 @@ public class CatalogService {
     }
 
     /** Updates a product’s mutable fields. */
+    @Caching(evict = {
+            @CacheEvict(cacheNames = PRODUCT_BY_ID, key = "'id=' + #id"),
+            @CacheEvict(cacheNames = {PRODUCTS_PAGE, PRODUCTS_BY_CATEGORY, FEATURED_PAGE, FEATURED_TOP, NEW_ARRIVALS}, allEntries = true)
+    })
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
-    public Product updateProduct(Long id, ProductDto dto) {
+    public ProductDto updateProduct(Long id, ProductDto dto) {
         log.info("[PRODUCT][UPDATE] id={} name='{}'", id, (dto!=null?dto.getName():null));
         if (id == null) throw new IllegalArgumentException("Product id is required");
         if (dto == null) throw new IllegalArgumentException("ProductDto is required");
@@ -336,10 +369,14 @@ public class CatalogService {
         if (dto.getFeatured() != null)    p.setFeatured(dto.getFeatured());
         if (dto.getActive() != null) p.setActive(dto.getActive());
         log.info("[PRODUCT][UPDATE][OK] id={}", id);
-        return p; // dirty checking
+        return toDto(p); // dirty checking
     }
 
     /** Soft-deletes a product (active=false via @SQLDelete). */
+    @Caching(evict = {
+            @CacheEvict(cacheNames = PRODUCT_BY_ID, key = "'id=' + #id"),
+            @CacheEvict(cacheNames = {PRODUCTS_PAGE, PRODUCTS_BY_CATEGORY, FEATURED_PAGE, FEATURED_TOP, NEW_ARRIVALS}, allEntries = true)
+    })
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void deleteProduct(Long id) {
@@ -384,6 +421,12 @@ public class CatalogService {
     // ─────────────────────── Product ↔ Category links ────────────────────────
 
     /** Links a product to a category (idempotent). */
+    @Caching(evict = {
+            @CacheEvict(cacheNames = PRODUCTS_BY_CATEGORY, allEntries = true),
+            @CacheEvict(cacheNames = PRODUCTS_PAGE, allEntries = true),
+            @CacheEvict(cacheNames = PRODUCT_BY_ID, allEntries = true)
+    })
+
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void linkProductToCategory(Long productId, Long categoryId) {
@@ -414,6 +457,12 @@ public class CatalogService {
         log.info("[LINK][PRODUCT_CATEGORY][OK] productId={} categoryId={}", productId, categoryId);
     }
 
+    @Caching(evict = {
+            @CacheEvict(cacheNames = PRODUCTS_BY_CATEGORY, allEntries = true),
+            @CacheEvict(cacheNames = PRODUCTS_PAGE, allEntries = true),
+            @CacheEvict(cacheNames = PRODUCT_BY_ID, allEntries = true)
+    })
+
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void unlinkProductFromCategory(Long productId, Long categoryId) {
@@ -442,6 +491,8 @@ public class CatalogService {
     }
 
     // ───────────────── addProductImage (REPLACE) ─────────────────
+
+    @CacheEvict(cacheNames = PRODUCT_BY_ID, key = "'id=' + #productId")
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public ProductImage addProductImage(Long productId, MultipartFile file, String altText, Integer sortOrder)
@@ -514,6 +565,7 @@ public class CatalogService {
 
 
     // ──────────────── updateProductImage (REPLACE) ────────────────
+    @CacheEvict(cacheNames = PRODUCT_BY_ID, key = "'id=' + #dto.productId")
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public ProductImage updateProductImage(ProductImageDto dto, MultipartFile newFile)
@@ -747,6 +799,7 @@ public class CatalogService {
     }
 
     // --- 2) Read temp object, process, upload final, delete temp, persist
+    @CacheEvict(cacheNames = PRODUCT_BY_ID, key = "'id=' + #productId")
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public ProductImageDto createImageFromTempKey(Long productId, String tempKey, String altText, Integer sortOrder)
@@ -908,6 +961,7 @@ public class CatalogService {
     }
 
     /** Soft-deletes a product image (active=false via @SQLDelete). */
+    @CacheEvict(cacheNames = PRODUCT_BY_ID, key = "'id=' + #productId")
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void deleteProductImage(Long productId, Long imageId) {
@@ -933,6 +987,7 @@ public class CatalogService {
     }
 
     /** Makes an image primary (sortOrder=0) and pushes others down. */
+    @CacheEvict(cacheNames = PRODUCT_BY_ID, key = "'id=' + #productId")
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void setPrimaryImage(Long productId, Long imageId) {
@@ -1170,6 +1225,10 @@ public class CatalogService {
         // ).getContent();
         return out;
     }
+    @Caching(evict = {
+            @CacheEvict(cacheNames = PRODUCT_BY_ID, key = "'id=' + #id"),
+            @CacheEvict(cacheNames = {FEATURED_PAGE, FEATURED_TOP, PRODUCTS_PAGE, NEW_ARRIVALS, PRODUCTS_BY_CATEGORY}, allEntries = true)
+    })
     @Transactional
     public Product setProductFeatured(Long id, boolean featured) {
         log.info("[PRODUCT][FEATURED][SET] id={} featured={}", id, featured);
@@ -1178,8 +1237,82 @@ public class CatalogService {
         log.info("[PRODUCT][FEATURED][SET][OK] id={} featured={}", id, featured);
         return p; // dirty checking persists
     }
+    /** Maps a Product entity to a cache-safe DTO. */
+    private ProductDto toDto(Product p) {
+        ProductDto d = new ProductDto();
+        d.setId(p.getId());
+        d.setSlug(p.getSlug());
+        d.setName(p.getName());
+        d.setDescription(p.getDescription());
+        d.setPrice(p.getPrice());
+        d.setVisible(p.getVisible());
+        d.setFeatured(p.getFeatured());
+        d.setActive(p.getActive());
+        return d;
+    }
 
+    /** Maps a Category entity to a cache-safe DTO. */
+    private CategoryDto toDto(Category c) {
+        CategoryDto d = new CategoryDto();
+        d.setId(c.getId());
+        d.setName(c.getName());
+        d.setSlug(c.getSlug());
+        d.setActive(c.getActive());
+        d.setDescription(c.getDescription());
+        d.setParentId(c.getParent() != null ? c.getParent().getId() : null);
+        return d;
+    }
+    @Cacheable(cacheNames = CATEGORIES, key = "'all'")
+    public List<CategoryDto> listCategoriesDto() {
+        return categoryRepo.findAll()
+                .stream()
+                .map(this::toDto)
+                .toList();
+    }
+    @Cacheable(cacheNames = PRODUCT_BY_ID, key = "'id=' + #id")
+    public ProductDto getProductDto(Long id) {
+        return toDto(getProduct(id)); // uses your existing entity fetch + validations
+    }
 
+    @Cacheable(cacheNames = PRODUCTS_PAGE, key = "'p=' + #page + ':s=' + #size + ':sort=' + #sort + ':dir=' + #dir")
+    public Page<ProductDto> listProductsDto(int page, int size, String sort, String dir) {
+        Sort s = Sort.by("createdAt");
+        if (sort != null && !sort.isBlank()) s = Sort.by(sort);
+        if ("ASC".equalsIgnoreCase(dir)) s = s.ascending(); else s = s.descending();
 
+        return productRepo.findAll(PageRequest.of(page, size, s))
+                .map(this::toDto);
+    }
+
+    @Cacheable(cacheNames = PRODUCTS_BY_CATEGORY, key = "'cat=' + #categoryId + ':p=' + #page + ':s=' + #size")
+    public Page<ProductDto> listProductsByCategoryDto(Long categoryId, int page, int size) {
+        return productRepo.findActiveByCategoryId(categoryId, PageRequest.of(page, size))
+                .map(this::toDto);
+    }
+
+    @Cacheable(cacheNames = FEATURED_PAGE, key = "'p=' + #page + ':s=' + #size")
+    public Page<ProductDto> listFeaturedProductsDto(int page, int size) {
+        return productRepo.findByFeaturedTrue(PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")))
+                .map(this::toDto);
+    }
+
+    @Cacheable(cacheNames = FEATURED_TOP, key = "'lim=' + #limit")
+    public List<ProductDto> listFeaturedTopDto(int limit) {
+        int lim = Math.max(1, Math.min(100, limit));
+        return productRepo.findByFeaturedTrue(PageRequest.of(0, lim, Sort.by(Sort.Direction.DESC, "createdAt")))
+                .getContent()
+                .stream()
+                .map(this::toDto)
+                .toList();
+    }
+    @Cacheable(cacheNames = NEW_ARRIVALS, key = "'lim=' + #limit")
+    public List<ProductDto> listNewArrivalsDto(int limit) {
+        return listNewArrivals(limit).stream().map(this::toDto).toList();
+    }
+
+    @Cacheable(cacheNames = CATEGORIES, key = "'id=' + #id")
+    public CategoryDto getCategoryDto(Long id) {
+        return toDto(getCategory(id));
+    }
 
 }

@@ -41,20 +41,20 @@ public class CatalogController {
     @PostMapping("/categories")
     @PreAuthorize("hasRole('ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
-    public Category createCategory(@Valid @RequestBody CategoryDto dto) {
+    public CategoryDto createCategory(@Valid @RequestBody CategoryDto dto) {
         return catalog.createCategory(dto);
     }
 
     /** Get category by id (read: public). */
     @GetMapping("/categories/{id}")
-    public Category getCategory(@PathVariable Long id) {
-        return catalog.getCategory(id);
+    public CategoryDto getCategory(@PathVariable Long id) {
+        return catalog.getCategoryDto(id);
     }
 
     /** Update category. */
     @PutMapping("/categories/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public Category updateCategory(@PathVariable Long id, @Valid @RequestBody CategoryDto dto) {
+    public CategoryDto updateCategory(@PathVariable Long id, @Valid @RequestBody CategoryDto dto) {
         return catalog.updateCategory(id, dto);
     }
 
@@ -72,34 +72,39 @@ public class CatalogController {
     @PostMapping("/products")
     @PreAuthorize("hasRole('ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
-    public Product createProduct(@Valid @RequestBody ProductDto dto) {
+    public ProductDto createProduct(@Valid @RequestBody ProductDto dto) {
         return catalog.createProduct(dto);
     }
 
     /** List all active products (read: public). */
     @GetMapping("/products")
-    public Page<Product> listProducts(
+    public Page<ProductDto> listProducts(
             @RequestParam(defaultValue = "0") @Min(0) int page,
-            @RequestParam(defaultValue = "20") @Min(1) int size) {
-        return catalog.listProducts(page, size);
+            @RequestParam(defaultValue = "20") @Min(1) int size,
+            @RequestParam(defaultValue = "createdAt") String sort,
+            @RequestParam(defaultValue = "DESC") String dir
+    ) {
+        return catalog.listProductsDto(page, size, sort, dir);
     }
 
     /** NEW: New-arrival products (sorted by createdAt DESC, active via @Where). */
     @GetMapping("/products/new-arrivals")
-    public List<Product> newArrivals(@RequestParam(defaultValue = "12") @Min(1) int limit) {
-        return catalog.listNewArrivals(limit);
+    public List<ProductDto> newArrivals(@RequestParam(defaultValue = "12") @Min(1) int limit) {
+        return catalog.listNewArrivalsDto(limit);
     }
+
 
     /** Get product by id (read: public). */
     @GetMapping("/products/{id}")
-    public Product getProduct(@PathVariable Long id) {
-        return catalog.getProduct(id);
+    public ProductDto getProduct(@PathVariable Long id) {
+        return catalog.getProductDto(id);
     }
+
 
     /** Update product. */
     @PutMapping("/products/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public Product updateProduct(@PathVariable Long id, @Valid @RequestBody ProductDto dto) {
+    public ProductDto updateProduct(@PathVariable Long id, @Valid @RequestBody ProductDto dto) {
         return catalog.updateProduct(id, dto);
     }
 
@@ -140,7 +145,7 @@ public class CatalogController {
     /** Upload + create image (returns signed URLs). */
     @PostMapping(value = "/products/{productId}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole('ADMIN')")
-    public ProductImage addProductImage(
+    public ProductImageDto addProductImage(
             @PathVariable Long productId,
             @RequestParam(required = false) String altText,
             @RequestParam(required = false) Integer sortOrder,
@@ -205,7 +210,7 @@ public class CatalogController {
         log.info("Saved image id={}, publicId={}, sortOrder={}",
                 saved.getId(), saved.getPublicId(), saved.getSortOrder());
 
-        return saved;
+        return catalog.toResponse(saved);
     }
 
     private static MultipartFile firstNonEmpty(MultipartFile... arr) {
@@ -225,7 +230,7 @@ public class CatalogController {
     /** Update metadata and/or replace file (returns fresh signed URLs). */
     @PutMapping(value = "/products/{productId}/images/{imageId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole('ADMIN')")
-    public ProductImage updateImage(
+    public ProductImageDto updateImage(
             @PathVariable Long productId,
             @PathVariable Long imageId,
             @RequestParam(required = false) String altText,
@@ -254,7 +259,8 @@ public class CatalogController {
         dto.setSortOrder(sortOrder);
         dto.setActive(active);
 
-        return catalog.updateProductImage(dto, file);
+        ProductImage saved= catalog.updateProductImage(dto, file);
+        return catalog.toResponse(saved);
     }
 
     /** Delete an image (soft delete). */
@@ -375,20 +381,20 @@ public class CatalogController {
     }
     /** GET /api/catalog/products/featured?page=0&size=24 */
     @GetMapping("/products/featured")
-    public Page<Product> listFeatured(
+    public Page<ProductDto> listFeatured(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "24") int size
     ) {
-        return catalog.listFeaturedProducts(page, size);
+        return catalog.listFeaturedProductsDto(page, size);
     }
+
 
     /** GET /api/catalog/products/featured/top?limit=12 */
     @GetMapping("/products/featured/top")
-    public List<Product> listFeaturedTop(
-            @RequestParam(defaultValue = "12") int limit
-    ) {
-        return catalog.listFeaturedTop(limit);
+    public List<ProductDto> listFeaturedTop(@RequestParam(defaultValue = "12") int limit) {
+        return catalog.listFeaturedTopDto(limit);
     }
+
     // Mark featured = true
     @PostMapping("/products/{id}/featured")
     @PreAuthorize("hasRole('ADMIN')")
