@@ -5,6 +5,7 @@ import com.blossombuds.domain.DeliveryFeeRules.RuleScope;
 import com.blossombuds.repository.DeliveryFeeRulesRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,7 +30,8 @@ public class DeliveryFeeRulesService {
     /* ============================ FEE LOOKUP ============================ */
 
     /** Finds the most specific *active* fee (district → state → default), if any. */
-    @org.springframework.cache.annotation.Cacheable(value = "deliveryFees", key = "{#stateId, #districtId}")
+    @Cacheable(value = "deliveryFees", key = "'s=' + #stateId + ':d=' + #districtId",
+            unless = "#result == null || !#result.isPresent()")
     public Optional<BigDecimal> findEffectiveFee(Long stateId, Long districtId) {
         // District-specific rule (active)
         if (districtId != null) {

@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -140,7 +141,7 @@ public class FeatureImageSettingsService {
     }
 
     /** List public feature images (cached). */
-    @org.springframework.cache.annotation.Cacheable(value = "featureImages")
+    @Cacheable(cacheNames = "featureImages", key = "'public'")
     public List<FeatureImageDto> listPublic() {
         List<Map<String, Object>> raw = readListJson();
         List<FeatureImageDto> out = new ArrayList<>();
