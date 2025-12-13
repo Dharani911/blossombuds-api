@@ -115,9 +115,11 @@ public class CatalogService {
                         log.warn("[CATEGORY][CREATE][FAIL] Parent not found: {}", dto.getParentId());
                         return new IllegalArgumentException("Parent category not found: " + dto.getParentId());
                     });
+            c.setParent(parent); // ✅ IMPORTANT
         } else {
             c.setParent(null);
         }
+
 
         // slug
         String provided = dto.getSlug();
@@ -330,45 +332,59 @@ public class CatalogService {
 
 
     /** Updates a product’s mutable fields. */
+    /** Updates a product’s mutable fields (persists to DB) and returns a cache-safe DTO. */
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     @Caching(evict = {
-        @CacheEvict(value = "product", key = "#id"),
-        @CacheEvict(value = "newArrivals", allEntries = true),
-        @CacheEvict(value = "productsByCategory", allEntries = true)
+            @CacheEvict(value = "product", key = "#id"),
+            @CacheEvict(value = "newArrivals", allEntries = true),
+            @CacheEvict(value = "productsByCategory", allEntries = true)
     })
     public ProductDto updateProduct(Long id, ProductDto dto) {
-        log.info("[PRODUCT][UPDATE] id={} name='{}'", id, (dto!=null?dto.getName():null));
+        log.info("[PRODUCT][UPDATE] id={} name='{}'", id, (dto != null ? dto.getName() : null));
         if (id == null) throw new IllegalArgumentException("Product id is required");
         if (dto == null) throw new IllegalArgumentException("ProductDto is required");
-        ProductDto p = getProduct(id);
-        if (dto.getSlug() != null) {
+
+        Product p = productRepo.findById(id).orElseThrow(() -> {
+            log.warn("[PRODUCT][UPDATE][MISS] id={}", id);
+            return new IllegalArgumentException("Product not found: " + id);
+        });
+
+        // slug (optional)
+        if (dto.getSlug() != null && !dto.getSlug().isBlank()) {
             String normalized = slugify(dto.getSlug());
             if (!normalized.equalsIgnoreCase(p.getSlug())) {
-                // check uniqueness if changing
                 String candidate = normalized;
                 int i = 2;
                 while (productRepo.existsBySlugNative(candidate)) {
-                    // if collision, check if it's NOT this product (though native query doesn't easily exclude self without ID param)
-                    // For update, we want to allow keeping own slug, but here we are changing it.
-                    // If candidate exists and it's NOT self, we must increment.
-                    // Since native query is simple existence, we might collide with self if we don't exclude self.
-                    // BUT, we are only entering here if normalized != p.getSlug().
-                    // So we are changing to a NEW slug. If that new slug exists, it's a collision.
                     candidate = normalized + "-" + i++;
                 }
                 p.setSlug(candidate);
             }
         }
+
         if (dto.getName() != null) p.setName(dto.getName());
         if (dto.getDescription() != null) p.setDescription(dto.getDescription());
         if (dto.getPrice() != null) p.setPrice(dto.getPrice());
-        if (dto.getVisible() != null)     p.setVisible(dto.getVisible());
-        if (dto.getFeatured() != null)    p.setFeatured(dto.getFeatured());
+        if (dto.getVisible() != null) p.setVisible(dto.getVisible());
+        if (dto.getFeatured() != null) p.setFeatured(dto.getFeatured());
         if (dto.getActive() != null) p.setActive(dto.getActive());
-        log.info("[PRODUCT][UPDATE][OK] id={}", id);
-        return p; // dirty checking
+
+        ProductDto out = new ProductDto();
+        out.setId(p.getId());
+        out.setSlug(p.getSlug());
+        out.setName(p.getName());
+        out.setDescription(p.getDescription());
+        out.setPrice(p.getPrice());
+        out.setActive(p.getActive());
+        out.setVisible(p.getVisible());
+        out.setFeatured(p.getFeatured());
+        out.setCreatedAt(p.getCreatedAt());
+
+        log.info("[PRODUCT][UPDATE][OK] id={} slug='{}'", out.getId(), out.getSlug());
+        return out;
     }
+
 
     /** Soft-deletes a product (active=false via @SQLDelete). */
     @Transactional
@@ -1252,14 +1268,39 @@ public class CatalogService {
         // ).getContent();
         return out;
     }
+    /** Sets a product's featured flag (persists to DB) and returns a cache-safe DTO. */
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "product", key = "#id"),
+            @CacheEvict(value = "newArrivals", allEntries = true),
+            @CacheEvict(value = "productsByCategory", allEntries = true)
+    })
     public ProductDto setProductFeatured(Long id, boolean featured) {
         log.info("[PRODUCT][FEATURED][SET] id={} featured={}", id, featured);
-        ProductDto p = getProduct(id);
+        if (id == null) throw new IllegalArgumentException("Product id is required");
+
+        Product p = productRepo.findById(id).orElseThrow(() -> {
+            log.warn("[PRODUCT][FEATURED][SET][MISS] id={}", id);
+            return new IllegalArgumentException("Product not found: " + id);
+        });
+
         p.setFeatured(featured);
+
+        ProductDto out = new ProductDto();
+        out.setId(p.getId());
+        out.setSlug(p.getSlug());
+        out.setName(p.getName());
+        out.setDescription(p.getDescription());
+        out.setPrice(p.getPrice());
+        out.setActive(p.getActive());
+        out.setVisible(p.getVisible());
+        out.setFeatured(p.getFeatured());
+        out.setCreatedAt(p.getCreatedAt());
+
         log.info("[PRODUCT][FEATURED][SET][OK] id={} featured={}", id, featured);
-        return p; // dirty checking persists
+        return out;
     }
+
 
 
 

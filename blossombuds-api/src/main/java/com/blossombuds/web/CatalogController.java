@@ -77,12 +77,15 @@ public class CatalogController {
     }
 
     /** List all active products (read: public). */
-    @GetMapping("/products")
-    public Page<Product> listProducts(
+    @GetMapping("/{id}/products")
+    public com.blossombuds.dto.CachedPage<ProductListItemDto> listProducts(
+            @PathVariable Long id,
             @RequestParam(defaultValue = "0") @Min(0) int page,
-            @RequestParam(defaultValue = "20") @Min(1) int size) {
-        return catalog.listProducts(page, size);
+            @RequestParam(defaultValue = "12") @Min(1) int size
+    ) {
+        return catalog.listProductsByCategory(id, page, size);
     }
+
 
     /** NEW: New-arrival products (sorted by createdAt DESC, active via @Where). */
     @GetMapping("/products/new-arrivals")
