@@ -1,6 +1,7 @@
 package com.blossombuds.domain;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.SQLDelete;
@@ -25,7 +26,7 @@ import java.util.Set;
 // Soft-delete = hide from lists (visible=false), but keep the row.
 @SQLDelete(sql = "UPDATE products SET active = false, modified_at = now() WHERE id = ?")
 @Where(clause = "active = true") //
-
+@com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
 public class Product {
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -79,4 +80,27 @@ public class Product {
     @JsonIgnore
     @ToString.Exclude @EqualsAndHashCode.Exclude
     private Set<ProductCategory> categoryLinks = new LinkedHashSet<>();
+
+    @OneToMany(mappedBy = "product", fetch = FetchType.LAZY)
+    @OrderBy("sortOrder ASC")
+    @JsonIgnore
+    private Set<ProductImage> images = new LinkedHashSet<>();
+
+    /**
+     * Safer accessor for Jackson that avoids touching the proxy if not initialized,
+     * OR simply returns null if we want to force explicit loading.
+     * Ideally, for caching entities, we should cache DTOs, but for now we safeguard the Entity.
+     */
+    @JsonProperty("images")
+    public java.util.List<ProductImage> getImagesSafe() {
+        if (org.hibernate.Hibernate.isInitialized(images)) {
+            return new java.util.ArrayList<>(images);
+        }
+        return null;
+    }
+
+    @JsonProperty("images")
+    public void setImagesSafe(java.util.List<ProductImage> list) {
+        this.images = list == null ? new LinkedHashSet<>() : new LinkedHashSet<>(list);
+    }
 }

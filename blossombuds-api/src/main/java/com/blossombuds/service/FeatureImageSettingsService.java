@@ -124,6 +124,7 @@ public class FeatureImageSettingsService {
         row.put("sortOrder", sortOrder != null ? sortOrder : items.size());
         items.add(row);
         saveListJson(items);
+        evictCache();
         log.info("[FEATURE][UPLOAD] Added entry to settings list: key={}, sortOrder={}", key, row.get("sortOrder"));
 
         String signed = signGet(key);
@@ -138,6 +139,8 @@ public class FeatureImageSettingsService {
         return dto;
     }
 
+    /** List public feature images (cached). */
+    @org.springframework.cache.annotation.Cacheable(value = "featureImages")
     public List<FeatureImageDto> listPublic() {
         List<Map<String, Object>> raw = readListJson();
         List<FeatureImageDto> out = new ArrayList<>();
@@ -222,6 +225,7 @@ public class FeatureImageSettingsService {
             if (sortOrder != null) row.put("sortOrder", sortOrder);
             items.add(row);
             saveListJson(items);
+            evictCache();
             log.info("[FEATURE][TEMP] Metadata saved for key={}", finalKey);
 
             // 6) Build DTO with signed GET for preview
@@ -248,6 +252,7 @@ public class FeatureImageSettingsService {
         log.info("[FEATURE][ADMIN] Replacing full feature image list: count={}",
                 items != null ? items.size() : 0);
         saveListJson(items != null ? items : List.of());
+        evictCache();
     }
 
     /** Remove an entry; optionally delete object from R2. */
@@ -262,6 +267,7 @@ public class FeatureImageSettingsService {
         int after = items.size();
         log.info("[FEATURE][ADMIN] Removed key={}, before={}, after={}", key, before, after);
         saveListJson(items);
+        evictCache();
         if (deleteObject && key != null && !key.isBlank()) {
             log.info("[FEATURE][ADMIN] Deleting object from R2: key={}", key);
             safeDelete(key);
@@ -310,6 +316,7 @@ public class FeatureImageSettingsService {
 
         log.info("[FEATURE][ADMIN] Completed reorder. Total reordered={}", next.size());
         saveListJson(next);
+        evictCache();
     }
 
     /** Update a single item’s metadata (altText and/or sortOrder). */
@@ -356,6 +363,7 @@ public class FeatureImageSettingsService {
 
         log.info("[FEATURE][ADMIN] Metadata updated and sortOrder normalized for all items");
         saveListJson(items);
+        evictCache();
     }
 
     /* ─────────────────────────── Helpers ─────────────────────────── */
@@ -432,4 +440,8 @@ public class FeatureImageSettingsService {
 
     /* Lightweight DTO for presign response */
     public record PresignResponse(String key, String url, String contentType) {}
+    @org.springframework.cache.annotation.CacheEvict(value = "featureImages", allEntries = true)
+    public void evictCache() {
+        log.info("[CACHE] Evicting featureImages");
+    }
 }

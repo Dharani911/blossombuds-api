@@ -23,7 +23,7 @@ import java.util.Set;
 @EntityListeners(AuditingEntityListener.class) // <-- enable Spring Data auditing
 @SQLDelete(sql = "UPDATE categories SET active = false, modified_at = now() WHERE id = ?")
 @Where(clause = "active = true")
-@JsonIgnoreProperties({"hibernateLazyInitializer","handler"}) // safety
+@JsonIgnoreProperties(value = {"hibernateLazyInitializer", "handler"}, ignoreUnknown = true) // safety
 public class Category {
 
     /** Surrogate primary key for categories. */
@@ -34,10 +34,13 @@ public class Category {
      *  Serialize as just the ID to avoid deep graphs & lazy hits. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "parent_id")
-    @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id")
-    @JsonIdentityReference(alwaysAsId = true) // <-- parent -> 5 (id only) in JSON
+    @JsonIgnore
     @ToString.Exclude @EqualsAndHashCode.Exclude
     private Category parent;
+
+    @JsonIgnore
+    @Column(name = "parent_id", insertable = false, updatable = false)
+    private Long parentId;
 
     /** Human-friendly category name. */
     @Column(length = 100)
@@ -88,8 +91,8 @@ public class Category {
 
     // Optional: convenience read-only scalars for the frontend
     @Transient @JsonProperty("parentId")
-    public Long getParentId() { return parent != null ? parent.getId() : null; }
+    public Long getParentId() { return parentId; }
 
-    @Transient @JsonProperty("parentName")
-    public String getParentName() { return parent != null ? parent.getName() : null; }
+
+
 }
