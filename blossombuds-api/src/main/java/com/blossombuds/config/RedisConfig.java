@@ -43,10 +43,20 @@ public class RedisConfig {
     @Bean
     public RedisCacheManager cacheManager(
             RedisConnectionFactory connectionFactory,
-
             @Value("${app.cache.default-ttl:PT6H}") Duration defaultTtl
     ) {
+        BasicPolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator.builder()
+                .allowIfSubType("com.blossombuds.dto")
+                .allowIfSubType("org.springframework.data")
+                .allowIfSubType("java.math")
+                .allowIfSubType("java.util")
+                .allowIfSubType("java.time")
+                .build();
+
         ObjectMapper redisOm = new ObjectMapper().findAndRegisterModules();
+        // IMPORTANT: keep type info in Redis (but only for allowed packages)
+        redisOm.activateDefaultTypingAsProperty(ptv, ObjectMapper.DefaultTyping.NON_FINAL, "@class");
+
         var valueSerializer = new GenericJackson2JsonRedisSerializer(redisOm);
 
         RedisCacheConfiguration base = RedisCacheConfiguration.defaultCacheConfig()
@@ -55,7 +65,6 @@ public class RedisConfig {
                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(valueSerializer));
 
-        // Optional: per-cache TTL overrides
         Map<String, RedisCacheConfiguration> perCache = Map.of(
                 "catalog.categories",          base.entryTtl(Duration.ofHours(12)),
                 "catalog.productById",         base.entryTtl(Duration.ofMinutes(30)),
@@ -64,9 +73,6 @@ public class RedisConfig {
                 "catalog.featured.page",       base.entryTtl(Duration.ofMinutes(20)),
                 "catalog.featured.top",        base.entryTtl(Duration.ofMinutes(20)),
                 "catalog.newArrivals",         base.entryTtl(Duration.ofMinutes(20))
-
-                // Only if you decide to cache signed image URLs (not recommended):
-                // "catalog.productImages",    base.entryTtl(Duration.ofMinutes(15))
         );
 
         return RedisCacheManager.builder(connectionFactory)
