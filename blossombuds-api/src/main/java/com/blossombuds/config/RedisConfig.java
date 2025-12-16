@@ -45,15 +45,17 @@ public class RedisConfig implements CachingConfigurer {
                 .allowIfSubType("java.math")
                 .allowIfSubType("java.util")
                 .allowIfSubType("java.time")
+                .allowIfSubType("java.lang")
                 .build();
 
         ObjectMapper redisOm = new ObjectMapper().findAndRegisterModules();
         // Keep polymorphic typing for cached Object values, using a property when possible.
         redisOm.activateDefaultTypingAsProperty(
                 ptv,
-                ObjectMapper.DefaultTyping.EVERYTHING,
+                ObjectMapper.DefaultTyping.NON_FINAL,
                 "@class"
         );
+
 
 
 
@@ -61,7 +63,7 @@ public class RedisConfig implements CachingConfigurer {
 
         RedisCacheConfiguration base = RedisCacheConfiguration.defaultCacheConfig()
                 // IMPORTANT: bump this when serialization format changes
-                .computePrefixWith(cacheName -> "bb:v4:" + cacheName + "::")
+                .computePrefixWith(cacheName -> "bb:v5:" + cacheName + "::")
                 .entryTtl(defaultTtl)
                 .disableCachingNullValues()
                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
