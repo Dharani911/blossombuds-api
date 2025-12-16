@@ -51,12 +51,11 @@ public class RedisConfig implements CachingConfigurer {
 
         ObjectMapper redisOm = new ObjectMapper().findAndRegisterModules();
         // Keep polymorphic typing for cached Object values, using a property when possible.
-        /*redisOm.activateDefaultTypingAsProperty(
+        redisOm.activateDefaultTypingAsProperty(
                 ptv,
                 ObjectMapper.DefaultTyping.NON_FINAL,
                 "@class"
-        );*/
-
+        );
 
 
 
@@ -65,7 +64,7 @@ public class RedisConfig implements CachingConfigurer {
 
         RedisCacheConfiguration base = RedisCacheConfiguration.defaultCacheConfig()
                 // IMPORTANT: bump this when serialization format changes
-                .computePrefixWith(cacheName -> "bb:v7:" + cacheName + "::")
+                .computePrefixWith(cacheName -> "bb:v8:" + cacheName + "::")
                 .entryTtl(defaultTtl)
                 .disableCachingNullValues()
                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
