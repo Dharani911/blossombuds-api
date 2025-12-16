@@ -96,7 +96,7 @@ public class RedisConfig implements CachingConfigurer {
                         || t instanceof RedisConnectionFailureException
                         || t instanceof RedisSystemException
                         || t instanceof QueryTimeoutException) {
-                    log.warn("Cache GET failed. Treating as miss. cache={}, key={}", cache.getName(), key, ex);
+                    log.warn("Cache GET failed. Treating as miss. cache={}, key={}", cache.getName(), key, ex.getMessage());
                     try { cache.evict(key); } catch (Exception ignored) {}
                     return;
                 }
