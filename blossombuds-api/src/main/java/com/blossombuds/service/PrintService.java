@@ -113,7 +113,7 @@ public class PrintService {
     }
 
     /** Generates packing slip PDF bytes for a given order id (no pricing). */
-    @Transactional(readOnly = true, propagation = Propagation.SUPPORTS, noRollbackFor = Exception.class)
+    @Transactional(readOnly = true, propagation = Propagation.NOT_SUPPORTED)
     public byte[] renderPackingSlipPdf(Long orderId) {
         if (orderId == null) throw new IllegalArgumentException("orderId is required");
         log.info("[PRINT][PACKING_SLIP] Generating packing slip for orderId={}", orderId);
@@ -125,6 +125,8 @@ public class PrintService {
                             .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
                 });
         List<OrderItem> items = orderItemRepository.findByOrder_Id(orderId);
+        java.util.Map<Long, ProductImage> imgMap = loadPreferredImages(items);
+
         log.debug("[PRINT][PACKING_SLIP] Retrieved {} items for orderId={}", items.size(), orderId);
 
         // Settings
@@ -160,16 +162,41 @@ public class PrintService {
         );
 
         byte[] pdf = buildPdfWithWriter((doc, writer) -> {
-            writePackingSlipPage(doc, writer, order, items, brandName, fromAddress);
+            writePackingSlipPage(doc, writer, order, items, brandName, fromAddress, imgMap);
         });
         log.info("[PRINT][PACKING_SLIP] Packing slip PDF generated for orderId={}, size={} bytes", orderId, pdf.length);
         return pdf;
     }
+
+    /** Extracts distinct productIds from order items. */
+    private List<Long> extractProductIds(List<OrderItem> items) {
+        List<Long> ids = new ArrayList<>();
+        for (OrderItem it : items) {
+            if (it.getProductId() != null) ids.add(it.getProductId());
+        }
+        return ids.stream().distinct().toList();
+    }
+
+    /** Builds a map of productId -> preferred ProductImage (first by sortOrder/id). */
+    private java.util.Map<Long, ProductImage> loadPreferredImages(List<OrderItem> items) {
+        List<Long> productIds = extractProductIds(items);
+        if (productIds.isEmpty()) return java.util.Collections.emptyMap();
+
+        List<ProductImage> all = productImageRepository.findActiveForProductIds(productIds);
+
+        java.util.Map<Long, ProductImage> map = new java.util.HashMap<>();
+        for (ProductImage pi : all) {
+            Long pid = pi.getProduct().getId();
+            map.putIfAbsent(pid, pi); // first one wins due to ORDER BY
+        }
+        return map;
+    }
+
     /**
      * Generates a single PDF that contains packing slips for all given order IDs.
      * Each order renders on its own page using the same layout as renderPackingSlipPdf().
      */
-    @Transactional(readOnly = true, propagation = Propagation.SUPPORTS, noRollbackFor = Exception.class)
+    @Transactional(readOnly = true, propagation = Propagation.NOT_SUPPORTED)
     public byte[] renderPackingSlipsPdf(List<Long> orderIds) {
         if (orderIds == null || orderIds.isEmpty()) {
             throw new IllegalArgumentException("orderIds is required and must be non-empty");
@@ -200,13 +227,14 @@ public class PrintService {
                     continue;
                 }
                 List<OrderItem> items = orderItemRepository.findByOrder_Id(id);
+                java.util.Map<Long, ProductImage> imgMap = loadPreferredImages(items);
                 log.debug("[PRINT][PACKING_SLIP_BULK] OrderId={} has {} items", id, items.size());
 
                 if (!first) doc.newPage();
                 first = false;
 
                 // Render one full packing slip page
-                writePackingSlipPage(doc, writer, order, items, brandName, fromAddress);
+                writePackingSlipPage(doc, writer, order, items, brandName, fromAddress, imgMap);
 
                 processed.add(id);
             }
@@ -233,8 +261,9 @@ public class PrintService {
     void writePackingSlipPage(
             Document doc, PdfWriter writer,
             Order order, List<OrderItem> items,
-            String brandName, String fromAddress
-    ) throws Exception {
+            String brandName, String fromAddress,
+            java.util.Map<Long, ProductImage> imgMap
+    )  throws Exception {
         log.info("[PRINT][PACKING_SLIP_PAGE] Rendering packing slip page for orderId={}", order.getId());
 
         // Data strings (stay stringy to avoid LAZY trips)
@@ -454,9 +483,7 @@ public class PrintService {
 
                 try {
                     if (it.getProductId() != null) {
-                        ProductImage pImg = productImageRepository
-                                .findFirstByProduct_IdAndActiveTrueOrderBySortOrderAscIdAsc(it.getProductId())
-                                .orElse(null);
+                        ProductImage pImg = (it.getProductId() != null) ? imgMap.get(it.getProductId()) : null;
                         if (pImg != null) {
                             String imgUrl = pImg.getUrl();
                             if (imgUrl == null || imgUrl.isBlank()) {
@@ -613,7 +640,7 @@ public class PrintService {
     }
 
     /** Build one packing-slip line: [thumbnail] [wrapped text]. */
-    private Element buildPackingSlipItemElement(OrderItem it, Font fItem, Font fVar) throws Exception {
+   /* private Element buildPackingSlipItemElement(OrderItem it, Font fItem, Font fVar) throws Exception {
         PdfPTable itemTbl = new PdfPTable(new float[]{0.7f, 5.3f});
         itemTbl.setWidthPercentage(100);
         itemTbl.getDefaultCell().setBorder(Rectangle.NO_BORDER);
@@ -691,7 +718,7 @@ public class PrintService {
         itemTbl.setKeepTogether(true);
 
         return itemTbl;
-    }
+    }*/
 
 
 

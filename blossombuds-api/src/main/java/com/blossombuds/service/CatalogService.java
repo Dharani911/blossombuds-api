@@ -1271,30 +1271,37 @@ public class CatalogService {
     }
     @Cacheable(cacheNames = PRODUCT_BY_ID, key = "'id=' + #id")
     public ProductDto getProductDto(Long id) {
-        return toDto(getProduct(id)); // uses your existing entity fetch + validations
+        return toDto(getProduct(id));
     }
+
 
     @Cacheable(cacheNames = PRODUCTS_PAGE, key = "'p=' + #page + ':s=' + #size + ':sort=' + #sort + ':dir=' + #dir")
-    public Page<ProductDto> listProductsDto(int page, int size, String sort, String dir) {
+    public CachedPage<ProductDto> listProductsDto(int page, int size, String sort, String dir) {
+
         Sort s = Sort.by("createdAt");
         if (sort != null && !sort.isBlank()) s = Sort.by(sort);
-        if ("ASC".equalsIgnoreCase(dir)) s = s.ascending(); else s = s.descending();
+        s = "ASC".equalsIgnoreCase(dir) ? s.ascending() : s.descending();
 
-        return productRepo.findAll(PageRequest.of(page, size, s))
-                .map(this::toDto);
+        Page<ProductDto> pg = productRepo.findAll(PageRequest.of(page, size, s)).map(this::toDto);
+
+        return CachedPage.from(pg); // implement a small helper: content, page, size, total, totalPages, etc.
     }
 
+
     @Cacheable(cacheNames = PRODUCTS_BY_CATEGORY, key = "'cat=' + #categoryId + ':p=' + #page + ':s=' + #size")
-    public Page<ProductDto> listProductsByCategoryDto(Long categoryId, int page, int size) {
-        return productRepo.findActiveByCategoryId(categoryId, PageRequest.of(page, size))
+    public CachedPage<ProductDto> listProductsByCategoryDto(Long categoryId, int page, int size) {
+        Page<ProductDto> pg = productRepo.findActiveByCategoryId(categoryId, PageRequest.of(page, size))
                 .map(this::toDto);
+        return CachedPage.from(pg);
     }
 
     @Cacheable(cacheNames = FEATURED_PAGE, key = "'p=' + #page + ':s=' + #size")
-    public Page<ProductDto> listFeaturedProductsDto(int page, int size) {
-        return productRepo.findByFeaturedTrue(PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")))
+    public CachedPage<ProductDto> listFeaturedProductsDto(int page, int size) {
+        Page<ProductDto> pg = productRepo.findByFeaturedTrue(PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")))
                 .map(this::toDto);
+        return CachedPage.from(pg);
     }
+
 
     @Cacheable(cacheNames = FEATURED_TOP, key = "'lim=' + #limit")
     public List<ProductDto> listFeaturedTopDto(int limit) {

@@ -28,24 +28,15 @@ public class CategoryController {
     /** List all active categories (public). */
     @GetMapping
     public List<CategoryDto> listCategories() {
-        List<Category> cats = catalog.listCategories();
-        return cats.stream().map(c -> {
-            CategoryDto dto = new CategoryDto();
-            dto.setId(c.getId());
-            dto.setSlug(c.getSlug());
-            dto.setName(c.getName());
-            dto.setActive(c.getActive());
-            dto.setParentId(c.getParentId());
-            return dto;
-        }).collect(Collectors.toList());
+        return catalog.listCategoriesDto(); // ✅ uses @Cacheable
     }
 
     /** List products under a category with pagination (public). */
     @GetMapping("/{id}/products")
-
-    public Page<Product> listProducts(@PathVariable Long id,
-                                         @RequestParam(defaultValue = "0") @Min(0) int page,
-                                         @RequestParam(defaultValue = "12") @Min(1) int size) {
-        return catalog.listProductsByCategory(id, page, size);
+    public CachedPage<ProductDto> listProducts(@PathVariable Long id,
+                                               @RequestParam(defaultValue = "0") @Min(0) int page,
+                                               @RequestParam(defaultValue = "12") @Min(1) int size) {
+        return catalog.listProductsByCategoryDto(id, page, size);
     }
+
 }

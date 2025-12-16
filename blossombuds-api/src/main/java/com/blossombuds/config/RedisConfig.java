@@ -10,6 +10,9 @@ import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.dao.QueryTimeoutException;
+import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.data.redis.RedisSystemException;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -80,14 +83,30 @@ public class RedisConfig {
         return new CacheErrorHandler() {
             /** Handles Redis cache get errors by evicting the bad key (prevents 500s). */
             @Override
-            public void handleCacheGetError(RuntimeException exception, Cache cache, Object key) {
-                if (exception instanceof SerializationException) {
-                    log.warn("Cache deserialization failed. Evicting key. cache={}, key={}", cache.getName(), key, exception);
-                    try { cache.evict(key); } catch (Exception ignored) {}
-                    return; // proceed as cache miss
+            public void handleCacheGetError(RuntimeException ex, Cache cache, Object key) {
+
+                Throwable t = ex;
+
+                // unwrap ValueRetrievalException if present
+                if (ex instanceof Cache.ValueRetrievalException vre && vre.getCause() != null) {
+                    t = vre.getCause();
                 }
-                throw exception;
+
+                // treat these as cache miss (fail-open)
+                if (t instanceof SerializationException
+                        || t instanceof RedisConnectionFailureException
+                        || t instanceof RedisSystemException
+                        || t instanceof QueryTimeoutException) {
+
+                    log.warn("Cache GET failed. Treating as miss. cache={}, key={}", cache.getName(), key, ex);
+                    try { cache.evict(key); } catch (Exception ignored) {}
+                    return;
+                }
+
+                throw ex;
             }
+
+
 
             /** Handles Redis cache put errors by logging (does not break the request). */
             @Override
@@ -108,4 +127,5 @@ public class RedisConfig {
             }
         };
     }
+
 }

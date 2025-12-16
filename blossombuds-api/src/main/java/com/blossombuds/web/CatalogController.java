@@ -78,7 +78,7 @@ public class CatalogController {
 
     /** List all active products (read: public). */
     @GetMapping("/products")
-    public Page<ProductDto> listProducts(
+    public CachedPage<ProductDto> listProducts(
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) int size,
             @RequestParam(defaultValue = "createdAt") String sort,
@@ -86,6 +86,7 @@ public class CatalogController {
     ) {
         return catalog.listProductsDto(page, size, sort, dir);
     }
+
 
     /** NEW: New-arrival products (sorted by createdAt DESC, active via @Where). */
     @GetMapping("/products/new-arrivals")
@@ -381,12 +382,13 @@ public class CatalogController {
     }
     /** GET /api/catalog/products/featured?page=0&size=24 */
     @GetMapping("/products/featured")
-    public Page<ProductDto> listFeatured(
+    public CachedPage<ProductDto> listFeatured(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "24") int size
     ) {
         return catalog.listFeaturedProductsDto(page, size);
     }
+
 
 
     /** GET /api/catalog/products/featured/top?limit=12 */

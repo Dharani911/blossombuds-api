@@ -5,7 +5,7 @@ public final class CacheNames {
     private CacheNames() {}
 
     /** Cache for product lists by category + paging params. */
-    public static final String PRODUCTS_BY_CATEGORY = "catalog.productsByCategory";
+    public static final String PRODUCTS_BY_CATEGORY = "catalog.products.byCategory";
 
     /** Cache for product detail by id. */
     public static final String PRODUCT_BY_ID = "catalog.productById";

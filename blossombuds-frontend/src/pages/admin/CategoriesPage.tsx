@@ -58,10 +58,12 @@ export default function CategoriesPage() {
       setLoadingCats(true);
       setCatsErr(null);
       try {
-        const data = await listAllCategories(); // returns Category[]
+        const data = await listAllCategories();
+        const rows = Array.isArray(data) ? data : [];
         if (!live) return;
-        setCats(Array.isArray(data) ? data : []);
-        if (!selectedCatId && data.length) setSelectedCatId(data[0].id!);
+        setCats(rows);
+        if (!selectedCatId && rows.length) setSelectedCatId(rows[0].id!);
+
       } catch (e: any) {
         if (!live) return;
         setCats([]);
@@ -80,13 +82,14 @@ export default function CategoriesPage() {
     (async () => {
       setLoadingAllProducts(true);
       try {
-        const page: Page<Product> = await listProducts(0, 500);
+        const page: any = await listProducts(0, 500);
         if (!live) return;
-        setAllProducts(page.content || []);
+        setAllProducts(Array.isArray(page?.content) ? page.content : []);
       } catch {
         if (!live) return;
         setAllProducts([]);
-      } finally {
+      }
+         finally {
         if (live) setLoadingAllProducts(false);
       }
     })();
@@ -107,7 +110,8 @@ export default function CategoriesPage() {
         if (!live) return;
         setCatProducts([]);
         setToast({ kind: "bad", msg: e?.response?.data?.message || "Failed to load category products" });
-      } finally {
+      }
+       finally {
         if (live) setLoadingCatProducts(false);
       }
     })();
@@ -128,10 +132,12 @@ export default function CategoriesPage() {
   async function refreshCategories() {
     try {
       const data = await listAllCategories();
-      setCats(Array.isArray(data) ? data : []);
-      if (selectedCatId && !data.find(c => c.id === selectedCatId)) {
-        setSelectedCatId(data[0]?.id ?? null);
+      const rows = Array.isArray(data) ? data : [];
+      setCats(rows);
+      if (selectedCatId && !rows.find(c => c.id === selectedCatId)) {
+        setSelectedCatId(rows[0]?.id ?? null);
       }
+
     } catch {
       /* keep old state on refresh failure */
     }

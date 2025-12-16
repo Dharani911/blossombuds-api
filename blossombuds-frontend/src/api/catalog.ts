@@ -68,26 +68,38 @@ function normalizePage<T>(data: any): PageResp<T> {
       size: data.length || 0,
     };
   }
-  if (Array.isArray(data?.content)) {
+
+  // Spring Page OR CachedPage
+  const content = Array.isArray(data?.content) ? (data.content as T[]) : null;
+  if (content) {
+    const pageNumber =
+      data.number ?? data.page ?? data.pageNumber ?? 0; // support CachedPage
+    const pageSize =
+      data.size ?? data.pageSize ?? content.length ?? 0;
+
     return {
-      content: data.content as T[],
+      content,
       totalPages: Number(data.totalPages ?? 1),
-      totalElements: Number(data.totalElements ?? (data.content?.length ?? 0)),
-      number: Number(data.number ?? 0),
-      size: Number(data.size ?? (data.content?.length ?? 0)),
+      totalElements: Number(data.totalElements ?? content.length ?? 0),
+      number: Number(pageNumber),
+      size: Number(pageSize),
     };
   }
+
+  // other legacy shapes
   if (Array.isArray(data?.items)) {
     return {
       content: data.items as T[],
-      totalPages: 1,
-      totalElements: data.items.length,
-      number: 0,
-      size: data.items.length || 0,
+      totalPages: Number(data.totalPages ?? 1),
+      totalElements: Number(data.totalElements ?? data.items.length),
+      number: Number(data.number ?? data.page ?? 0),
+      size: Number(data.size ?? data.pageSize ?? data.items.length || 0),
     };
   }
+
   return { content: [], totalPages: 0, totalElements: 0, number: 0, size: 0 };
 }
+
 
 /* =========================
  * Categories (public)
@@ -162,7 +174,10 @@ export async function listNewArrivals(limit = 12): Promise<Product[]> {
 
   // 1) explicit “new-arrivals” endpoint
   try {
-    const r1 = await http.get("/api/catalog/products/new-arrivals", { params: { size: limit } });
+    const r1 = await http.get("/api/catalog/products/new-arrivals", {
+      params: { limit },
+    });
+
     const rows = unwrap(r1.data).slice(0, limit);
     if (rows.length) return rows;
   } catch { /* ignore and try next */ }
@@ -170,8 +185,9 @@ export async function listNewArrivals(limit = 12): Promise<Product[]> {
   // 2) sort by createdAt desc on general products list
   try {
     const r2 = await http.get("/api/catalog/products", {
-      params: { page: 0, size: limit, sort: "createdAt,desc", active: true },
+      params: { page: 0, size: limit, sort: "createdAt", dir: "DESC" },
     });
+
     const rows = unwrap(r2.data).slice(0, limit);
     if (rows.length) return rows;
   } catch { /* ignore and try next */ }

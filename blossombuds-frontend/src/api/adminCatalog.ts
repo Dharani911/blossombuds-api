@@ -8,9 +8,18 @@ export type Page<T> = {
   content: T[];
   totalElements: number;
   totalPages: number;
-  number: number; // 0-based
-  size: number;
+  number?: number; // Spring Page
+  page?: number;   // CachedPage
+  size?: number;   // Spring Page
+  pageSize?: number; // CachedPage
 };
+function pageNumber(p: Page<any>) {
+  return Number((p as any).number ?? (p as any).page ?? 0);
+}
+function pageSize(p: Page<any>) {
+  const c = Array.isArray((p as any).content) ? (p as any).content.length : 0;
+  return Number((p as any).size ?? (p as any).pageSize ?? c);
+}
 
 export type ProductDto = {
   id?: number;
@@ -82,12 +91,13 @@ export type Category = {
 
 /** ---------- Products ---------- */
 
-export async function listProducts(page = 0, size = 20) {
+export async function listProducts(page = 0, size = 20, sort = "createdAt", dir: "ASC" | "DESC" = "DESC") {
   const { data } = await adminHttp.get<Page<Product>>(`/api/catalog/products`, {
-    params: { page, size },
+    params: { page, size, sort, dir },
   });
   return data;
 }
+
 
 export async function getProduct(id: number) {
   const { data } = await adminHttp.get<Product>(`/api/catalog/products/${id}`);
@@ -188,12 +198,12 @@ export async function listFeaturedTop(limit = 12) {
   return data;
 }
 
-export async function listNewArrivals(page = 0, size = 24) {
-  const { data } = await adminHttp.get<Page<Product>>(
+export async function listNewArrivals(limit = 24) {
+  const { data } = await adminHttp.get<Product[]>(
     `/api/catalog/products/new-arrivals`,
-    { params: { page, size } }
+    { params: { limit } }
   );
-  return data;
+  return Array.isArray(data) ? data : [];
 }
 
 /** ---------- Images (multipart) ---------- */
@@ -328,10 +338,8 @@ export async function deleteOptionValue(optionId: number, valueId: number) {
 /** ---------- Categories ---------- */
 
 export async function listAllCategories(): Promise<Category[]> {
-  const { data } = await adminHttp.get(`/api/catalog/categories`, {
-    params: { page: 0, size: 1000 },
-  });
-  return Array.isArray(data) ? (data as Category[]) : (data?.content ?? []);
+  const { data } = await adminHttp.get(`/api/catalog/categories`);
+  return Array.isArray(data) ? (data as Category[]) : [];
 }
 
 export async function createCategory(dto: Partial<Category>) {
@@ -357,7 +365,8 @@ export async function listProductsByCategory(
     `/api/catalog/categories/${categoryId}/products`,
     { params: { page, size } }
   );
-  return data.content || [];
+  return (data as any)?.content ?? [];
+
 }
 
 export async function linkProductToCategoryApi(productId: number, categoryId: number) {
