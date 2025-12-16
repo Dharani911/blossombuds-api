@@ -92,19 +92,28 @@ public class RedisConfig implements CachingConfigurer {
         return new CacheErrorHandler() {
             @Override
             public void handleCacheGetError(RuntimeException ex, Cache cache, Object key) {
-                Throwable t = ex;
-                if (ex instanceof Cache.ValueRetrievalException vre && vre.getCause() != null) t = vre.getCause();
-
-                if (t instanceof org.springframework.data.redis.serializer.SerializationException
-                        || t instanceof RedisConnectionFailureException
-                        || t instanceof RedisSystemException
-                        || t instanceof QueryTimeoutException) {
-                    log.warn("Cache GET failed. Treating as miss. cache={}, key={}", cache.getName(), key, ex.getMessage());
-                    try { cache.evict(key); } catch (Exception ignored) {}
-                    return;
+                Throwable root = ex;
+                if (ex instanceof Cache.ValueRetrievalException vre && vre.getCause() != null) {
+                    root = vre.getCause();
                 }
-                throw ex;
+
+                String cacheName = (cache != null ? cache.getName() : "null");
+                String rootType = (root != null ? root.getClass().getName() : "null");
+
+                log.warn(
+                        "Cache GET failed. Treating as miss. cache={} key={} rootType={} msg={}",
+                        cacheName, key, rootType, (root != null ? root.getMessage() : null),
+                        ex // <-- IMPORTANT: prints stacktrace
+                );
+
+                // Only try to evict when it's a bad/stale value; don't bother on connection failures.
+                if (cache != null && (root instanceof org.springframework.data.redis.serializer.SerializationException
+                        || root instanceof SerializationException)) {
+                    try { cache.evict(key); } catch (Exception ignored) {}
+                }
+                // swallow (treat as miss)
             }
+
 
             @Override public void handleCachePutError(RuntimeException ex, Cache cache, Object key, Object value) {
                 log.warn("Cache PUT failed. cache={}, key={}", cache.getName(), key, ex);
