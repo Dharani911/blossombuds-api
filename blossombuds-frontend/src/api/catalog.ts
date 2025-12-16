@@ -93,7 +93,7 @@ function normalizePage<T>(data: any): PageResp<T> {
       totalPages: Number(data.totalPages ?? 1),
       totalElements: Number(data.totalElements ?? data.items.length),
       number: Number(data.number ?? data.page ?? 0),
-      size: Number(data.size ?? data.pageSize ?? data.items.length || 0),
+      size: Number(data.size ?? data.pageSize ?? (data.items?.length || 0)),
     };
   }
 
