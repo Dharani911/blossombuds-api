@@ -51,11 +51,12 @@ public class RedisConfig implements CachingConfigurer {
 
         ObjectMapper redisOm = new ObjectMapper().findAndRegisterModules();
         // Keep polymorphic typing for cached Object values, using a property when possible.
-        redisOm.activateDefaultTypingAsProperty(
+        /*redisOm.activateDefaultTypingAsProperty(
                 ptv,
                 ObjectMapper.DefaultTyping.NON_FINAL,
                 "@class"
-        );
+        );*/
+
 
 
 
@@ -64,7 +65,7 @@ public class RedisConfig implements CachingConfigurer {
 
         RedisCacheConfiguration base = RedisCacheConfiguration.defaultCacheConfig()
                 // IMPORTANT: bump this when serialization format changes
-                .computePrefixWith(cacheName -> "bb:v6:" + cacheName + "::")
+                .computePrefixWith(cacheName -> "bb:v7:" + cacheName + "::")
                 .entryTtl(defaultTtl)
                 .disableCachingNullValues()
                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
@@ -103,7 +104,7 @@ public class RedisConfig implements CachingConfigurer {
                         key,
                         root.getClass().getName(),
                         root.getMessage(),
-                        ex);
+                        ex.getMessage());
 
                 if (cache != null && (root instanceof JsonProcessingException
                         || root instanceof org.springframework.data.redis.serializer.SerializationException
@@ -116,13 +117,13 @@ public class RedisConfig implements CachingConfigurer {
 
 
             @Override public void handleCachePutError(RuntimeException ex, Cache cache, Object key, Object value) {
-                log.warn("Cache PUT failed. cache={}, key={}", cache.getName(), key, ex);
+                log.warn("Cache PUT failed. cache={}, key={}", cache.getName(), key, ex.getMessage());
             }
             @Override public void handleCacheEvictError(RuntimeException ex, Cache cache, Object key) {
-                log.warn("Cache EVICT failed. cache={}, key={}", cache.getName(), key, ex);
+                log.warn("Cache EVICT failed. cache={}, key={}", cache.getName(), key, ex.getMessage());
             }
             @Override public void handleCacheClearError(RuntimeException ex, Cache cache) {
-                log.warn("Cache CLEAR failed. cache={}", cache.getName(), ex);
+                log.warn("Cache CLEAR failed. cache={}", cache.getName(), ex.getMessage());
             }
         };
     }
