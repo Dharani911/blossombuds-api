@@ -1,6 +1,7 @@
 package com.blossombuds.config;
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import lombok.extern.slf4j.Slf4j;
@@ -63,7 +64,7 @@ public class RedisConfig implements CachingConfigurer {
 
         RedisCacheConfiguration base = RedisCacheConfiguration.defaultCacheConfig()
                 // IMPORTANT: bump this when serialization format changes
-                .computePrefixWith(cacheName -> "bb:v5:" + cacheName + "::")
+                .computePrefixWith(cacheName -> "bb:v6:" + cacheName + "::")
                 .entryTtl(defaultTtl)
                 .disableCachingNullValues()
                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
@@ -95,25 +96,22 @@ public class RedisConfig implements CachingConfigurer {
             @Override
             public void handleCacheGetError(RuntimeException ex, Cache cache, Object key) {
                 Throwable root = ex;
-                if (ex instanceof Cache.ValueRetrievalException vre && vre.getCause() != null) {
-                    root = vre.getCause();
-                }
+                while (root.getCause() != null) root = root.getCause();
 
-                String cacheName = (cache != null ? cache.getName() : "null");
-                String rootType = (root != null ? root.getClass().getName() : "null");
+                log.warn("Cache GET failed. Treating as miss. cache={} key={} rootType={} msg={}",
+                        cache != null ? cache.getName() : "null",
+                        key,
+                        root.getClass().getName(),
+                        root.getMessage(),
+                        ex);
 
-                log.warn(
-                        "Cache GET failed. Treating as miss. cache={} key={} rootType={} msg={}",
-                        cacheName, key, rootType, (root != null ? root.getMessage() : null),
-                        ex // <-- IMPORTANT: prints stacktrace
-                );
-
-                // Only try to evict when it's a bad/stale value; don't bother on connection failures.
-                if (cache != null && (root instanceof org.springframework.data.redis.serializer.SerializationException
-                        || root instanceof SerializationException)) {
+                if (cache != null && (root instanceof JsonProcessingException
+                        || root instanceof org.springframework.data.redis.serializer.SerializationException
+                        || root instanceof org.springframework.data.redis.RedisSystemException)) {
                     try { cache.evict(key); } catch (Exception ignored) {}
                 }
-                // swallow (treat as miss)
+
+                // swallow => treat as miss
             }
 
 
