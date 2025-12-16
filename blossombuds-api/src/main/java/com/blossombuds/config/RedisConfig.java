@@ -11,6 +11,7 @@ import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.dao.QueryTimeoutException;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.RedisSystemException;
@@ -32,6 +33,7 @@ import java.util.Map;
 public class RedisConfig implements CachingConfigurer {
 
     /** Builds a RedisCacheManager with JSON values and string keys. */
+    @Primary
     @Bean
     public RedisCacheManager cacheManager(
             RedisConnectionFactory connectionFactory,
@@ -49,16 +51,17 @@ public class RedisConfig implements CachingConfigurer {
         // Keep polymorphic typing for cached Object values, using a property when possible.
         redisOm.activateDefaultTypingAsProperty(
                 ptv,
-                ObjectMapper.DefaultTyping.NON_FINAL,
+                ObjectMapper.DefaultTyping.EVERYTHING,
                 "@class"
         );
+
 
 
         var valueSerializer = new GenericJackson2JsonRedisSerializer(redisOm);
 
         RedisCacheConfiguration base = RedisCacheConfiguration.defaultCacheConfig()
                 // IMPORTANT: bump this when serialization format changes
-                .computePrefixWith(cacheName -> "bb:v3:" + cacheName + "::")
+                .computePrefixWith(cacheName -> "bb:v4:" + cacheName + "::")
                 .entryTtl(defaultTtl)
                 .disableCachingNullValues()
                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
