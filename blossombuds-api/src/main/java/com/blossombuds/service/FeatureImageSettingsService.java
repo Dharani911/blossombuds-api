@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -60,6 +61,7 @@ public class FeatureImageSettingsService {
     private static final int MAX_H = 900;
 
     /** Upload from multipart (no presign; same flow as product images). */
+    @CacheEvict(cacheNames = "featureImages", key = "'public'")
     public FeatureImageDto addFromUpload(MultipartFile file, String altText, Integer sortOrder)
             throws IOException {
         log.info("[FEATURE][UPLOAD] Incoming feature image upload: fileName={}, size={}",
@@ -125,7 +127,7 @@ public class FeatureImageSettingsService {
         row.put("sortOrder", sortOrder != null ? sortOrder : items.size());
         items.add(row);
         saveListJson(items);
-        evictCache();
+        ;
         log.info("[FEATURE][UPLOAD] Added entry to settings list: key={}, sortOrder={}", key, row.get("sortOrder"));
 
         String signed = signGet(key);
@@ -183,6 +185,7 @@ public class FeatureImageSettingsService {
      * 2) Take a temp key, convert/resize/compress (no watermark), store to UI_PREFIX,
      * append to Settings list, and return a signed preview.
      */
+    @CacheEvict(cacheNames = "featureImages", key = "'public'")
     public FeatureImageDto addFromTempKey(String tempKey, String altText, Integer sortOrder) {
         log.info("[FEATURE][TEMP] Processing tempKey={}", tempKey);
 
@@ -226,7 +229,7 @@ public class FeatureImageSettingsService {
             if (sortOrder != null) row.put("sortOrder", sortOrder);
             items.add(row);
             saveListJson(items);
-            evictCache();
+            ;
             log.info("[FEATURE][TEMP] Metadata saved for key={}", finalKey);
 
             // 6) Build DTO with signed GET for preview
@@ -247,16 +250,19 @@ public class FeatureImageSettingsService {
     }
 
     /** Replace entire list (expects entries with keys already in UI_PREFIX). */
+
+    @CacheEvict(cacheNames = "featureImages", key = "'public'")
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void replaceAll(List<Map<String, Object>> items) {
         log.info("[FEATURE][ADMIN] Replacing full feature image list: count={}",
                 items != null ? items.size() : 0);
         saveListJson(items != null ? items : List.of());
-        evictCache();
+        ;
     }
 
     /** Remove an entry; optionally delete object from R2. */
+    @CacheEvict(cacheNames = "featureImages", key = "'public'")
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void remove(String key, boolean deleteObject) {
@@ -268,13 +274,13 @@ public class FeatureImageSettingsService {
         int after = items.size();
         log.info("[FEATURE][ADMIN] Removed key={}, before={}, after={}", key, before, after);
         saveListJson(items);
-        evictCache();
+        ;
         if (deleteObject && key != null && !key.isBlank()) {
             log.info("[FEATURE][ADMIN] Deleting object from R2: key={}", key);
             safeDelete(key);
         }
     }
-
+    @CacheEvict(cacheNames = "featureImages", key = "'public'")
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void reorder(List<String> orderedKeys) {
@@ -317,10 +323,11 @@ public class FeatureImageSettingsService {
 
         log.info("[FEATURE][ADMIN] Completed reorder. Total reordered={}", next.size());
         saveListJson(next);
-        evictCache();
+        ;
     }
 
     /** Update a single item’s metadata (altText and/or sortOrder). */
+    @CacheEvict(cacheNames = "featureImages", key = "'public'")
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void updateMeta(String key, String altText, Integer sortOrder) {
@@ -364,7 +371,7 @@ public class FeatureImageSettingsService {
 
         log.info("[FEATURE][ADMIN] Metadata updated and sortOrder normalized for all items");
         saveListJson(items);
-        evictCache();
+        ;
     }
 
     /* ─────────────────────────── Helpers ─────────────────────────── */
