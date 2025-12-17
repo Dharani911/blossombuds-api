@@ -24,7 +24,7 @@ import java.util.Set;
 @Table(name = "products")
 @EntityListeners(AuditingEntityListener.class)
 // Soft-delete = hide from lists (visible=false), but keep the row.
-@SQLDelete(sql = "UPDATE products SET active = false, modified_at = now() WHERE id = ?")
+@SQLDelete(sql = "UPDATE {h-schema}products SET active = false, modified_at = now() WHERE id = ?")
 @Where(clause = "active = true") //
 @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
 public class Product {

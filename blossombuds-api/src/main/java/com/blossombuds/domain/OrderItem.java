@@ -18,7 +18,7 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 
 /** Line item belonging to an order with quantity, pricing, and option snapshots. */
-@SQLDelete(sql = "UPDATE order_items SET active = false, modified_at = now() WHERE id = ?")
+@SQLDelete(sql = "UPDATE {h-schema}order_items SET active = false, modified_at = now() WHERE id = ?")
 @Where(clause = "active = true")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor
 @EntityListeners(AuditingEntityListener.class)

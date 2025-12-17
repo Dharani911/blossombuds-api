@@ -21,7 +21,7 @@ import java.util.Set;
 @Entity
 @Table(name = "categories")
 @EntityListeners(AuditingEntityListener.class) // <-- enable Spring Data auditing
-@SQLDelete(sql = "UPDATE categories SET active = false, modified_at = now() WHERE id = ?")
+@SQLDelete(sql = "UPDATE {h-schema}categories SET active = false, modified_at = now() WHERE id = ?")
 @Where(clause = "active = true")
 @JsonIgnoreProperties({"hibernateLazyInitializer","handler"}) // safety
 public class Category {

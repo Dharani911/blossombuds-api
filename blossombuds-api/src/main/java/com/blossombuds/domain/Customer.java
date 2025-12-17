@@ -30,7 +30,7 @@ import java.time.OffsetDateTime;
         }
 )
 @EntityListeners(AuditingEntityListener.class)
-@SQLDelete(sql = "UPDATE customers SET active=false, modified_at=now() WHERE id=?")
+@SQLDelete(sql = "UPDATE {h-schema}customers SET active=false, modified_at=now() WHERE id=?")
 @Where(clause = "active = true")
 public class Customer {
 

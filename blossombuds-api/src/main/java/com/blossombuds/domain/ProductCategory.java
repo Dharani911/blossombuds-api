@@ -16,7 +16,7 @@ import java.time.OffsetDateTime;
 
 /** Join entity linking a product to a category (M:N via product_categories). */
 @SQLDelete(sql = """
-  UPDATE product_categories
+  UPDATE {h-schema}product_categories
      SET active = false, modified_at = now()
    WHERE product_id = ? AND category_id = ?
 """)
