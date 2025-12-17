@@ -23,14 +23,14 @@ public interface ProductCategoryRepository extends JpaRepository<ProductCategory
 
     @Modifying
     @Query(value = """
-    UPDATE product_categories
+    UPDATE blossombuds_prod.product_categories
        SET active = false, modified_at = now()
      WHERE product_id = :pid AND category_id = :cid
   """, nativeQuery = true)
     int softUnlink(@Param("pid") Long productId, @Param("cid") Long categoryId);
     @Query(value = """
         select * 
-        from product_categories 
+        from blossombuds_prod.product_categories 
         where product_id = :productId and category_id = :categoryId 
         limit 1
     """, nativeQuery = true)

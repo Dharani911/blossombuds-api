@@ -21,7 +21,7 @@ public interface MetricsRepo extends JpaRepository<Order, Long> {
     // ---------- Totals / Sums ----------
     @Query(value = """
     SELECT COALESCE(COUNT(*),0)
-    FROM orders o
+    FROM blossombuds_prod.orders o
     WHERE o.status NOT IN ('CANCELLED')
       AND o.created_at >= COALESCE(:fromTs, '-infinity')::timestamptz
       AND o.created_at <  COALESCE(:toTs,   'infinity')::timestamptz
@@ -31,7 +31,7 @@ public interface MetricsRepo extends JpaRepository<Order, Long> {
     // Revenue sum (grand_total) in optional window
     @Query(value = """
     SELECT COALESCE(SUM(o.grand_total),0)
-    FROM orders o
+    FROM blossombuds_prod.orders o
     WHERE o.status NOT IN ('CANCELLED')
       AND o.created_at >= COALESCE(:fromTs, '-infinity')::timestamptz
       AND o.created_at <  COALESCE(:toTs,   'infinity')::timestamptz
@@ -41,7 +41,7 @@ public interface MetricsRepo extends JpaRepository<Order, Long> {
     // Shipping sum (shipping_fee) in optional window
     @Query(value = """
     SELECT COALESCE(SUM(o.shipping_fee),0)
-    FROM orders o
+    FROM blossombuds_prod.orders o
     WHERE o.status NOT IN ('CANCELLED')
       AND o.created_at >= COALESCE(:fromTs, '-infinity')::timestamptz
       AND o.created_at <  COALESCE(:toTs,   'infinity')::timestamptz
@@ -52,7 +52,7 @@ public interface MetricsRepo extends JpaRepository<Order, Long> {
     @Query(value = """
     SELECT COALESCE(MAX(month_sum),0) FROM (
       SELECT DATE_TRUNC('month', o.created_at) m, SUM(o.shipping_fee) month_sum
-      FROM orders o
+      FROM blossombuds_prod.orders o
       WHERE o.status NOT IN ('CANCELLED')
         AND o.created_at >= COALESCE(:fromTs, '-infinity')::timestamptz
         AND o.created_at <  COALESCE(:toTs,   'infinity')::timestamptz
@@ -61,15 +61,15 @@ public interface MetricsRepo extends JpaRepository<Order, Long> {
     """, nativeQuery = true)
     long maxShippingMonth(@Param("fromTs") OffsetDateTime from, @Param("toTs") OffsetDateTime to);
 
-    @Query(value = "SELECT COALESCE(COUNT(*),0) FROM products p WHERE p.active = true", nativeQuery = true)
+    @Query(value = "SELECT COALESCE(COUNT(*),0) FROM blossombuds_prod.products p WHERE p.active = true", nativeQuery = true)
     long countProducts();
 
-    @Query(value = "SELECT COALESCE(COUNT(*),0) FROM customers c WHERE c.active = true", nativeQuery = true)
+    @Query(value = "SELECT COALESCE(COUNT(*),0) FROM blossombuds_prod.customers c WHERE c.active = true", nativeQuery = true)
     long countCustomers();
 
     @Query(value = """
     SELECT COALESCE(COUNT(*),0)
-    FROM customers c
+    FROM blossombuds_prod.customers c
     WHERE c.active = true
       AND c.created_at >= COALESCE(:fromTs, '-infinity')::timestamptz
       AND c.created_at <  COALESCE(:toTs,   'infinity')::timestamptz
@@ -86,7 +86,7 @@ public interface MetricsRepo extends JpaRepository<Order, Long> {
                                  DATE_TRUNC('day', NOW()),
                                  INTERVAL '1 day')::timestamp with time zone AS d
         ) days
-        LEFT JOIN orders o
+        LEFT JOIN blossombuds_prod.orders o
           ON DATE_TRUNC('day', o.created_at) = DATE_TRUNC('day', days.d)
          AND o.status NOT IN ('CANCELLED')
         GROUP BY 1, days.d
@@ -97,7 +97,7 @@ public interface MetricsRepo extends JpaRepository<Order, Long> {
     @Query(value = """
         SELECT TO_CHAR(DATE_TRUNC('week', o.created_at), '"W"W IW Mon') AS label,
                COUNT(*) AS orders, COALESCE(SUM(o.grand_total),0) AS revenue
-        FROM orders o
+        FROM blossombuds_prod.orders o
         WHERE o.status NOT IN ('CANCELLED')
         GROUP BY 1, DATE_TRUNC('week', o.created_at)
         ORDER BY DATE_TRUNC('week', o.created_at) DESC
@@ -108,7 +108,7 @@ public interface MetricsRepo extends JpaRepository<Order, Long> {
     @Query(value = """
         SELECT TO_CHAR(DATE_TRUNC('month', o.created_at), 'Mon YYYY') AS label,
                COUNT(*) AS orders, COALESCE(SUM(o.grand_total),0) AS revenue
-        FROM orders o
+        FROM blossombuds_prod.orders o
         WHERE o.status NOT IN ('CANCELLED')
         GROUP BY 1, DATE_TRUNC('month', o.created_at)
         ORDER BY DATE_TRUNC('month', o.created_at) DESC
@@ -119,7 +119,7 @@ public interface MetricsRepo extends JpaRepository<Order, Long> {
     @Query(value = """
         SELECT TO_CHAR(DATE_TRUNC('year', o.created_at), 'YYYY') AS label,
                COUNT(*) AS orders, COALESCE(SUM(o.grand_total),0) AS revenue
-        FROM orders o
+        FROM blossombuds_prod.orders o
         WHERE o.status NOT IN ('CANCELLED')
         GROUP BY 1, DATE_TRUNC('year', o.created_at)
         ORDER BY DATE_TRUNC('year', o.created_at) DESC
@@ -184,7 +184,7 @@ public interface MetricsRepo extends JpaRepository<Order, Long> {
           SELECT DATE_TRUNC('month', NOW()) - (s.a || ' months')::interval AS m
           FROM generate_series(0, 11) AS s(a)
         ) months
-        LEFT JOIN orders o
+        LEFT JOIN blossombuds_prod.orders o
           ON DATE_TRUNC('month', o.created_at) = months.m
          AND o.status NOT IN ('CANCELLED')
         GROUP BY 1, months.m
@@ -207,7 +207,7 @@ public interface MetricsRepo extends JpaRepository<Order, Long> {
           SELECT DATE_TRUNC('month', NOW()) - (s.a || ' months')::interval AS m
           FROM generate_series(0, 11) AS s(a)
         ) months
-        LEFT JOIN customers c
+        LEFT JOIN blossombuds_prod.customers c
           ON DATE_TRUNC('month', c.created_at) = months.m
          AND c.active = true
         GROUP BY 1, months.m
@@ -228,9 +228,9 @@ public interface MetricsRepo extends JpaRepository<Order, Long> {
     // Top products since a start timestamp (no reserved words, no CTE)
     @Query(value = """
       SELECT p.name AS label, COALESCE(SUM(oi.quantity),0) AS val
-      FROM order_items oi
-      JOIN orders o   ON o.id = oi.order_id
-      JOIN products p ON p.id = oi.product_id
+      FROM blossombuds_prod.order_items oi
+      JOIN blossombuds_prod.orders o   ON o.id = oi.order_id
+      JOIN blossombuds_prod.products p ON p.id = oi.product_id
       WHERE o.status NOT IN ('CANCELLED')
         AND o.created_at >= :startTs
       GROUP BY p.name
@@ -258,11 +258,11 @@ public interface MetricsRepo extends JpaRepository<Order, Long> {
     // Top categories since a start timestamp
     @Query(value = """
       SELECT c.name AS label, COALESCE(SUM(oi.quantity),0) AS val
-      FROM order_items oi
-      JOIN orders o        ON o.id = oi.order_id
-      JOIN products p      ON p.id = oi.product_id
-      JOIN product_categories pc ON pc.product_id = p.id
-      JOIN categories c     ON c.id = pc.category_id
+      FROM blossombuds_prod.order_items oi
+      JOIN blossombuds_prod.orders o        ON o.id = oi.order_id
+      JOIN blossombuds_prod.products p      ON p.id = oi.product_id
+      JOIN blossombuds_prod.product_categories pc ON pc.product_id = p.id
+      JOIN blossombuds_prod.categories c     ON c.id = pc.category_id
       WHERE o.status NOT IN ('CANCELLED')
         AND o.created_at >= :startTs
       GROUP BY c.name

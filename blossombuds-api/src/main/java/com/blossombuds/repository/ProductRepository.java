@@ -16,7 +16,7 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     /** Finds a product by its unique slug. */
     Optional<Product> findBySlug(String slug);
 
-    @Query(value = "SELECT CASE WHEN count(*) > 0 THEN true ELSE false END FROM products p WHERE p.slug = :slug", nativeQuery = true)
+    @Query(value = "SELECT CASE WHEN count(*) > 0 THEN true ELSE false END FROM blossombuds_prod.products p WHERE p.slug = :slug", nativeQuery = true)
     boolean existsBySlugNative(@Param("slug") String slug);
 
     @Query("""

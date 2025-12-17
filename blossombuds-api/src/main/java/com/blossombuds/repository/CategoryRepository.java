@@ -19,7 +19,7 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
     /** Categories linked to a product (active on both link and category). */
     @Query("""
            select c
-           from ProductCategory pc
+           from blossombuds_prod.ProductCategory pc
            join pc.category c
            where pc.product.id = :productId
              and pc.active = true
