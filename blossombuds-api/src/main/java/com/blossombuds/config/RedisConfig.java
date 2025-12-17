@@ -70,7 +70,7 @@ public class RedisConfig implements CachingConfigurer {
                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(valueSerializer));
 
-        Map<String, RedisCacheConfiguration> perCache = Map.of(
+        Map<String, RedisCacheConfiguration> perCache = new java.util.HashMap<>(Map.of(
                 "catalog.categories",          base.entryTtl(Duration.ofHours(12)),
                 "catalog.productById",         base.entryTtl(Duration.ofMinutes(30)),
                 "catalog.products.page",       base.entryTtl(Duration.ofMinutes(20)),
@@ -78,7 +78,10 @@ public class RedisConfig implements CachingConfigurer {
                 "catalog.featured.page",       base.entryTtl(Duration.ofMinutes(20)),
                 "catalog.featured.top",        base.entryTtl(Duration.ofMinutes(20)),
                 "catalog.newArrivals",         base.entryTtl(Duration.ofMinutes(20))
-        );
+        ));
+
+        // Presigned URLs expire in 3600s, so keep cache < 3600s
+        perCache.put("featureImages", base.entryTtl(Duration.ofMinutes(50)));
 
         return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(base)
