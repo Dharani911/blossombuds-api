@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.Cache;
@@ -32,7 +33,14 @@ import java.util.Map;
 @EnableCaching
 @Slf4j
 public class RedisConfig implements CachingConfigurer {
+    @Value("${spring.data.redis.url:}")
+    private String redisUrl;
 
+    @PostConstruct
+    public void logRedisUrl() {
+        String safe = redisUrl == null ? "" : redisUrl.replaceAll("://([^:]+):([^@]+)@", "://$1:***@");
+        log.info("[REDIS][CONFIG] url={}", safe);
+    }
     /** Builds a RedisCacheManager with JSON values and string keys. */
     @Primary
     @Bean
@@ -64,7 +72,7 @@ public class RedisConfig implements CachingConfigurer {
 
         RedisCacheConfiguration base = RedisCacheConfiguration.defaultCacheConfig()
                 // IMPORTANT: bump this when serialization format changes
-                .computePrefixWith(cacheName -> "bb:v8:" + cacheName + "::")
+                .computePrefixWith(cacheName -> "bb:v9:" + cacheName + "::")
                 .entryTtl(defaultTtl)
                 .disableCachingNullValues()
                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
@@ -105,8 +113,7 @@ public class RedisConfig implements CachingConfigurer {
                         cache != null ? cache.getName() : "null",
                         key,
                         root.getClass().getName(),
-                        root.getMessage(),
-                        ex.getMessage());
+                        root.getMessage());
 
                 if (cache != null && (root instanceof JsonProcessingException
                         || root instanceof org.springframework.data.redis.serializer.SerializationException
