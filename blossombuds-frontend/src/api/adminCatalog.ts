@@ -348,9 +348,17 @@ export async function createCategory(dto: Partial<Category>) {
 }
 
 export async function updateCategory(id: number, dto: Partial<Category>) {
-  const { data } = await adminHttp.put(`/api/catalog/categories/${id}`, dto);
+  const payload: any = { ...dto };
+
+  // Option 1 contract: backend clears parent when parentId <= 0
+  if ("parentId" in payload && (payload.parentId == null || payload.parentId === "")) {
+    payload.parentId = 0;
+  }
+
+  const { data } = await adminHttp.put(`/api/catalog/categories/${id}`, payload);
   return data as Category;
 }
+
 
 export async function deleteCategory(id: number) {
   await adminHttp.delete(`/api/catalog/categories/${id}`);
