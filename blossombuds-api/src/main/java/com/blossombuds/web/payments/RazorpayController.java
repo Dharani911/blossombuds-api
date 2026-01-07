@@ -6,6 +6,7 @@ import com.blossombuds.dto.OrderItemDto;
 import com.blossombuds.repository.CheckoutIntentRepository;
 import com.blossombuds.security.RazorPayProperties;
 import com.blossombuds.service.OrderService;
+import com.blossombuds.service.payments.CheckoutFinalizeService;
 import com.blossombuds.service.payments.RazorpayService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -34,6 +35,8 @@ public class RazorpayController {
     private final OrderService orderService;
     private final RazorPayProperties props;
     private final ObjectMapper om;
+    private final CheckoutFinalizeService finalizeService;
+
 
     @GetMapping("/config")
     @PreAuthorize("permitAll()")
@@ -52,7 +55,7 @@ public class RazorpayController {
      * Frontend posts here AFTER Razorpay Checkout success (has orderId, paymentId, signature).
      * We verify the signature, create the Order (from the stored CheckoutIntent), and record the payment.
      */
-    @PostMapping("/verify")
+   /* @PostMapping("/verify")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @org.springframework.transaction.annotation.Transactional // <— IMPORTANT
     public void verifyAndRecord(@RequestBody VerifyRequest req) {
@@ -95,7 +98,30 @@ public class RazorpayController {
         //ci.setModifiedAt(OffsetDateTime.now());
         //ci.setModifiedBy("system");
         checkoutIntentRepository.save(ci);
+    }*/
+    /** Verifies Razorpay signature and finalizes the pending CheckoutIntent into an order. */
+    @PostMapping("/verify")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @org.springframework.transaction.annotation.Transactional
+    public void verifyAndRecord(@RequestBody VerifyRequest req) {
+
+        boolean ok = rzp.verifyCheckoutSignature(
+                req.getRazorpayOrderId(),
+                req.getRazorpayPaymentId(),
+                req.getRazorpaySignature()
+        );
+        if (!ok) throw new IllegalArgumentException("Invalid Razorpay signature");
+
+        // ✅ Finalize from server-side stored intent (do NOT trust client amount)
+        finalizeService.finalizeCapturedPayment(
+                req.getRazorpayOrderId(),
+                req.getRazorpayPaymentId(),
+                null, // ignore client-provided amount
+                req.getCurrency(),
+                "customer"
+        );
     }
+
 
     /* ----------------------------- WEBHOOKS ----------------------------- */
 
@@ -162,7 +188,7 @@ public class RazorpayController {
             String event = root.path("event").asText("");
 
             // Example: payment.captured
-            if ("payment.captured".equalsIgnoreCase(event)) {
+            /*if ("payment.captured".equalsIgnoreCase(event)) {
                 JsonNode entity = root.path("payload").path("payment").path("entity");
                 String rzpPaymentId = entity.path("id").asText("");
                 long amountPaise = entity.path("amount").asLong(0);
@@ -194,7 +220,29 @@ public class RazorpayController {
 
                 // You can also transition order status, send emails, etc.
                 return;
+            }*/
+            if ("payment.captured".equalsIgnoreCase(event)) {
+                JsonNode entity = root.path("payload").path("payment").path("entity");
+
+                String rzpPaymentId = entity.path("id").asText("");
+                long amountPaise = entity.path("amount").asLong(0);
+                String currency = entity.path("currency").asText("INR");
+                String rzpOrderId = entity.path("order_id").asText("");
+
+                // Convert paise to BigDecimal INR
+                BigDecimal captured = BigDecimal.valueOf(amountPaise, 2);
+
+                // ✅ Finalize pending intent into an order even if customer never returns to site
+                finalizeService.finalizeCapturedPayment(
+                        rzpOrderId,
+                        rzpPaymentId,
+                        captured,
+                        currency,
+                        "webhook:" + env.toLowerCase()
+                );
+                return;
             }
+
 
             // Handle other events if needed (order.paid, payment.failed, refund.processed, ...)
             // No-op by default.

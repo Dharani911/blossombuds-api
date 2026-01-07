@@ -837,7 +837,7 @@ export default function CheckoutPage() {
           contact: selectedAddress.phone || "",
         },
         theme: { color: "#F05D8B" },
-        handler: async function (response: any) {
+        /* handler: async function (response: any) {
           // Navigate to processing page with payment details
           const params = new URLSearchParams({
             razorpay_order_id: response.razorpay_order_id,
@@ -847,7 +847,35 @@ export default function CheckoutPage() {
             currency: "INR",
           });
           nav(`/payment-processing?${params.toString()}`, { replace: true });
+        }, */
+        handler: async function (response: any) {
+          try {
+            await http.post("/api/payments/razorpay/verify", {
+              razorpayOrderId: response.razorpay_order_id,
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpaySignature: response.razorpay_signature,
+              currency: "INR",
+              // DO NOT send amount (server should use intent/order)
+            });
+
+            clear();
+            showOrderSuccessPopup(internalOrderId); // optional
+            nav("/", { replace: true });
+          } catch (e: any) {
+            // If verify fails, show your processing page or an error page
+            const msg = e?.response?.data?.message || e?.message || "Payment verified failed. Contact support.";
+            setErr(msg);
+            // optionally still redirect to processing page for retry UI
+            const params = new URLSearchParams({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              currency: "INR",
+            });
+            nav(`/payment-processing?${params.toString()}`, { replace: true });
+          }
         },
+
 
         modal: {
           ondismiss: () => {
