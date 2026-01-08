@@ -72,7 +72,7 @@ public class RedisConfig implements CachingConfigurer {
 
         RedisCacheConfiguration base = RedisCacheConfiguration.defaultCacheConfig()
                 // IMPORTANT: bump this when serialization format changes
-                .computePrefixWith(cacheName -> "bb:v11:" + cacheName + "::")
+                .computePrefixWith(cacheName -> "bb:v12:" + cacheName + "::")
                 .entryTtl(defaultTtl)
                 .disableCachingNullValues()
                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))

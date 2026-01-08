@@ -543,7 +543,7 @@ export function ImagesTab({ productId, onDone, onChanged, onNext, setToast }: Im
   >([]);
 
 
-  const MAX = 5;
+  const MAX = 10;
 
   React.useEffect(() => {
     let live = true;
@@ -780,7 +780,7 @@ export function ImagesTab({ productId, onDone, onChanged, onNext, setToast }: Im
             ))}
 
             {queue.length === 0 && (items || []).length === 0 && (
-              <div className="empty">No images yet. Upload up to 5.</div>
+              <div className="empty">No images yet. Upload up to 10.</div>
             )}
           </div>
         )}
