@@ -9,19 +9,41 @@ export default function PaymentProcessingPage() {
     const { clear } = useCart();
     const [error, setError] = useState<string | null>(null);
     const [processing, setProcessing] = useState(true);
+    const STORAGE_KEY = "rzp_last_success";
+
+    function readStoredPayload() {
+      try {
+        const raw = sessionStorage.getItem(STORAGE_KEY);
+        if (!raw) return null;
+        return JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    }
 
     useEffect(() => {
-        const razorpayOrderId = searchParams.get("razorpay_order_id");
-        const razorpayPaymentId = searchParams.get("razorpay_payment_id");
-        const razorpaySignature = searchParams.get("razorpay_signature");
-        const amount = searchParams.get("amount");
-        const currency = searchParams.get("currency") || "INR";
+        let razorpayOrderId = searchParams.get("razorpay_order_id");
+        let razorpayPaymentId = searchParams.get("razorpay_payment_id");
+        let razorpaySignature = searchParams.get("razorpay_signature");
+        let currency = searchParams.get("currency") || "INR";
+
+        // ✅ Fallback: if URL missing (refresh / navigation issue), try sessionStorage
+        if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+          const stored = readStoredPayload();
+          if (stored) {
+            razorpayOrderId = stored.razorpay_order_id || stored.razorpayOrderId || razorpayOrderId;
+            razorpayPaymentId = stored.razorpay_payment_id || stored.razorpayPaymentId || razorpayPaymentId;
+            razorpaySignature = stored.razorpay_signature || stored.razorpaySignature || razorpaySignature;
+            currency = stored.currency || currency;
+          }
+        }
 
         if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
-            setError("Invalid payment data. Please contact support.");
-            setProcessing(false);
-            return;
+          setError("Invalid payment data. Please contact support.");
+          setProcessing(false);
+          return;
         }
+
 
         // Prevent navigation away
         const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -36,23 +58,31 @@ export default function PaymentProcessingPage() {
         (async () => {
             try {
                 await http.post("/api/payments/razorpay/verify", {
-                    razorpayOrderId,
-                    razorpayPaymentId,
-                    razorpaySignature,
-                    amount: amount ? parseFloat(amount) : undefined,
-                    currency,
+                  razorpayOrderId,
+                  razorpayPaymentId,
+                  razorpaySignature,
+                  currency,
                 });
 
-                // Success - clear cart and redirect
+
+                // ✅ show success UI state
+                setError(null);
+                setProcessing(false);
+
+                // ✅ clear cart
                 clear();
+
+                // ✅ remove stored payload (optional)
+                sessionStorage.removeItem(STORAGE_KEY);
 
                 // Remove the beforeunload listener before navigating
                 window.removeEventListener("beforeunload", handleBeforeUnload);
 
                 // Wait a moment to show success state
                 setTimeout(() => {
-                    navigate("/", { replace: true });
+                  navigate("/", { replace: true });
                 }, 2000);
+
             } catch (e: any) {
                 console.error("Payment verification failed:", e);
                 setError(

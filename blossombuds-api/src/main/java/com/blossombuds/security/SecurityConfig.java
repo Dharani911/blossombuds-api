@@ -80,6 +80,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/customers/auth/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/payments/razorpay/webhook").permitAll()
+                        .requestMatchers(HttpMethod.GET,  "/api/payments/razorpay/config").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/payments/razorpay/webhook/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/logout").authenticated()
 
                         // ----- ADMIN namespace -----

@@ -93,7 +93,7 @@ public class AdminMetricsService {
 
         // 🔁 Normalize aliases from frontend
         switch (key) {
-            case "today", "d", "24h" -> key = "day";
+            case "today", "daily", "d", "24h" -> key = "day";
             case "weekly", "7d"      -> key = "week";
             case "monthly", "30d"    -> key = "month";
             case "yearly", "12m"     -> key = "year";

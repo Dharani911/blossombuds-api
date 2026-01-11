@@ -15,6 +15,9 @@ export type OrderDto = {
 
   courierName?: string;
   orderNotes?: string;
+  deliveryPartnerId?: number;
+    couponId?: number;
+    couponCode?: string;
 
   shipName?: string;
   shipPhone?: string;
@@ -79,13 +82,12 @@ export async function createRzpOrder(orderId: number) {
 
 /** Payload to verify the payment on the server. */
 export type RzpVerifyPayload = {
-  orderId: number;                // your internal order id
-  razorpayOrderId: string;        // resp.razorpay_order_id
-  razorpayPaymentId: string;      // resp.razorpay_payment_id
-  razorpaySignature: string;      // resp.razorpay_signature
-  amount?: number;                // optional (for record-keeping)
-  currency?: string;              // optional (default INR)
+  razorpayOrderId: string;
+  razorpayPaymentId: string;
+  razorpaySignature: string;
+  currency?: string;
 };
+
 
 /** Verify success with the backend (signature + record Payment row). */
 export async function verifyRzp(payload: RzpVerifyPayload) {

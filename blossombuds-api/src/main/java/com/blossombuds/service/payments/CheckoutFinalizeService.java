@@ -103,6 +103,30 @@ public class CheckoutFinalizeService {
             throw e;
         }
     }
+    @Transactional
+    public void finalizeCapturedPaymentByIntentId(Long checkoutIntentId,
+                                                  String rzpOrderId,
+                                                  String rzpPaymentId,
+                                                  BigDecimal capturedAmount,
+                                                  String currency,
+                                                  String actor) {
+
+        if (checkoutIntentId == null) throw new IllegalArgumentException("checkoutIntentId is required");
+        if (rzpPaymentId == null || rzpPaymentId.isBlank()) throw new IllegalArgumentException("rzpPaymentId is required");
+
+        var ci = checkoutIntentRepository.findForUpdateById(checkoutIntentId)
+                .orElseThrow(() -> new IllegalArgumentException("Checkout intent not found: " + checkoutIntentId));
+
+        // If rzpOrderId not stored yet (crash gap), store it now
+        if (ci.getRzpOrderId() == null || ci.getRzpOrderId().isBlank()) {
+            ci.setRzpOrderId(rzpOrderId);
+            checkoutIntentRepository.save(ci);
+        }
+
+        // Now reuse existing finalize path (by rzpOrderId)
+        finalizeCapturedPayment(ci.getRzpOrderId(), rzpPaymentId, capturedAmount, currency, actor);
+    }
+
 
     /** Parses OrderDto stored as JSON in CheckoutIntent. */
     private OrderDto readOrderDto(String json) {

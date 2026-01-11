@@ -46,7 +46,7 @@ public class RazorpayController {
 
     /** Creates a Razorpay order for our internal order id (server→Razorpay). */
     @PostMapping("/orders/{orderId}")
-    @PreAuthorize("hasAnyRole('ROLE_ADMIN','ROLE_CUSTOMER')")
+    @PreAuthorize("hasAnyRole('ADMIN','CUSTOMER')")
     public Map<String, Object> createOrder(@PathVariable Long orderId) {
         return rzp.createRzpOrder(orderId);
     }
@@ -231,15 +231,38 @@ public class RazorpayController {
 
                 // Convert paise to BigDecimal INR
                 BigDecimal captured = BigDecimal.valueOf(amountPaise, 2);
+                String notesCiId = entity.path("notes").path("checkoutIntentId").asText("");
+                try {
+                    // Primary path (fast): finalize by rzpOrderId
+                    finalizeService.finalizeCapturedPayment(
+                            rzpOrderId,
+                            rzpPaymentId,
+                            captured,
+                            currency,
+                            "webhook:" + env.toLowerCase()
+                    );
+                } catch (IllegalArgumentException ex) {
+                    // Fallback path: intent row exists but rzpOrderId link wasn't committed yet
+                    if (notesCiId != null && !notesCiId.isBlank()) {
+                        try {
+                            Long checkoutIntentId = Long.parseLong(notesCiId);
 
-                // ✅ Finalize pending intent into an order even if customer never returns to site
-                finalizeService.finalizeCapturedPayment(
-                        rzpOrderId,
-                        rzpPaymentId,
-                        captured,
-                        currency,
-                        "webhook:" + env.toLowerCase()
-                );
+                            finalizeService.finalizeCapturedPaymentByIntentId(
+                                    checkoutIntentId,
+                                    rzpOrderId,
+                                    rzpPaymentId,
+                                    captured,
+                                    currency,
+                                    "webhook:" + env.toLowerCase()
+                            );
+                            return;
+                        } catch (NumberFormatException ignore) {
+                            // fall through and rethrow original
+                        }
+                    }
+                    throw ex;
+                }
+
                 return;
             }
 

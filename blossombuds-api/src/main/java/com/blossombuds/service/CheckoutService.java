@@ -36,10 +36,11 @@ public class CheckoutService {
     private final CheckoutIntentRepository ciRepo;
     private final WhatsAppPayloadBuilder waBuilder;
     private final RazorpayService rzpService;
+    private final CheckoutTxService checkoutTxService;
     private final ObjectMapper om = new ObjectMapper();
 
     /** Starts checkout. India → returns RZP order payload; Intl → WhatsApp URL. */
-    @Transactional
+    /*@Transactional
     public Decision startCheckout(OrderDto orderDraft, List<OrderItemDto> items) {
         final Instant t0 = Instant.now();
         final Long shipCountryId = orderDraft != null ? orderDraft.getShipCountryId() : null;
@@ -80,7 +81,7 @@ public class CheckoutService {
         ci.setExpiresAt(OffsetDateTime.now().plus(2, ChronoUnit.HOURS));
         //ci.setCreatedAt(OffsetDateTime.now());
         //ci.setCreatedBy("system");
-        ciRepo.save(ci);
+        ciRepo.saveAndFlush(ci);
         log.info("[CHECKOUT][INDIA][INTENT][OK] checkoutIntentId={}", ci.getId());
 
 
@@ -94,6 +95,58 @@ public class CheckoutService {
         Map<String, Object> rzp = rzpService.createRzpOrderForAmount(paise, currency, "CI" + ci.getId(), notes, true);
         String rzpOrderId = (String) rzp.get("id");
         ci.setRzpOrderId(rzpOrderId);
+        ciRepo.saveAndFlush(ci);
+        log.info("[PAYMENT][RZP][ORDER_CREATE][OK] rzpOrderId={} checkoutIntentId={} elapsedMs={}",
+                rzpOrderId, ci.getId(), java.time.Duration.between(t0, Instant.now()).toMillis());
+
+        return Decision.rzpOrder(rzp, currency);
+    }
+*/
+    /** Starts checkout. India → returns RZP order payload; Intl → WhatsApp URL. */
+    public Decision startCheckout(OrderDto orderDraft, List<OrderItemDto> items) {
+        final Instant t0 = Instant.now();
+        final Long shipCountryId = orderDraft != null ? orderDraft.getShipCountryId() : null;
+        final Long customerId = orderDraft != null ? orderDraft.getCustomerId() : null;
+
+        log.info("[CHECKOUT][START] shipCountryId={} customerId={} itemsCount={} currency='{}' grandTotal={}",
+                shipCountryId,
+                customerId,
+                (items != null ? items.size() : 0),
+                (orderDraft != null ? orderDraft.getCurrency() : null),
+                (orderDraft != null ? orderDraft.getGrandTotal() : null));
+
+        Country country = countryRepo.findById(orderDraft.getShipCountryId())
+                .orElseThrow(() -> new IllegalArgumentException("Country not found: " + shipCountryId));
+
+        // International
+        if (!isIndia(country)) {
+            log.info("[CHECKOUT][INTL] Building WhatsApp URL for non-India destination");
+            Customer c = (customerId == null) ? null : customerRepo.findById(customerId).orElse(null);
+            String url = waBuilder.buildForOrderDraft(orderDraft, items, c);
+            log.info("[CHECKOUT][INTL][OK] elapsedMs={}", java.time.Duration.between(t0, Instant.now()).toMillis());
+            return Decision.whatsapp(url);
+        }
+
+        // India: (1) commit intent first
+        BigDecimal grand = nvl(orderDraft.getGrandTotal());
+        String currency = normCurrency(orderDraft.getCurrency());
+        log.info("[CHECKOUT][INDIA] Creating intent (commit-first) grand={} currency='{}'", grand, currency);
+
+        var ci = checkoutTxService.createIntentCommitted(orderDraft, items);
+
+        // (2) call Razorpay outside DB transaction
+        long paise = grand.movePointRight(2).longValueExact();
+        Map<String, String> notes = new HashMap<>();
+        notes.put("checkoutIntentId", String.valueOf(ci.getId()));
+        notes.put("customerId", String.valueOf(orderDraft.getCustomerId()));
+
+        log.info("[PAYMENT][RZP][ORDER_CREATE] paise={} currency='{}' receipt='CI{}'", paise, currency, ci.getId());
+        Map<String, Object> rzp = rzpService.createRzpOrderForAmount(paise, currency, "CI" + ci.getId(), notes, true);
+        String rzpOrderId = (String) rzp.get("id");
+
+        // (3) commit rzpOrderId link immediately
+        checkoutTxService.attachRzpOrderIdCommitted(ci.getId(), rzpOrderId);
+
         log.info("[PAYMENT][RZP][ORDER_CREATE][OK] rzpOrderId={} checkoutIntentId={} elapsedMs={}",
                 rzpOrderId, ci.getId(), java.time.Duration.between(t0, Instant.now()).toMillis());
 

@@ -10,7 +10,7 @@ import org.springframework.data.repository.CrudRepository;
 import java.util.Optional;
 
 /** JPA repository for checkout intents. */
-public interface CheckoutIntentRepository extends CrudRepository<CheckoutIntent, Long> {
+public interface CheckoutIntentRepository extends JpaRepository<CheckoutIntent, Long> {
 
     /** Finds an intent by Razorpay order id. */
     Optional<CheckoutIntent> findByRzpOrderId(String rzpOrderId);
@@ -19,4 +19,9 @@ public interface CheckoutIntentRepository extends CrudRepository<CheckoutIntent,
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select ci from CheckoutIntent ci where ci.rzpOrderId = :rzpOrderId")
     Optional<CheckoutIntent> findForUpdateByRzpOrderId(String rzpOrderId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select ci from CheckoutIntent ci where ci.id = :id")
+    Optional<CheckoutIntent> findForUpdateById(Long id);
+
 }

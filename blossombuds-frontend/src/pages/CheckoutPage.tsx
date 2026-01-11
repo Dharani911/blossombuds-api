@@ -187,8 +187,8 @@ function showOrderSuccessPopup(orderId?: number | string) {
     ? `Your order is confirmed. Order ID: #${orderId}`
     : "Your order is confirmed. Please check your email.";
   showCheckoutPopup({
-    title: "Payment successful 🎉",
-    message: msg,
+    title: "Payment received 🎉",
+    message: "We’re confirming your order now. You’ll receive a confirmation shortly.",
   });
 }
 
@@ -837,18 +837,27 @@ export default function CheckoutPage() {
           contact: selectedAddress.phone || "",
         },
         theme: { color: "#F05D8B" },
-        /* handler: async function (response: any) {
-          // Navigate to processing page with payment details
-          const params = new URLSearchParams({
+        handler: function (response: any) {
+          // ✅ Build payload once (URL + sessionStorage)
+          const payload = {
             razorpay_order_id: response.razorpay_order_id,
             razorpay_payment_id: response.razorpay_payment_id,
             razorpay_signature: response.razorpay_signature,
-            amount: String(grandTotal),
             currency: "INR",
-          });
+
+            // optional (useful for UI / debugging)
+            internalOrderId: internalOrderId ? String(internalOrderId) : "",
+          };
+
+          // ✅ Store for refresh/fallback
+          sessionStorage.setItem("rzp_last_success", JSON.stringify(payload));
+
+          // ✅ Navigate to processing page
+          const params = new URLSearchParams(payload);
           nav(`/payment-processing?${params.toString()}`, { replace: true });
-        }, */
-        handler: async function (response: any) {
+        },
+
+        /* handler: async function (response: any) {
           try {
             await http.post("/api/payments/razorpay/verify", {
               razorpayOrderId: response.razorpay_order_id,
@@ -874,7 +883,7 @@ export default function CheckoutPage() {
             });
             nav(`/payment-processing?${params.toString()}`, { replace: true });
           }
-        },
+        }, */
 
 
         modal: {
