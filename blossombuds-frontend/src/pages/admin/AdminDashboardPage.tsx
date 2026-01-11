@@ -1,17 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
 import http from "../../api/adminHttp";
 import { Link } from "react-router-dom";
-import { formatIstDateTime } from "../../utils/dates";
-
 import {
   ResponsiveContainer,
-  LineChart, Line,
+  AreaChart, Area,
   BarChart, Bar,
   PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from "recharts";
 
-/* ------------------------- Types (your API) ------------------------- */
+/* ---------------------------------------------------------------------------
+   TYPES
+--------------------------------------------------------------------------- */
 type Section = {
   total: number; daily: number; weekly: number; monthly: number; yearly: number;
   prevDaily?: number; prevWeekly?: number; prevMonthly?: number; prevYearly?: number;
@@ -22,6 +22,7 @@ type Shipping = {
   prevDaily?: number; prevWeekly?: number; prevMonthly?: number; prevYearly?: number;
   max: number;
 };
+
 type Products = { total: number };
 type Customers = {
   total: number;
@@ -29,897 +30,1024 @@ type Customers = {
   prevDaily?: number; prevWeekly?: number; prevMonthly?: number; prevYearly?: number;
   max: number;
 };
-type MetricsSummary = { orders: Section; revenue: Section; shipping: Shipping; products: Products; customers: Customers };
+
+type MetricsSummary = {
+  orders: Section;
+  revenue: Section;
+  shipping: Shipping;
+  products: Products;
+  customers: Customers;
+};
 
 type TrendPoint = { label: string; orders: number; revenue: number };
 type LabeledValue = { label: string; value: number };
 type RangeKey = "daily" | "weekly" | "monthly" | "yearly";
 
-/* ------------------------------ Theme palette (unchanged) --------------------------- */
-const ACCENT = "#F05D8B";   // Pink
-const GOLD = "#F6C320";   // Gold
-const PRIMARY = "#4A4F41";   // Text
-const BG = "#FAF7E7";   // Background
-const INK = "rgba(0,0,0,.08)";
-const donutColors = ["#F05D8B", "#F6C320", "#9BB472", "#7AA2E3", "#C084FC", "#FF9F6E"];
+/* ---------------------------------------------------------------------------
+   THEME CONSTANTS (STRICT BRAND)
+--------------------------------------------------------------------------- */
+const BRAND = {
+  bg: "#FAF7E7",
+  text: "#4A4F41",
+  textLight: "#8B9185",
+  card: "#FFFFFF",
+  accent: "#F05D8B",
+  gold: "#F6C320",
+  goldLight: "#FFF5D6",
+  pinkLight: "#FFEBF2",
+  green: "#9BB472",
+  border: "rgba(74, 79, 65, 0.08)",
+  shadow: "0 10px 40px -10px rgba(74, 79, 65, 0.08)",
+  shadowHover: "0 16px 48px -12px rgba(74, 79, 65, 0.15)",
+};
 
-/* ------------------------------ Utils -------------------------------- */
+const PIE_COLORS = [BRAND.accent, BRAND.gold, BRAND.green, "#7AA2E3", "#C084FC", "#FF9F6E"];
+
+/* ---------------------------------------------------------------------------
+   UTILS
+--------------------------------------------------------------------------- */
 const fmtNum = (n: number) => new Intl.NumberFormat("en-IN").format(n ?? 0);
-const fmtMoney = (n: number) => "₹" + new Intl.NumberFormat("en-IN").format(n ?? 0);
-const labelOf = (r: RangeKey) => r[0].toUpperCase() + r.slice(1);
+const fmtMoney = (n: number) => "₹" + new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(n ?? 0);
 
-/* ------------------------------ Page -------------------------------- */
-export default function AdminAnalyticsSimple() {
-  const [range, setRange] = useState<RangeKey>("monthly");
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-  const [summary, setSummary] = useState<MetricsSummary | null>(null);
-  const [trend, setTrend] = useState<TrendPoint[]>([]);
-  const [ship12m, setShip12m] = useState<LabeledValue[]>([]);
-  const [cust12m, setCust12m] = useState<LabeledValue[]>([]);
-  const [topProducts, setTopProducts] = useState<LabeledValue[]>([]);
-  const [topCategories, setTopCategories] = useState<LabeledValue[]>([]);
+const getLabel = (r: RangeKey) => {
+  switch (r) {
+    case "daily": return "Today";
+    case "weekly": return "This Week";
+    case "monthly": return "This Month";
+    case "yearly": return "This Year";
+    default: return r;
+  }
+};
+const fmtIstDateTime = (d: Date) => {
+  // "11 Jan 2026, 16:32 IST" style
+  const fmt = new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+  return `${fmt.format(d)} IST`;
+};
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true); setErr(null);
-      try {
-        const [sum, tr, sh, cu, tp, tc] = await Promise.all([
-          http.get<MetricsSummary>("/api/admin/metrics/summary").then(r => r.data),
-          http.get<TrendPoint[]>(`/api/admin/metrics/trend?range=${range}`).then(r => r.data),
-          http.get<LabeledValue[]>("/api/admin/metrics/shipping/12m").then(r => r.data),
-          http.get<LabeledValue[]>("/api/admin/metrics/customers/12m").then(r => r.data),
-          http.get<LabeledValue[]>(`/api/admin/metrics/top-products?range=${range}&limit=6`).then(r => r.data),
-          http.get<LabeledValue[]>(`/api/admin/metrics/top-categories?range=${range}&limit=6`).then(r => r.data),
-        ]);
-        setSummary(sum);
-        setTrend(tr);
-        setShip12m(sh);
-        setCust12m(cu);
-        setTopProducts(tp);
-        setTopCategories(tc);
-      } catch (e: any) {
-        setErr(e?.response?.data?.message || "Failed to load analytics.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, [range, reloadKey]);
 
-  const ordersSpark = useMemo(() => trend.map(t => ({ x: t.label, y: t.orders })), [trend]);
-  const revenueSpark = useMemo(() => trend.map(t => ({ x: t.label, y: t.revenue })), [trend]);
 type RangeSection = {
   total: number;
   daily: number; weekly: number; monthly: number; yearly: number;
   prevDaily?: number; prevWeekly?: number; prevMonthly?: number; prevYearly?: number;
 };
 
-const pick = (s: RangeSection, r: RangeKey) => Number(s?.[r] ?? 0);
-
-const pickPrev = (s: RangeSection, r: RangeKey) => {
-  const key = ("prev" + r[0].toUpperCase() + r.slice(1)) as keyof RangeSection;
+const pick = (s: RangeSection | null | undefined, r: RangeKey) => Number(s?.[r] ?? 0);
+const pickPrev = (s: RangeSection | null | undefined, r: RangeKey) => {
+  const key = ("prev" + r.charAt(0).toUpperCase() + r.slice(1)) as keyof RangeSection;
   return Number(s?.[key] ?? 0);
 };
 
-
-const pct = (cur: number, prev: number) => {
-  if (!prev) return cur ? "∞" : "0%";
-  const p = ((cur - prev) / prev) * 100;
-  const sign = p > 0 ? "+" : "";
-  return `${sign}${p.toFixed(0)}%`;
+const calcGrowth = (curr: number, prev: number) => {
+  if (!prev) return curr > 0 ? 100 : 0;
+  return ((curr - prev) / prev) * 100;
 };
 
+/* ---------------------------------------------------------------------------
+   MAIN COMPONENT (PROGRESSIVE LOADING)
+--------------------------------------------------------------------------- */
+export default function AdminDashboardPage() {
+  const [range, setRange] = useState<RangeKey>("monthly");
+
+  // global manual refresh
+  const [tick, setTick] = useState(0);
+
+  // KPI / Summary state (loads FIRST)
+  const [summary, setSummary] = useState<MetricsSummary | null>(null);
+  const [kpiLoading, setKpiLoading] = useState(true);
+  const [kpiErr, setKpiErr] = useState<string | null>(null);
+
+  // Trend (range-based)
+  const [trend, setTrend] = useState<TrendPoint[]>([]);
+  const [trendLoading, setTrendLoading] = useState(true);
+  const [trendErr, setTrendErr] = useState<string | null>(null);
+
+  // Top lists (range-based)
+  const [topProducts, setTopProducts] = useState<LabeledValue[]>([]);
+  const [topCategories, setTopCategories] = useState<LabeledValue[]>([]);
+  const [topsLoading, setTopsLoading] = useState(true);
+  const [topsErr, setTopsErr] = useState<string | null>(null);
+
+  // 12m charts (load once, independent)
+  const [ship12m, setShip12m] = useState<LabeledValue[]>([]);
+  const [cust12m, setCust12m] = useState<LabeledValue[]>([]);
+  const [baseLoading, setBaseLoading] = useState(true);
+  const [baseErr, setBaseErr] = useState<string | null>(null);
+const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+
+const markUpdated = () => setLastUpdatedAt(new Date());
+
+  /* ---------------- KPI FIRST: Summary loads quickly ---------------- */
+  useEffect(() => {
+    let alive = true;
+    setKpiLoading(true);
+    setKpiErr(null);
+
+    http.get<MetricsSummary>("/api/admin/metrics/summary")
+      .then(res => {
+        if (!alive) return;
+        setSummary(res.data);
+        markUpdated();
+      })
+      .catch((e) => {
+        if (!alive) return;
+        setKpiErr(e?.response?.data?.message || "Failed to load KPI summary.");
+      })
+      .finally(() => {
+        if (!alive) return;
+        setKpiLoading(false);
+      });
+
+    return () => { alive = false; };
+  }, [tick]);
+
+  /* ---------------- RANGE-BASED: Trend loads independent ---------------- */
+  useEffect(() => {
+    let alive = true;
+    setTrendLoading(true);
+    setTrendErr(null);
+
+    http.get<TrendPoint[]>(`/api/admin/metrics/trend?range=${range}`)
+      .then(res => {
+        if (!alive) return;
+        setTrend(res.data || []);
+      })
+      .catch((e) => {
+        if (!alive) return;
+        setTrendErr(e?.response?.data?.message || "Failed to load trend.");
+        setTrend([]);
+      })
+      .finally(() => {
+        if (!alive) return;
+        setTrendLoading(false);
+      });
+
+    return () => { alive = false; };
+  }, [range, tick]);
+
+  /* ---------------- RANGE-BASED: Tops load independent ---------------- */
+  useEffect(() => {
+    let alive = true;
+    setTopsLoading(true);
+    setTopsErr(null);
+
+    // Fire both calls, but update UI as each completes (no Promise.all blocking)
+    const p1 = http.get<LabeledValue[]>(`/api/admin/metrics/top-products?range=${range}&limit=5`)
+      .then(res => {
+        if (!alive) return;
+        setTopProducts(res.data || []);
+      });
+
+    const p2 = http.get<LabeledValue[]>(`/api/admin/metrics/top-categories?range=${range}&limit=5`)
+      .then(res => {
+        if (!alive) return;
+        setTopCategories(res.data || []);
+      });
+
+    Promise.allSettled([p1, p2])
+      .catch(() => { /* ignore */ })
+      .finally(() => {
+        if (!alive) return;
+        // If either failed, we still show what we got
+        setTopsLoading(false);
+      });
+
+    // Track errors individually
+    p1.catch((e) => {
+      if (!alive) return;
+      setTopsErr(e?.response?.data?.message || "Some top lists failed to load.");
+      setTopProducts([]);
+    });
+    p2.catch((e) => {
+      if (!alive) return;
+      setTopsErr(e?.response?.data?.message || "Some top lists failed to load.");
+      setTopCategories([]);
+    });
+
+    return () => { alive = false; };
+  }, [range, tick]);
+
+  /* ---------------- 12M BASE: loads once (or on refresh) ---------------- */
+  useEffect(() => {
+    let alive = true;
+    setBaseLoading(true);
+    setBaseErr(null);
+
+    const s1 = http.get<LabeledValue[]>("/api/admin/metrics/shipping/12m")
+      .then(res => {
+        if (!alive) return;
+        setShip12m(res.data || []);
+      });
+
+    const s2 = http.get<LabeledValue[]>("/api/admin/metrics/customers/12m")
+      .then(res => {
+        if (!alive) return;
+        setCust12m(res.data || []);
+      });
+
+    Promise.allSettled([s1, s2])
+      .catch(() => { /* ignore */ })
+      .finally(() => {
+        if (!alive) return;
+        setBaseLoading(false);
+      });
+
+    s1.catch((e) => {
+      if (!alive) return;
+      setBaseErr(e?.response?.data?.message || "Failed to load base charts.");
+      setShip12m([]);
+    });
+    s2.catch((e) => {
+      if (!alive) return;
+      setBaseErr(e?.response?.data?.message || "Failed to load base charts.");
+      setCust12m([]);
+    });
+
+    return () => { alive = false; };
+  }, [tick]);
+
+  const metrics = useMemo(() => {
+    if (!summary) return null;
+
+    const rev = pick(summary.revenue, range);
+    const revPrev = pickPrev(summary.revenue, range);
+
+    const ord = pick(summary.orders, range);
+    const ordPrev = pickPrev(summary.orders, range);
+
+    const cust = pick(summary.customers, range);
+    const custPrev = pickPrev(summary.customers, range);
+
+    const aov = ord > 0 ? rev / ord : 0;
+
+    return {
+      revenue: { val: rev, growth: calcGrowth(rev, revPrev), total: summary.revenue.total },
+      orders: { val: ord, growth: calcGrowth(ord, ordPrev), total: summary.orders.total },
+      customers: { val: cust, growth: calcGrowth(cust, custPrev), total: summary.customers.total },
+      shipping: { val: pick(summary.shipping, range) },
+      products: summary.products.total,
+    };
+  }, [summary, range]);
+
+  const categoryTotal = useMemo(() => {
+    return (topCategories || []).reduce((a, x) => a + (x.value || 0), 0);
+  }, [topCategories]);
+
   return (
-    <div className="analytics-wrap">
-      <style>{styles}</style>
+    <div className="analytics-page">
+      <style>{CSS}</style>
 
-      {/* Header */}
-      <div className="header">
-        <div className="tit">
-          <h1>Analytics</h1>
-          <p>Clear metrics for orders, revenue, shipping & customers.</p>
-        </div>
-        <div className="controls">
-          <div className="seg">
-            {(["daily", "weekly", "monthly", "yearly"] as RangeKey[]).map(k => (
-              <button key={k} className={"seg-btn" + (range === k ? " active" : "")} onClick={() => setRange(k)}>
-                {labelOf(k)}
-              </button>
-            ))}
-          </div>
-          <div className="meta">
-            Updated {formatIstDateTime(new Date())}
+      {/* HEADER */}
+      <header className="page-header">
+        <div className="header-content">
+          <div className="titles">
+            <h1>Dashboard</h1>
+            <p>Overview & Performance Insights</p>
           </div>
 
+
+          <div className="actions">
+            <div className="range-toggle">
+              {(["daily", "weekly", "monthly", "yearly"] as RangeKey[]).map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setRange(r)}
+                  className={`toggle-btn ${range === r ? "active" : ""}`}
+                >
+                  {r.charAt(0).toUpperCase() + r.slice(1)}
+                </button>
+              ))}
+            </div>
+            <button className="refresh-btn" onClick={() => setTick(t => t + 1)} title="Refresh everything">
+              ↻
+            </button>
+            <div className="updated-at">
+                        {lastUpdatedAt ? (
+                          <>Last updated: <b>{fmtIstDateTime(lastUpdatedAt)}</b></>
+                        ) : (
+                          <>Last updated: <span className="muted">—</span></>
+                        )}
+                      </div>
+          </div>
+
+
         </div>
-      </div>
+      </header>
 
-      {/* Error / Loading */}
-      {err && <div className="alert">{err} <button onClick={() => setReloadKey(k => k + 1)}>Retry</button></div>}
-      {loading && <Skeleton />}
+      <main className="main-grid">
+        {/* KPI ROW (FAST) */}
+        <section className="kpi-row">
+          {kpiLoading || !summary || !metrics ? (
+            <>
+              <div className="card sk-kpi" />
+              <div className="card sk-kpi" />
+              <div className="card sk-kpi" />
+              <div className="card sk-kpi" />
+            </>
+          ) : (
+            <>
+              <KpiCard
+                title="Total Revenue"
+                rangeLabel={getLabel(range)}
+                value={fmtMoney(metrics.revenue.val)}
+                growth={metrics.revenue.growth}
+                footer={`Lifetime: ${fmtMoney(metrics.revenue.total)}`}
+                accent={BRAND.gold}
+                icon="💰"
+              />
+              <KpiCard
+                title="Total Orders"
+                rangeLabel={getLabel(range)}
+                value={fmtNum(metrics.orders.val)}
+                growth={metrics.orders.growth}
+                footer={`Lifetime: ${fmtNum(metrics.orders.total)}`}
+                accent={BRAND.accent}
+                icon="🛍️"
+              />
+              <KpiCard
+                title="New Customers"
+                rangeLabel={getLabel(range)}
+                value={fmtNum(metrics.customers.val)}
+                growth={metrics.customers.growth}
+                footer={`Total Base: ${fmtNum(metrics.customers.total)}`}
+                accent={BRAND.green}
+                icon="👥"
+              />
+              <KpiCard
+                title="Total Products"
+                rangeLabel="Catalog Size"
+                value={fmtNum(metrics.products)}
+                footer="Active products in store"
+                accent="#7AA2E3"
+                icon="🪷"
+              />
+            </>
+          )}
+        </section>
 
-      {!loading && summary && (
-        <>
-          {/* KPIs */}
-          <section className="kpis">
-            <MetricCard
-              title={`Orders • ${labelOf(range)}`}
-              value={fmtNum(pick(summary.orders, range))}
-              hint={`Total: ${fmtNum(summary.orders.total)}`}
-            >
-              <TinyLine data={ordersSpark} color={ACCENT} />
-            </MetricCard>
+        {kpiErr && (
+          <div className="card soft-alert">
+            <div className="soft-alert-row">
+              <span>⚠️ {kpiErr}</span>
+              <button className="mini-btn" onClick={() => setTick(t => t + 1)}>Retry</button>
+            </div>
+          </div>
+        )}
 
-            <MetricCard
-              title={`Revenue • ${labelOf(range)}`}
-              value={fmtMoney(pick(summary.revenue, range))}
-              hint={`Total: ${fmtMoney(summary.revenue.total)}`}
-            >
-              <TinyLine data={revenueSpark} color={GOLD} />
-            </MetricCard>
+        {/* CHARTS ROW 1: Trend + Category Mix (independent loaders) */}
+        <section className="charts-row">
+          <div className="card chart-box trend-box">
+            <div className="card-head">
+              <div className="card-icon" style={{ background: BRAND.goldLight }}>📈</div>
+              <div>
+                <h3>Market Trend</h3>
+                <span>Revenue vs Orders over time</span>
+              </div>
+            </div>
 
-            <MiniCard
-              title="Products"
-              value={fmtNum(summary.products.total)}
-              link={{ label: "Manage", to: "/admin/products" }}
-            />
+            <div className="chart-canvas">
+              {trendLoading ? (
+                <div className="sk-chart" />
+              ) : trendErr ? (
+                <InlineError msg={trendErr} onRetry={() => setTick(t => t + 1)} />
+              ) : trend.length === 0 ? (
+                <div className="empty-msg">No trend data for this range</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={320}>
+                  <AreaChart data={trend} margin={{ top: 20, right: 0, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="gradRev" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={BRAND.gold} stopOpacity={0.4} />
+                        <stop offset="95%" stopColor={BRAND.gold} stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="gradOrd" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={BRAND.accent} stopOpacity={0.4} />
+                        <stop offset="95%" stopColor={BRAND.accent} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
 
-            {/* ✅ Customers becomes range-aware + still shows global total */}
-            <MetricCard
-              title={`New Customers • ${labelOf(range)}`}
-              value={fmtNum(pick(summary.customers, range))}
-              hint={`Total customers: ${fmtNum(summary.customers.total)}`}
-            />
-          </section>
-
-
-
-          {/* Trend */}
-          <section className="grid">
-            <ChartCard title={`Trend • ${labelOf(range)}`} subtitle="Orders vs Revenue">
-              {trend.length === 0 ? <Empty msg="No data in this range." /> : (
-                <ResponsiveContainer>
-                  <LineChart data={trend} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
-                    <CartesianGrid stroke={INK} vertical={false} />
-                    <XAxis dataKey="label" tick={{ fill: PRIMARY, fontSize: 12 }} />
-                    <YAxis yAxisId="left" tick={{ fill: PRIMARY, fontSize: 12 }} />
-                    <YAxis yAxisId="right" orientation="right" hide />
-                    <Tooltip content={({ active, payload, label }: any) => {
-                      if (!active || !payload || !payload.length) return null;
-                      const ord = payload.find((p: any) => p.dataKey === "orders")?.value ?? 0;
-                      const rev = payload.find((p: any) => p.dataKey === "revenue")?.value ?? 0;
-                      return (
-                        <Tip>
-                          <b>{label}</b>
-                          <span><Dot c={ACCENT} /> Orders: <b>{fmtNum(ord)}</b></span>
-                          <span><Dot c={GOLD} /> Revenue: <b>{fmtMoney(rev)}</b></span>
-                        </Tip>
-                      );
-                    }} />
-                    <Legend />
-                    <Line yAxisId="left" type="monotone" dataKey="orders" name="Orders" stroke={ACCENT} strokeWidth={2} dot={false} />
-                    <Line yAxisId="right" type="monotone" dataKey="revenue" name="Revenue" stroke={GOLD} strokeWidth={2} dot={false} />
-                  </LineChart>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={BRAND.border} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: BRAND.textLight }} axisLine={false} tickLine={false} dy={10} />
+                    <YAxis
+                      yAxisId="L"
+                      tick={{ fontSize: 11, fill: BRAND.textLight }}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={(v) => v >= 1000 ? `₹${Math.round(v / 1000)}k` : `₹${v}`}
+                    />
+                    <YAxis yAxisId="R" orientation="right" tick={{ fontSize: 11, fill: BRAND.textLight }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(0,0,0,0.02)" }} />
+                    <Area isAnimationActive={false} yAxisId="L" type="monotone" dataKey="revenue" stroke={BRAND.gold} strokeWidth={3} fill="url(#gradRev)" name="Revenue" />
+                    <Area isAnimationActive={false} yAxisId="R" type="monotone" dataKey="orders" stroke={BRAND.accent} strokeWidth={3} fill="url(#gradOrd)" name="Orders" />
+                  </AreaChart>
                 </ResponsiveContainer>
               )}
-            </ChartCard>
+            </div>
+          </div>
 
-            {/* Category mix */}
-            <ChartCard title="Category mix" subtitle={`Top categories • ${labelOf(range)}`}>
-              {topCategories.length === 0 ? <Empty msg="No category sales yet." /> : (
-                <ResponsiveContainer>
+          <div className="card chart-box pie-box">
+            <div className="card-head">
+              <div className="card-icon" style={{ background: BRAND.pinkLight }}>🌸</div>
+              <div>
+                <h3>Category Mix</h3>
+                <span>Top performing collections</span>
+              </div>
+            </div>
+
+            <div className="chart-canvas flex-center">
+              {topsLoading ? (
+                <div className="sk-chart small" />
+              ) : topsErr ? (
+                <InlineError msg={topsErr} onRetry={() => setTick(t => t + 1)} />
+              ) : topCategories.length > 0 ? (
+                <ResponsiveContainer width="100%" height={280}>
                   <PieChart>
-                    <Tooltip content={({ active, payload }: any) => {
-                      if (!active || !payload || !payload.length) return null;
-                      const p = payload[0];
-                      return <Tip><b>{p?.name}</b><span><Dot c={p?.fill} /> {fmtNum(p?.value)}</span></Tip>;
-                    }} />
-                    <Legend />
-                    <Pie data={topCategories} dataKey="value" nameKey="label" innerRadius={55} outerRadius={85} startAngle={90} endAngle={-270} paddingAngle={2}>
-                      {topCategories.map((_, i) => <Cell key={i} fill={donutColors[i % donutColors.length]} />)}
+                    <Pie
+                      data={topCategories}
+                      dataKey="value"
+                      nameKey="label"         // ✅ FIX: Use label as category name
+                      innerRadius={60}
+                      outerRadius={90}
+                      paddingAngle={4}
+                      isAnimationActive={false}
+                    >
+                      {topCategories.map((_, i) => (
+                        <Cell
+                          key={i}
+                          fill={PIE_COLORS[i % PIE_COLORS.length]}
+                          stroke="none"
+                        />
+                      ))}
                     </Pie>
+                    <Tooltip content={<CustomPieTooltip total={categoryTotal} />} />
+                    <Legend
+                      iconType="circle"
+                      wrapperStyle={{ fontSize: "11px", marginTop: "10px" }}
+                      formatter={(name: any) => <span style={{ color: BRAND.text }}>{name}</span>}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
+              ) : (
+                <div className="empty-msg">No sales data yet</div>
               )}
-            </ChartCard>
+            </div>
+          </div>
+        </section>
 
-            {/* Shipping */}
-            <ChartCard title="Shipping cost" subtitle="Last 12 months">
-              {ship12m.length === 0 ? <Empty msg="No shipping data yet." /> : (
-                <ResponsiveContainer>
-                  <BarChart data={ship12m} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
-                    <CartesianGrid stroke={INK} vertical={false} />
-                    <XAxis dataKey="label" tick={{ fill: PRIMARY, fontSize: 12 }} />
-                    <YAxis tick={{ fill: PRIMARY, fontSize: 12 }} />
-                    <Tooltip content={({ active, payload, label }: any) => {
-                      if (!active || !payload || !payload.length) return null;
-                      const v = payload[0]?.value ?? 0;
-                      return <Tip><b>{label}</b><span><Dot c={GOLD} /> {fmtMoney(v)}</span></Tip>;
-                    }} />
-                    <Legend />
-                    <Bar dataKey="value" name="Cost" fill={GOLD} radius={[8, 8, 0, 0]} />
+        {/* CHARTS ROW 2: Shipping & Customers 12M (independent) */}
+        <section className="charts-row">
+          <div className="card chart-box">
+            <div className="card-head">
+              <div className="card-icon" style={{ background: "#E0F2F1" }}>🚚</div>
+              <div>
+                <h3>Shipping Costs</h3>
+                <span>Last 12 Month Analysis</span>
+              </div>
+            </div>
+
+            <div className="chart-canvas">
+              {baseLoading ? (
+                <div className="sk-chart" />
+              ) : baseErr ? (
+                <InlineError msg={baseErr} onRetry={() => setTick(t => t + 1)} />
+              ) : ship12m.length === 0 ? (
+                <div className="empty-msg">No shipping data yet</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={ship12m} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={BRAND.border} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: BRAND.textLight }} axisLine={false} tickLine={false} dy={10} />
+                    <YAxis
+                      tick={{ fontSize: 11, fill: BRAND.textLight }}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={(v) => v >= 1000 ? `₹${Math.round(v / 1000)}k` : `₹${v}`}
+                    />
+                    <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(0,0,0,0.02)" }} />
+                    <Bar isAnimationActive={false} dataKey="value" name="Shipping" fill={BRAND.green} radius={[6, 6, 0, 0]} barSize={32} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
-            </ChartCard>
+            </div>
+          </div>
 
-            {/* Customers */}
-            <ChartCard title="New customers" subtitle="Last 12 months">
-              {cust12m.length === 0 ? <Empty msg="No customer data yet." /> : (
-                <ResponsiveContainer>
-                  <BarChart data={cust12m} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
-                    <CartesianGrid stroke={INK} vertical={false} />
-                    <XAxis dataKey="label" tick={{ fill: PRIMARY, fontSize: 12 }} />
-                    <YAxis tick={{ fill: PRIMARY, fontSize: 12 }} />
-                    <Tooltip content={({ active, payload, label }: any) => {
-                      if (!active || !payload || !payload.length) return null;
-                      const v = payload[0]?.value ?? 0;
-                      return <Tip><b>{label}</b><span><Dot c={ACCENT} /> {fmtNum(v)}</span></Tip>;
-                    }} />
-                    <Legend />
-                    <Bar dataKey="value" name="New" fill={ACCENT} radius={[8, 8, 0, 0]} />
+          <div className="card chart-box">
+            <div className="card-head">
+              <div className="card-icon" style={{ background: "#F3E5F5" }}>👥</div>
+              <div>
+                <h3>Customer Growth</h3>
+                <span>New signups (Last 12M)</span>
+              </div>
+            </div>
+
+            <div className="chart-canvas">
+              {baseLoading ? (
+                <div className="sk-chart" />
+              ) : baseErr ? (
+                <InlineError msg={baseErr} onRetry={() => setTick(t => t + 1)} />
+              ) : cust12m.length === 0 ? (
+                <div className="empty-msg">No customer data yet</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={cust12m} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={BRAND.border} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: BRAND.textLight }} axisLine={false} tickLine={false} dy={10} />
+                    <YAxis tick={{ fontSize: 11, fill: BRAND.textLight }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(0,0,0,0.02)" }} />
+                    <Bar isAnimationActive={false} dataKey="value" name="New Customers" fill={BRAND.accent} radius={[6, 6, 0, 0]} barSize={32} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
-            </ChartCard>
+            </div>
+          </div>
+        </section>
 
-            {/* Top lists */}
-            <ListCard title={`Top products • ${labelOf(range)}`} items={topProducts} empty="No product sales yet." />
-            <ListCard title={`Top categories • ${labelOf(range)}`} items={topCategories} empty="No category sales yet." />
-          </section>
-        </>
-      )}
+        {/* LISTS ROW: independent */}
+        <section className="lists-row">
+          <div className="card list-box">
+            <div className="card-head between">
+              <h3>Top Products</h3>
+              <Link to="/admin/products" className="link-btn">View Catalog →</Link>
+            </div>
+
+            <div className="list-content">
+              {topsLoading ? (
+                <>
+                  <div className="sk-line" />
+                  <div className="sk-line" />
+                  <div className="sk-line" />
+                </>
+              ) : topProducts.length > 0 ? (
+                topProducts.map((p, i) => (
+                  <div className="list-item" key={i}>
+                    <div className={`rank r-${i + 1}`}>{i + 1}</div>
+                    <div className="item-details">
+                      <span className="name">{p.label}</span>
+                      <span className="qty">{fmtNum(p.value)} units sold</span>
+                    </div>
+
+                    <div className="bar-visual" aria-hidden="true">
+                      <div
+                        className="fill"
+                        style={{ width: `${Math.min((p.value / (topProducts[0]?.value || 1)) * 100, 100)}%` }}
+                      />
+                    </div>
+
+                  </div>
+                ))
+              ) : (
+                <div className="empty-msg">No products sold in this period</div>
+              )}
+            </div>
+          </div>
+
+          <div className="card insights-box">
+            <div className="card-head">
+              <div className="card-icon" style={{ background: "#E0F2F1" }}>💡</div>
+              <h3>Smart Insights</h3>
+            </div>
+
+            <div className="insights-list">
+              {!metrics ? (
+                <>
+                  <div className="sk-line" />
+                  <div className="sk-line" />
+                  <div className="sk-line" />
+                </>
+              ) : (
+                <>
+                  <InsightRow
+                    icon="📈"
+                    title="Performance"
+                    text={metrics.revenue.growth >= 0
+                      ? `Revenue is up ${metrics.revenue.growth.toFixed(1)}% compared to last period.`
+                      : `Revenue dipped by ${Math.abs(metrics.revenue.growth).toFixed(1)}%. Consider a promotion to boost sales.`
+                    }
+                  />
+                  <InsightRow
+                    icon="🚚"
+                    title="Logistics"
+                    text={`Shipping spend in this period: ${fmtMoney(metrics.shipping.val)}.`}
+                  />
+                  <InsightRow
+                    icon="✨"
+                    title="Catalog"
+                    text={`You have ${metrics.products} active products. Keep inventory fresh & featured products updated!`}
+                  />
+                </>
+              )}
+            </div>
+          </div>
+        </section>
+      </main>
     </div>
   );
 }
 
-/* ------------------------------ Small components ------------------------------ */
-
-function MetricCard({
-  title, value, hint, children
-}: { title: string; value: string | number; hint?: string; children?: React.ReactNode }) {
+/* ---------------------------------------------------------------------------
+   SUB-COMPONENTS
+--------------------------------------------------------------------------- */
+function KpiCard({ title, rangeLabel, value, growth, footer, accent, icon }: any) {
+  const isPos = growth >= 0;
   return (
-    <div className="card metric">
-      <div className="metric-head">
-        <div className="t">{title}</div>
-        <div className="v">{value}</div>
-      </div>
-      {children && <div className="spark">{children}</div>}
-      {hint && <div className="hint">{hint}</div>}
-    </div>
-  );
-}
-
-function MiniCard({ title, value, link }: {
-  title: string; value: string | number; link?: { label: string; to: string }
-}) {
-  return (
-    <div className="card mini">
-      <div className="mini-t">{title}</div>
-      <div className="mini-v">{value}</div>
-      {link && <Link to={link.to} className="mini-a">{link.label} →</Link>}
-    </div>
-  );
-}
-
-function ChartCard({ title, subtitle, children }: {
-  title: string; subtitle?: string; children: React.ReactNode
-}) {
-  return (
-    <div className="card block">
-      <div className="card-hd">
-        <div className="card-title">{title}</div>
-        {subtitle && <div className="card-sub">{subtitle}</div>}
-      </div>
-      <div className="card-bd">
-        <div className="chart">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-function ListCard({ title, items, empty }: {
-  title: string; items: LabeledValue[]; empty: string;
-}) {
-  return (
-    <div className="card list">
-      <div className="card-hd">
-        <div className="card-title">{title}</div>
-      </div>
-      <div className="card-bd">
-        {(!items || items.length === 0) ? (
-          <div className="muted">{empty}</div>
-        ) : (
-          <ul className="rows">
-            {items.map((x, i) => (
-              <li key={i} className="row">
-                <span className="rank">{i + 1}</span>
-                <span className="name" title={x.label}>{x.label}</span>
-                <span className="val">{fmtNum(x.value)}</span>
-              </li>
-            ))}
-          </ul>
+    <div className="card kpi-card">
+      <div className="kpi-top">
+        <div className="kpi-title">
+          <span className="icon-badge" style={{ color: accent, background: accent + "15" }}>{icon}</span>
+          <span className="lbl">{title}</span>
+        </div>
+        {growth !== undefined && (
+          <div className={`growth-pill ${isPos ? "pos" : "neg"}`}>
+            {isPos ? "↑" : "↓"} {Math.abs(growth).toFixed(0)}%
+          </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function TinyLine({ data, color }: { data: { x: string; y: number }[]; color: string }) {
-  return (
-    <ResponsiveContainer>
-      <LineChart data={data} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
-        <XAxis dataKey="x" hide />
-        <YAxis hide />
-        <Tooltip content={({ active, payload }: { active?: boolean; payload?: any[] }) => {
-          if (!active || !payload || !payload.length) return null;
-          return (
-            <Tip>
-              <b>{payload[0].payload.x}</b>
-              <span><Dot c={color} /> {fmtNum(payload[0].payload.y)}</span>
-            </Tip>
-          );
-        }} />
-        <Line type="monotone" dataKey="y" stroke={color} strokeWidth={2} dot={false} />
-      </LineChart>
-    </ResponsiveContainer>
-  );
-}
-
-function Empty({ msg }: { msg: string }) {
-  return (
-    <div className="empty">
-      <div className="icon">🌸</div>
-      <div className="txt">{msg}</div>
-    </div>
-  );
-}
-
-function Tip({ children }: { children: React.ReactNode }) {
-  return <div className="tip">{children}</div>;
-}
-function Dot({ c }: { c: string }) {
-  return <span className="dot" style={{ backgroundColor: c }} />;
-}
-
-function Skeleton() {
-  return (
-    <div className="skel">
-      <div className="row">
-        <div className="sh"></div><div className="sh"></div><div className="sh"></div><div className="sh"></div>
+      <div className="kpi-main">
+        <div className="val" style={{ color: BRAND.text }}>{value}</div>
+        <div className="sub">{rangeLabel}</div>
       </div>
-      <div className="row2">
-        <div className="sh tall"></div><div className="sh tall"></div>
-      </div>
-      <div className="row2">
-        <div className="sh tall"></div><div className="sh tall"></div>
+      <div className="kpi-foot">
+        {footer}
       </div>
     </div>
   );
 }
 
-/* ═══════════════════════════ PREMIUM ADMIN DASHBOARD STYLES ═══════════════════════════ */
-const styles = `
-.analytics-wrap {
-  background: linear-gradient(135deg, ${BG} 0%, #fff 100%);
-  color: ${PRIMARY};
+function InsightRow({ icon, title, text }: any) {
+  return (
+    <div className="insight-row">
+      <div className="i-icon">{icon}</div>
+      <div className="i-body">
+        <strong>{title}</strong>
+        <p>{text}</p>
+      </div>
+    </div>
+  );
+}
+
+function InlineError({ msg, onRetry }: { msg: string; onRetry: () => void }) {
+  return (
+    <div className="inline-err">
+      <span>⚠️ {msg}</span>
+      <button className="mini-btn" onClick={onRetry}>Retry</button>
+    </div>
+  );
+}
+
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="glass-tooltip">
+        <div className="tt-head">{label}</div>
+        {payload.map((p: any) => (
+          <div key={p.name} className="tt-row">
+            <span className="dot" style={{ background: p.stroke || p.fill }} />
+            <span className="nm">{p.name}:</span>
+            <span className="vl">
+              {p.name === "Revenue" || p.name === "Shipping" ? fmtMoney(p.value) : fmtNum(p.value)}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return null;
+};
+
+const CustomPieTooltip = ({ active, payload, total }: any) => {
+  if (active && payload?.[0]) {
+    const d = payload[0];
+    const label = d?.name ?? d?.payload?.label ?? "Category";
+    const color = d?.fill ?? d?.payload?.fill ?? d?.color;
+    const val = Number(d?.value ?? 0);
+    const share = total ? Math.round((val / total) * 100) : 0;
+
+    return (
+      <div className="glass-tooltip">
+        <div className="tt-row">
+          <span className="dot" style={{ background: color }} />
+          <span className="nm">{label}</span>
+        </div>
+        <div className="tt-big">{fmtNum(val)}</div>
+        <div className="tt-sub">{share}% share</div>
+      </div>
+    );
+  }
+  return null;
+};
+
+/* ---------------------------------------------------------------------------
+   STYLES (CSS-IN-JS)
+--------------------------------------------------------------------------- */
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700;800&display=swap');
+
+:root { --anim: 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+
+.analytics-page {
   min-height: 100vh;
-  padding: 24px;
+  background-color: ${BRAND.bg};
+  color: ${BRAND.text};
+  font-family: 'Outfit', sans-serif;
+  padding: 32px;
 }
 
-/* ═══════════════════════════ HEADER ═══════════════════════════ */
-.header {
-  max-width: 1280px;
-  margin: 0 auto 24px;
-  padding: 24px 28px;
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 20px;
-  background: #fff;
-  border: 1px solid ${INK};
+/* HEADER */
+.page-header { margin-bottom: 28px; }
+.header-content {
+  display: flex; justify-content: space-between; align-items: flex-end;
+  flex-wrap: wrap; gap: 20px;
+}
+.titles h1 {
+  font-size: 36px; font-weight: 800; margin: 0;
+  background: linear-gradient(135deg, ${BRAND.text} 0%, #686e5c 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  letter-spacing: -1px;
+}
+.titles p { margin: 4px 0 0; color: ${BRAND.textLight}; font-size: 15px; }
+
+/* CONTROLS */
+.actions { display: flex; align-items: center; gap: 16px; }
+.range-toggle {
+  background: white; padding: 5px; border-radius: 50px; display: flex;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+  border: 1px solid ${BRAND.border};
+}
+.toggle-btn {
+  background: transparent; border: none; padding: 8px 20px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 13px; font-weight: 600; color: ${BRAND.textLight};
+  cursor: pointer; transition: all 0.2s; border-radius: 40px;
+}
+.toggle-btn:hover { color: ${BRAND.text}; }
+.toggle-btn.active {
+  background: ${BRAND.text}; color: #fff;
+  box-shadow: 0 4px 12px rgba(74,79,65,0.3);
+}
+.refresh-btn {
+  width: 42px; height: 42px; border-radius: 50%;
+  border: 1px solid ${BRAND.border}; background: white; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; color: ${BRAND.textLight};
+  transition: all 0.2s; box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+}
+.refresh-btn:hover { color: ${BRAND.text}; transform: rotate(180deg); border-color: ${BRAND.text}; }
+
+/* GRID LAYOUTS */
+.main-grid { display: flex; flex-direction: column; gap: 24px; }
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 24px;
+}
+.charts-row { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; }
+.lists-row { display: grid; grid-template-columns: 1.5fr 1fr; gap: 24px; }
+
+@media (max-width: 1100px) {
+  .charts-row, .lists-row { grid-template-columns: 1fr; }
+}
+
+/* CARDS COMMON */
+.card {
+  background: ${BRAND.card};
   border-radius: 24px;
-  box-shadow: 0 16px 48px rgba(0,0,0,0.06);
+  border: 1px solid ${BRAND.border};
+  box-shadow: ${BRAND.shadow};
+  transition: var(--anim);
+  padding: 24px;
   position: relative;
+  overflow: hidden;
 }
+.card:hover { transform: translateY(-4px); box-shadow: ${BRAND.shadowHover}; }
 
-.header::after {
-  content: "";
-  position: absolute;
-  bottom: 0;
-  left: 28px;
-  right: 28px;
-  height: 3px;
-  background: linear-gradient(90deg, ${ACCENT}, ${GOLD}, #9BB472);
-  border-radius: 3px 3px 0 0;
+/* KPI CARDS */
+.kpi-card { display: flex; flex-direction: column; justify-content: space-between; min-height: 180px; }
+.kpi-top { display: flex; justify-content: space-between; align-items: flex-start; }
+.kpi-title { display: flex; align-items: center; gap: 10px; }
+.icon-badge {
+  width: 48px; height: 48px; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
 }
-
-.tit h1 {
-  margin: 0;
-  font-size: 32px;
-  font-weight: 800;
-  background: linear-gradient(135deg, ${PRIMARY} 0%, #6b7058 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+.lbl {
+  font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;
+  font-weight: 700; color: ${BRAND.textLight};
 }
-
-.tit h1::before {
-  content: "📊 ";
-  -webkit-text-fill-color: initial;
-}
-
-.tit p {
-  margin: 8px 0 0;
-  font-size: 14px;
-  opacity: 0.7;
-}
-
-.controls {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 10px;
-}
-
-.seg {
-  display: flex;
-  gap: 6px;
-  background: #f5f5f5;
-  padding: 4px;
-  border-radius: 16px;
-}
-
-.seg-btn {
-  height: 36px;
-  padding: 0 18px;
-  border-radius: 12px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font-weight: 700;
-  font-size: 13px;
-  color: ${PRIMARY};
-  transition: all 0.2s ease;
-}
-
-.seg-btn:hover {
-  background: rgba(255,255,255,0.8);
-}
-
-.seg-btn.active {
-  background: linear-gradient(135deg, ${GOLD} 0%, #ffe066 100%);
-  color: #5d4800;
-  box-shadow: 0 4px 12px rgba(246,195,32,0.3);
-}
-
-.meta {
+.growth-pill { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; }
+.growth-pill.pos { background: #E6F4EA; color: #1E8E3E; }
+.growth-pill.neg { background: #FCE8E6; color: #D93025; }
+.kpi-main { margin-top: 16px; }
+.kpi-main .val { font-size: 32px; font-weight: 800; line-height: 1.1; letter-spacing: -1px; }
+.kpi-main .sub { font-size: 13px; color: ${BRAND.gold}; font-weight: 600; margin-top: 4px; }
+.kpi-foot {
+  margin-top: auto;
+  padding-top: 16px;
   font-size: 12px;
-  opacity: 0.6;
-  text-align: right;
+  color: ${BRAND.textLight};
+  font-weight: 500;
+  border-top: 1px solid ${BRAND.border};
 }
 
-/* ═══════════════════════════ ALERT ═══════════════════════════ */
-.alert {
-  max-width: 1280px;
-  margin: 0 auto 20px;
-  padding: 16px 20px;
+/* CHART BOXES */
+.chart-box { min-height: 360px; display: flex; flex-direction: column; }
+.card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+.card-head.between { justify-content: space-between; }
+.card-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+}
+.card-head h3 { margin: 0; font-size: 18px; font-weight: 700; }
+.card-head span { font-size: 13px; color: ${BRAND.textLight}; }
+.chart-canvas { flex: 1; }
+.chart-canvas.flex-center { display: flex; align-items: center; justify-content: center; }
+
+/* LISTS */
+.link-btn { font-size: 13px; font-weight: 700; color: ${BRAND.accent}; text-decoration: none; transition: opacity 0.2s; }
+.link-btn:hover { opacity: 0.7; }
+.list-content { display: flex; flex-direction: column; gap: 16px; }
+.list-item { display: flex; align-items: center; gap: 14px; position: relative; }
+.rank {
+  width: 28px; height: 28px; border-radius: 8px;
+  font-size: 12px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+  background: ${BRAND.bg}; color: ${BRAND.textLight};
+}
+.rank.r-1 { background: ${BRAND.gold}; color: white; box-shadow: 0 4px 10px ${BRAND.gold}66; }
+.rank.r-2 { background: ${BRAND.textLight}; color: white; }
+.rank.r-3 { background: ${BRAND.border}; color: ${BRAND.text}; }
+
+.item-details { flex: 1; z-index: 1; }
+.item-details .name { display: block; font-weight: 600; font-size: 14px; margin-bottom: 2px; }
+.item-details .qty { display: block; font-size: 12px; color: ${BRAND.textLight}; }
+
+.bar-visual {
+  position: absolute;
+  bottom: 0; left: 42px; right: 0;
+  height: 3px;
+  background: ${BRAND.bg};
+  border-radius: 2px;
+  overflow: hidden;
+}
+.bar-visual .fill { background: ${BRAND.accent}; height: 100%; border-radius: 2px; }
+
+/* INSIGHTS */
+.insights-list { display: flex; flex-direction: column; gap: 16px; }
+.insight-row {
+  display: flex; gap: 14px; padding: 16px;
+  background: ${BRAND.bg};
   border-radius: 16px;
-  background: linear-gradient(135deg, #fff5f5 0%, #ffe8e8 100%);
-  border: 1px solid rgba(198,40,40,0.2);
-  color: #b71c1c;
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  border: 1px solid rgba(0,0,0,0.02);
 }
+.i-icon { font-size: 20px; line-height: 1; margin-top: 2px; }
+.i-body strong { display: block; font-size: 14px; margin-bottom: 4px; color: ${BRAND.text}; }
+.i-body p { margin: 0; font-size: 13px; color: ${BRAND.textLight}; line-height: 1.4; }
 
-.alert button {
-  margin-left: auto;
-  height: 32px;
-  padding: 0 14px;
-  border-radius: 10px;
-  border: 1px solid ${INK};
-  background: #fff;
-  cursor: pointer;
+/* TOOLTIP */
+.glass-tooltip {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid white;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+}
+.tt-head {
+  font-size: 12px;
+  font-weight: 700;
+  color: ${BRAND.textLight};
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.tt-row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 4px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; }
+.nm { color: ${BRAND.textLight}; }
+.vl { font-weight: 700; margin-left: auto; color: ${BRAND.text}; }
+.tt-big { font-size: 16px; font-weight: 800; color: ${BRAND.text}; margin-top: 4px; }
+.tt-sub { font-size: 12px; color: ${BRAND.textLight}; margin-top: 2px; }
+
+/* EMPTY / ERROR / SKELETON */
+.empty-msg { color: ${BRAND.textLight}; font-weight: 600; font-size: 13px; padding: 18px; text-align: center; }
+
+.inline-err {
+  display: flex; gap: 12px; align-items: center; justify-content: space-between;
+  background: ${BRAND.bg};
+  border: 1px solid ${BRAND.border};
+  border-radius: 16px;
+  padding: 14px 16px;
+  color: ${BRAND.text};
   font-weight: 600;
 }
-
-/* ═══════════════════════════ KPIs ═══════════════════════════ */
-.kpis {
-  max-width: 1280px;
-  margin: 0 auto 24px;
-  display: grid;
-  grid-template-columns: 1.5fr 1.5fr 1fr 1fr;
-  gap: 20px;
-}
-
-@media (max-width: 1200px) {
-  .kpis { grid-template-columns: 1fr 1fr; }
-}
-
-@media (max-width: 768px) {
-  .kpis { grid-template-columns: 1fr; }
-}
-
-/* ═══════════════════════════ CARDS ═══════════════════════════ */
-.card {
-  border: 1px solid ${INK};
-  border-radius: 20px;
+.mini-btn {
+  border: 1px solid ${BRAND.border};
   background: #fff;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.06);
-  overflow: hidden;
-  transition: all 0.2s ease;
+  color: ${BRAND.text};
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
 }
+.mini-btn:hover { opacity: 0.85; }
 
-.card:hover {
-  box-shadow: 0 16px 50px rgba(0,0,0,0.1);
-  transform: translateY(-2px);
+.soft-alert { padding: 16px 18px; }
+.soft-alert-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+
+.sk-kpi { height: 180px; }
+.sk-chart {
+  height: 320px;
+  border-radius: 18px;
+  background: linear-gradient(90deg, #fff, #f3f3f3, #fff);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s linear infinite;
+  border: 1px solid ${BRAND.border};
 }
+.sk-chart.small { height: 260px; }
 
-/* Metric Card (Orders, Revenue) */
-.card.metric {
-  padding: 20px;
+.sk-line {
+  height: 14px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, #fff, #f3f3f3, #fff);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s linear infinite;
+  border: 1px solid ${BRAND.border};
+}
+.updated-at {
+  font-size: 12px;
+  color: ${BRAND.textLight};
+  white-space: nowrap;
+}
+.updated-at b {
+  color: ${BRAND.text};
+  font-weight: 800;
+}
+.muted {
+  opacity: 0.6;
+}
+.list-item {
   display: grid;
-  gap: 12px;
-  background: linear-gradient(135deg, rgba(240,93,139,0.04) 0%, rgba(246,195,32,0.04) 100%);
+  grid-template-columns: 28px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 14px;
+  row-gap: 8px;
+  align-items: start;
   position: relative;
 }
 
-.card.metric::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 20px;
-  right: 20px;
-  height: 3px;
-  background: linear-gradient(90deg, ${ACCENT}, ${GOLD});
-  border-radius: 0 0 3px 3px;
-}
-
-.metric-head {
+.item-details {
+  grid-column: 2;
+  grid-row: 1;
   display: flex;
-  align-items: flex-end;
+  align-items: baseline;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
 }
 
-.metric .t {
-  font-weight: 700;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #666;
-}
-
-.metric .v {
-  font-size: 32px;
-  font-weight: 800;
-  background: linear-gradient(135deg, ${PRIMARY} 0%, #6b7058 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.metric .spark {
-  height: 50px;
-  margin: 0 -8px;
-}
-
-.metric .hint {
-  font-size: 12px;
-  opacity: 0.6;
-  padding: 10px 14px;
-  background: rgba(0,0,0,0.02);
-  border-radius: 10px;
-  margin-top: 4px;
-}
-
-/* Mini Card (Products, Customers) */
-.card.mini {
-  padding: 20px;
-  display: grid;
-  gap: 8px;
-  position: relative;
-}
-
-.mini-t {
-  font-weight: 700;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #666;
-}
-
-.mini-v {
-  font-size: 28px;
-  font-weight: 800;
-}
-
-.mini-a {
-  margin-top: auto;
-  font-weight: 700;
-  font-size: 13px;
-  color: ${ACCENT};
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  transition: all 0.15s ease;
-}
-
-.mini-a:hover {
-  color: #d4466e;
-  gap: 8px;
-}
-
-/* ═══════════════════════════ CHART GRID ═══════════════════════════ */
-.grid {
-  max-width: 1280px;
-  margin: 0 auto 24px;
-  display: grid;
-  gap: 20px;
-  grid-template-columns: 1.3fr 0.7fr;
-}
-
-@media (max-width: 1200px) {
-  .grid { grid-template-columns: 1fr; }
-}
-
-/* ═══════════════════════════ CHART CARD ═══════════════════════════ */
-.card.block .card-hd {
-  padding: 16px 20px;
-  border-bottom: 1px solid ${INK};
-  background: linear-gradient(180deg, #fafafa 0%, #fff 100%);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.card-title {
-  font-weight: 800;
-  font-size: 15px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.card-title::before {
-  content: "";
-  width: 4px;
-  height: 16px;
-  background: linear-gradient(180deg, ${ACCENT}, ${GOLD});
-  border-radius: 2px;
-}
-
-.card-sub {
-  font-size: 12px;
-  opacity: 0.6;
-}
-
-.card-bd {
-  padding: 16px 20px;
-}
-
-.chart {
-  height: 300px;
-}
-
-/* ═══════════════════════════ LIST CARD ═══════════════════════════ */
-.card.list .rows {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 10px;
-}
-
-.card.list .row {
-  display: grid;
-  grid-template-columns: 40px 1fr auto;
-  gap: 14px;
-  align-items: center;
-  background: #fafafa;
-  border: 1px solid ${INK};
-  border-radius: 12px;
-  padding: 12px 14px;
-  transition: all 0.15s ease;
-}
-
-.card.list .row:hover {
-  background: #fff;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
-  transform: translateX(4px);
-}
-
-.rank {
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, ${ACCENT} 0%, #ff8ba7 100%);
-  color: #fff;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
+.item-details .name {
+  display: block;
+  font-weight: 600;
   font-size: 14px;
-  box-shadow: 0 4px 12px rgba(240,93,139,0.3);
-}
-
-.card.list .row:nth-child(1) .rank {
-  background: linear-gradient(135deg, ${GOLD} 0%, #ffe066 100%);
-  color: #5d4800;
-  box-shadow: 0 4px 12px rgba(246,195,32,0.3);
-}
-
-.card.list .row:nth-child(2) .rank {
-  background: linear-gradient(135deg, #9BB472 0%, #b8d390 100%);
-  color: #2f4b12;
-  box-shadow: 0 4px 12px rgba(155,180,114,0.3);
-}
-
-.name {
-  font-weight: 700;
-  color: ${PRIMARY};
+  margin-bottom: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 
-.val {
-  font-weight: 800;
-  font-size: 15px;
-  color: ${PRIMARY};
+.item-details .qty {
+  display: block;
+  font-size: 12px;
+  color: ${BRAND.textLight};
+  line-height: 1.2;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.muted {
-  font-size: 13px;
-  opacity: 0.6;
-  text-align: center;
-  padding: 20px;
+.bar-visual {
+  grid-column: 2;
+  grid-row: 2;
+  height: 6px;
+  background: ${BRAND.bg};
+  border-radius: 999px;
+  overflow: hidden;
 }
 
-/* ═══════════════════════════ TOOLTIP ═══════════════════════════ */
-.tip {
-  display: grid;
-  gap: 6px;
-  padding: 12px 16px;
-  border: 1px solid ${INK};
-  border-radius: 14px;
-  background: #fff;
-  box-shadow: 0 12px 36px rgba(0,0,0,0.15);
-  font-size: 13px;
-  color: ${PRIMARY};
-}
-
-.tip b {
-  font-size: 14px;
-}
-
-.dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  display: inline-block;
-  margin-right: 8px;
-  vertical-align: -1px;
-}
-
-/* ═══════════════════════════ EMPTY STATE ═══════════════════════════ */
-.empty {
+.bar-visual .fill {
   height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  border: 2px dashed ${INK};
-  border-radius: 14px;
-  background: linear-gradient(135deg, #fafafa 0%, #fff 100%);
-  padding: 40px;
+  background: ${BRAND.accent};
+  border-radius: 999px;
 }
 
-.empty .icon {
-  font-size: 36px;
-}
 
-.empty .txt {
-  font-size: 14px;
-  opacity: 0.6;
-  text-align: center;
-}
-
-/* ═══════════════════════════ SKELETON ═══════════════════════════ */
-.skel {
-  max-width: 1280px;
-  margin: 0 auto;
-}
-
-.skel .row {
-  display: grid;
-  grid-template-columns: 1.5fr 1.5fr 1fr 1fr;
-  gap: 20px;
-  margin-bottom: 20px;
-}
-
-.skel .row2 {
-  display: grid;
-  grid-template-columns: 1.3fr 0.7fr;
-  gap: 20px;
-  margin-bottom: 20px;
-}
-
-.skel .sh {
-  height: 140px;
-  border-radius: 20px;
-  background: linear-gradient(90deg, #eee, #f8f8f8, #eee);
-  background-size: 200% 100%;
-  animation: wave 1.2s linear infinite;
-  border: 1px solid ${INK};
-}
-
-.skel .tall {
-  height: 340px;
-}
-
-@keyframes wave {
+@keyframes shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
-}
-
-/* ═══════════════════════════ RESPONSIVE ═══════════════════════════ */
-@media (max-width: 1080px) {
-  .analytics-wrap {
-    padding: 16px;
-  }
-
-  .header {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 16px;
-  }
-
-  .controls {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .skel .row {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .skel .row2 {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 768px) {
-  .tit h1 {
-    font-size: 24px;
-  }
-
-  .seg {
-    flex-wrap: wrap;
-  }
-
-  .seg-btn {
-    flex: 1;
-    text-align: center;
-  }
-
-  .chart {
-    height: 240px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .card,
-  .skel .sh,
-  .card.list .row {
-    animation: none !important;
-    transition: none !important;
-  }
 }
 `;
