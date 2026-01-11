@@ -12,10 +12,23 @@ import {
 } from "recharts";
 
 /* ------------------------- Types (your API) ------------------------- */
-type Section = { total: number; daily: number; weekly: number; monthly: number; yearly: number };
-type Shipping = { monthly: number; yearly: number; max: number };
+type Section = {
+  total: number; daily: number; weekly: number; monthly: number; yearly: number;
+  prevDaily?: number; prevWeekly?: number; prevMonthly?: number; prevYearly?: number;
+};
+
+type Shipping = {
+  total: number; daily: number; weekly: number; monthly: number; yearly: number;
+  prevDaily?: number; prevWeekly?: number; prevMonthly?: number; prevYearly?: number;
+  max: number;
+};
 type Products = { total: number };
-type Customers = { total: number; monthly: number; max: number };
+type Customers = {
+  total: number;
+  daily: number; weekly: number; monthly: number; yearly: number;
+  prevDaily?: number; prevWeekly?: number; prevMonthly?: number; prevYearly?: number;
+  max: number;
+};
 type MetricsSummary = { orders: Section; revenue: Section; shipping: Shipping; products: Products; customers: Customers };
 
 type TrendPoint = { label: string; orders: number; revenue: number };
@@ -40,7 +53,7 @@ export default function AdminAnalyticsSimple() {
   const [range, setRange] = useState<RangeKey>("monthly");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-
+  const [reloadKey, setReloadKey] = useState(0);
   const [summary, setSummary] = useState<MetricsSummary | null>(null);
   const [trend, setTrend] = useState<TrendPoint[]>([]);
   const [ship12m, setShip12m] = useState<LabeledValue[]>([]);
@@ -73,10 +86,30 @@ export default function AdminAnalyticsSimple() {
       }
     };
     load();
-  }, [range]);
+  }, [range, reloadKey]);
 
   const ordersSpark = useMemo(() => trend.map(t => ({ x: t.label, y: t.orders })), [trend]);
   const revenueSpark = useMemo(() => trend.map(t => ({ x: t.label, y: t.revenue })), [trend]);
+type RangeSection = {
+  total: number;
+  daily: number; weekly: number; monthly: number; yearly: number;
+  prevDaily?: number; prevWeekly?: number; prevMonthly?: number; prevYearly?: number;
+};
+
+const pick = (s: RangeSection, r: RangeKey) => Number(s?.[r] ?? 0);
+
+const pickPrev = (s: RangeSection, r: RangeKey) => {
+  const key = ("prev" + r[0].toUpperCase() + r.slice(1)) as keyof RangeSection;
+  return Number(s?.[key] ?? 0);
+};
+
+
+const pct = (cur: number, prev: number) => {
+  if (!prev) return cur ? "∞" : "0%";
+  const p = ((cur - prev) / prev) * 100;
+  const sign = p > 0 ? "+" : "";
+  return `${sign}${p.toFixed(0)}%`;
+};
 
   return (
     <div className="analytics-wrap">
@@ -104,22 +137,44 @@ export default function AdminAnalyticsSimple() {
       </div>
 
       {/* Error / Loading */}
-      {err && <div className="alert">{err} <button onClick={() => setRange(range)}>Retry</button></div>}
+      {err && <div className="alert">{err} <button onClick={() => setReloadKey(k => k + 1)}>Retry</button></div>}
       {loading && <Skeleton />}
 
       {!loading && summary && (
         <>
           {/* KPIs */}
           <section className="kpis">
-            <MetricCard title="Orders" value={fmtNum(summary.orders.total)} hint={`M: ${fmtNum(summary.orders.monthly)} • Y: ${fmtNum(summary.orders.yearly)}`}>
+            <MetricCard
+              title={`Orders • ${labelOf(range)}`}
+              value={fmtNum(pick(summary.orders, range))}
+              hint={`Total: ${fmtNum(summary.orders.total)}`}
+            >
               <TinyLine data={ordersSpark} color={ACCENT} />
             </MetricCard>
-            <MetricCard title="Revenue" value={fmtMoney(summary.revenue.total)} hint={`M: ${fmtMoney(summary.revenue.monthly)} • Y: ${fmtMoney(summary.revenue.yearly)}`}>
+
+            <MetricCard
+              title={`Revenue • ${labelOf(range)}`}
+              value={fmtMoney(pick(summary.revenue, range))}
+              hint={`Total: ${fmtMoney(summary.revenue.total)}`}
+            >
               <TinyLine data={revenueSpark} color={GOLD} />
             </MetricCard>
-            <MiniCard title="Products" value={fmtNum(summary.products.total)} link={{ label: "Manage", to: "/admin/products" }} />
-            <MiniCard title="Customers" value={fmtNum(summary.customers.total)} link={{ label: "View", to: "/admin/customers" }} />
+
+            <MiniCard
+              title="Products"
+              value={fmtNum(summary.products.total)}
+              link={{ label: "Manage", to: "/admin/products" }}
+            />
+
+            {/* ✅ Customers becomes range-aware + still shows global total */}
+            <MetricCard
+              title={`New Customers • ${labelOf(range)}`}
+              value={fmtNum(pick(summary.customers, range))}
+              hint={`Total customers: ${fmtNum(summary.customers.total)}`}
+            />
           </section>
+
+
 
           {/* Trend */}
           <section className="grid">

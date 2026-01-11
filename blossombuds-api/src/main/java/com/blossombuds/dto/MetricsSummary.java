@@ -17,24 +17,56 @@ public class MetricsSummary {
         public long weekly;
         public long monthly;
         public long yearly;
+
+        private long prevDaily;
+        private long prevWeekly;
+        private long prevMonthly;
+        private long prevYearly;
     }
 
-    @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+    @Getter @Setter
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class Shipping {
-        public long monthly;
-        public long yearly;
-        public long max;
+        private long total;
+        private long daily;
+        private long weekly;
+        private long monthly;
+        private long yearly;
+
+        private long prevDaily;
+        private long prevWeekly;
+        private long prevMonthly;
+        private long prevYearly;
+
+        private long max;
     }
+
 
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
     public static class Products {
         public long total;
     }
 
-    @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class Customers {
-        public long total;
-        public long monthly;
-        public long max; // peak cumulative, or just total if you prefer
+        private long total;
+
+
+        private long daily;
+        private long weekly;
+        private long monthly;
+        private long yearly;
+
+        private long prevDaily;
+        private long prevWeekly;
+        private long prevMonthly;
+        private long prevYearly;
+
+        private long max;
     }
 }

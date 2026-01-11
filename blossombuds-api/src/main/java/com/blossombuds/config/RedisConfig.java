@@ -72,7 +72,7 @@ public class RedisConfig implements CachingConfigurer {
 
         RedisCacheConfiguration base = RedisCacheConfiguration.defaultCacheConfig()
                 // IMPORTANT: bump this when serialization format changes
-                .computePrefixWith(cacheName -> "bb:v13:" + cacheName + "::")
+                .computePrefixWith(cacheName -> "bb:v14:" + cacheName + "::")
                 .entryTtl(defaultTtl)
                 .disableCachingNullValues()
                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
@@ -89,7 +89,7 @@ public class RedisConfig implements CachingConfigurer {
         ));
 
         // Presigned URLs expire in 3600s, so keep cache < 3600s
-        perCache.put("featureImages", base.entryTtl(Duration.ofMinutes(50)));
+        perCache.put("featureImages", base.entryTtl(Duration.ofMinutes(25)));
 
         return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(base)

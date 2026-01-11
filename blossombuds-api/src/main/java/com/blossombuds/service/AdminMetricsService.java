@@ -17,51 +17,130 @@ import static java.time.temporal.ChronoUnit.DAYS;
 public class AdminMetricsService {
 
     private final MetricsRepo metricsRepo;
+    private static final ZoneId BIZ_ZONE = ZoneId.of("Asia/Kolkata");
 
+    private OffsetDateTime nowUtc() {
+        return OffsetDateTime.now(ZoneOffset.UTC);
+    }
+
+    private OffsetDateTime startOfThisUtc(String bucket) {
+        ZonedDateTime now = ZonedDateTime.now(BIZ_ZONE);
+        ZonedDateTime startLocal = switch (bucket) {
+            case "day" -> now.toLocalDate().atStartOfDay(BIZ_ZONE);
+            case "week" -> now.with(java.time.temporal.TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+                    .toLocalDate().atStartOfDay(BIZ_ZONE);
+            case "month" -> now.withDayOfMonth(1).toLocalDate().atStartOfDay(BIZ_ZONE);
+            case "year" -> now.withDayOfYear(1).toLocalDate().atStartOfDay(BIZ_ZONE);
+            default -> now.withDayOfMonth(1).toLocalDate().atStartOfDay(BIZ_ZONE);
+        };
+        return startLocal.toInstant().atOffset(ZoneOffset.UTC);
+    }
+
+    private OffsetDateTime startOfPrevUtc(String bucket) {
+        ZonedDateTime now = ZonedDateTime.now(BIZ_ZONE);
+        ZonedDateTime startThisLocal = switch (bucket) {
+            case "day" -> now.toLocalDate().atStartOfDay(BIZ_ZONE);
+            case "week" -> now.with(java.time.temporal.TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+                    .toLocalDate().atStartOfDay(BIZ_ZONE);
+            case "month" -> now.withDayOfMonth(1).toLocalDate().atStartOfDay(BIZ_ZONE);
+            case "year" -> now.withDayOfYear(1).toLocalDate().atStartOfDay(BIZ_ZONE);
+            default -> now.withDayOfMonth(1).toLocalDate().atStartOfDay(BIZ_ZONE);
+        };
+
+        ZonedDateTime startPrevLocal = switch (bucket) {
+            case "day" -> startThisLocal.minusDays(1);
+            case "week" -> startThisLocal.minusWeeks(1);
+            case "month" -> startThisLocal.minusMonths(1);
+            case "year" -> startThisLocal.minusYears(1);
+            default -> startThisLocal.minusMonths(1);
+        };
+
+        return startPrevLocal.toInstant().atOffset(ZoneOffset.UTC);
+    }
     public MetricsSummary buildSummary() {
+        log.info("📊 Building admin metrics summary (calendar-based, IST)");
 
-        log.info("📊 Building admin metrics summary");
+        OffsetDateTime now = nowUtc();
 
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        OffsetDateTime dayAgo = now.minusDays(1);
-        OffsetDateTime weekAgo = now.minusDays(7);
-        OffsetDateTime monthAgo = now.minusMonths(1);
-        OffsetDateTime yearAgo = now.minusYears(1);
+        OffsetDateTime dayStart = startOfThisUtc("day");
+        OffsetDateTime weekStart = startOfThisUtc("week");
+        OffsetDateTime monthStart = startOfThisUtc("month");
+        OffsetDateTime yearStart = startOfThisUtc("year");
+
+        OffsetDateTime prevDayStart = startOfPrevUtc("day");
+        OffsetDateTime prevWeekStart = startOfPrevUtc("week");
+        OffsetDateTime prevMonthStart = startOfPrevUtc("month");
+        OffsetDateTime prevYearStart = startOfPrevUtc("year");
 
         long ordersTotal = metricsRepo.countOrders(null, null);
-        long ordersDaily = metricsRepo.countOrders(dayAgo, null);
-        long ordersWeekly = metricsRepo.countOrders(weekAgo, null);
-        long ordersMonthly = metricsRepo.countOrders(monthAgo, null);
-        long ordersYearly = metricsRepo.countOrders(yearAgo, null);
+        long ordersDaily = metricsRepo.countOrders(dayStart, now);
+        long ordersWeekly = metricsRepo.countOrders(weekStart, now);
+        long ordersMonthly = metricsRepo.countOrders(monthStart, now);
+        long ordersYearly = metricsRepo.countOrders(yearStart, now);
+
+        long ordersPrevDaily = metricsRepo.countOrders(prevDayStart, dayStart);
+        long ordersPrevWeekly = metricsRepo.countOrders(prevWeekStart, weekStart);
+        long ordersPrevMonthly = metricsRepo.countOrders(prevMonthStart, monthStart);
+        long ordersPrevYearly = metricsRepo.countOrders(prevYearStart, yearStart);
 
         long revTotal = metricsRepo.sumRevenue(null, null);
-        long revDaily = metricsRepo.sumRevenue(dayAgo, null);
-        long revWeekly = metricsRepo.sumRevenue(weekAgo, null);
-        long revMonthly = metricsRepo.sumRevenue(monthAgo, null);
-        long revYearly = metricsRepo.sumRevenue(yearAgo, null);
+        long revDaily = metricsRepo.sumRevenue(dayStart, now);
+        long revWeekly = metricsRepo.sumRevenue(weekStart, now);
+        long revMonthly = metricsRepo.sumRevenue(monthStart, now);
+        long revYearly = metricsRepo.sumRevenue(yearStart, now);
 
-        long shipMonthly = metricsRepo.sumShipping(monthAgo, null);
-        long shipYearly  = metricsRepo.sumShipping(yearAgo, null);
-        long shipMax     = metricsRepo.maxShippingMonth(yearAgo, null);
+        long revPrevDaily = metricsRepo.sumRevenue(prevDayStart, dayStart);
+        long revPrevWeekly = metricsRepo.sumRevenue(prevWeekStart, weekStart);
+        long revPrevMonthly = metricsRepo.sumRevenue(prevMonthStart, monthStart);
+        long revPrevYearly = metricsRepo.sumRevenue(prevYearStart, yearStart);
+
+        long shipTotal = metricsRepo.sumShipping(null, null);
+        long shipDaily = metricsRepo.sumShipping(dayStart, now);
+        long shipWeekly = metricsRepo.sumShipping(weekStart, now);
+        long shipMonthly = metricsRepo.sumShipping(monthStart, now);
+        long shipYearly  = metricsRepo.sumShipping(yearStart, now);
+
+        long shipPrevDaily = metricsRepo.sumShipping(prevDayStart, dayStart);
+        long shipPrevWeekly = metricsRepo.sumShipping(prevWeekStart, weekStart);
+        long shipPrevMonthly = metricsRepo.sumShipping(prevMonthStart, monthStart);
+        long shipPrevYearly  = metricsRepo.sumShipping(prevYearStart, yearStart);
+
+        long shipMax = metricsRepo.maxShippingMonth(yearStart, null);
 
         long prodTotal = metricsRepo.countProducts();
         long custTotal = metricsRepo.countCustomers();
-        long custMonthly = metricsRepo.countNewCustomers(monthAgo, null);
-        log.debug("📦 Orders: total={}, daily={}, weekly={}, monthly={}, yearly={}",
-                ordersTotal, ordersDaily, ordersWeekly, ordersMonthly, ordersYearly);
-        log.debug("💰 Revenue: total={}, daily={}, weekly={}, monthly={}, yearly={}",
-                revTotal, revDaily, revWeekly, revMonthly, revYearly);
-        log.debug("🚚 Shipping: monthly={}, yearly={}, max={}", shipMonthly, shipYearly, shipMax);
-        log.debug("🛒 Products: total={}", prodTotal);
-        log.debug("👥 Customers: total={}, newMonthly={}", custTotal, custMonthly);
 
+        long custDaily = metricsRepo.countNewCustomers(dayStart, now);
+        long custWeekly = metricsRepo.countNewCustomers(weekStart, now);
+        long custMonthly = metricsRepo.countNewCustomers(monthStart, now);
+        long custYearly = metricsRepo.countNewCustomers(yearStart, now);
+
+        long custPrevDaily = metricsRepo.countNewCustomers(prevDayStart, dayStart);
+        long custPrevWeekly = metricsRepo.countNewCustomers(prevWeekStart, weekStart);
+        long custPrevMonthly = metricsRepo.countNewCustomers(prevMonthStart, monthStart);
+        long custPrevYearly = metricsRepo.countNewCustomers(prevYearStart, yearStart);
 
         return MetricsSummary.builder()
-                .orders(new MetricsSummary.Section(ordersTotal, ordersDaily, ordersWeekly, ordersMonthly, ordersYearly))
-                .revenue(new MetricsSummary.Section(revTotal, revDaily, revWeekly, revMonthly, revYearly))
-                .shipping(new MetricsSummary.Shipping(shipMonthly, shipYearly, shipMax))
-                .products(new MetricsSummary.Products(prodTotal))
-                .customers(new MetricsSummary.Customers(custTotal, custMonthly, custTotal))
+                .orders(MetricsSummary.Section.builder()
+                        .total(ordersTotal).daily(ordersDaily).weekly(ordersWeekly).monthly(ordersMonthly).yearly(ordersYearly)
+                        .prevDaily(ordersPrevDaily).prevWeekly(ordersPrevWeekly).prevMonthly(ordersPrevMonthly).prevYearly(ordersPrevYearly)
+                        .build())
+                .revenue(MetricsSummary.Section.builder()
+                        .total(revTotal).daily(revDaily).weekly(revWeekly).monthly(revMonthly).yearly(revYearly)
+                        .prevDaily(revPrevDaily).prevWeekly(revPrevWeekly).prevMonthly(revPrevMonthly).prevYearly(revPrevYearly)
+                        .build())
+                .shipping(MetricsSummary.Shipping.builder()
+                        .total(shipTotal).daily(shipDaily).weekly(shipWeekly).monthly(shipMonthly).yearly(shipYearly)
+                        .prevDaily(shipPrevDaily).prevWeekly(shipPrevWeekly).prevMonthly(shipPrevMonthly).prevYearly(shipPrevYearly)
+                        .max(shipMax)
+                        .build())
+                .products(MetricsSummary.Products.builder().total(prodTotal).build())
+                .customers(MetricsSummary.Customers.builder()
+                        .total(custTotal)
+                        .daily(custDaily).weekly(custWeekly).monthly(custMonthly).yearly(custYearly)
+                        .prevDaily(custPrevDaily).prevWeekly(custPrevWeekly).prevMonthly(custPrevMonthly).prevYearly(custPrevYearly)
+                        .max(custTotal)
+                        .build())
                 .build();
     }
 
@@ -85,33 +164,20 @@ public class AdminMetricsService {
         return metricsRepo.newCustomersByMonth(12);
     }
 
-    private OffsetDateTime startOfRange(String bucket) {
-        ZoneId zone = ZoneId.systemDefault();
-        ZonedDateTime now = ZonedDateTime.now(zone);
-
+    private String normalizeBucket(String bucket) {
         String key = (bucket == null ? "month" : bucket.trim().toLowerCase());
-
-        // 🔁 Normalize aliases from frontend
-        switch (key) {
-            case "today", "daily", "d", "24h" -> key = "day";
-            case "weekly", "7d"      -> key = "week";
-            case "monthly", "30d"    -> key = "month";
-            case "yearly", "12m"     -> key = "year";
-            default -> { /* keep as is: day, week, month, year */ }
-        }
-
-        OffsetDateTime start = switch (key) {
-            case "day" -> now.truncatedTo(DAYS).toOffsetDateTime();
-            case "week" -> now.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-                    .truncatedTo(DAYS).toOffsetDateTime();
-            case "year" -> now.withDayOfYear(1)
-                    .truncatedTo(DAYS).toOffsetDateTime();
-            default /* month */ -> now.withDayOfMonth(1)
-                    .truncatedTo(DAYS).toOffsetDateTime();
+        return switch (key) {
+            case "today", "daily", "d", "24h" -> "day";
+            case "weekly", "7d"               -> "week";
+            case "monthly", "30d"             -> "month";
+            case "yearly", "12m"              -> "year";
+            default -> key; // allow "day/week/month/year"
         };
+    }
 
-        log.debug("🕒 startOfRange for '{}' (normalized='{}') = {}", bucket, key, start);
-        return start;
+    private OffsetDateTime startOfRange(String bucket) {
+        String b = normalizeBucket(bucket);
+        return startOfThisUtc(b); // ✅ IST calendar start converted to UTC
     }
 
     public List<LabeledValue> topProducts(String range, int limit) {
