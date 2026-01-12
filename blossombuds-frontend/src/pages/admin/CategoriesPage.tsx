@@ -39,6 +39,12 @@ export default function CategoriesPage() {
   const [loadingAllProducts, setLoadingAllProducts] = useState(true);
   const [catProducts, setCatProducts] = useState<Product[]>([]);
   const [loadingCatProducts, setLoadingCatProducts] = useState(false);
+    const [assignedCounts, setAssignedCounts] = useState<Record<number, number>>({});
+
+      const [assignedCatsByPid, setAssignedCatsByPid] = useState<Record<number, string[]>>({});
+
+    const [loadingAssignedScan, setLoadingAssignedScan] = useState(false);
+    const [assignedUpdatedAt, setAssignedUpdatedAt] = useState<Date | null>(null);
 
   // ui
   const [q, setQ] = useState("");
@@ -50,6 +56,9 @@ export default function CategoriesPage() {
   const [draggingPid, setDraggingPid] = useState<number | null>(null);
   const [dragOverCat, setDragOverCat] = useState<number | null>(null);
   const dragGhostRef = useRef<HTMLDivElement | null>(null);
+  type AssignFilter = "all" | "assigned" | "unassigned";
+  const [assignFilter, setAssignFilter] = useState<AssignFilter>("all");
+
 
   // ---------- Load categories once ----------
   useEffect(() => {
@@ -118,15 +127,107 @@ export default function CategoriesPage() {
     return () => { live = false; };
   }, [selectedCatId]);
 
+    // ✅ Build global "assigned anywhere" map (background scan)
+    useEffect(() => {
+      if (!cats || cats.length === 0) return;
+
+      let live = true;
+      (async () => {
+        setLoadingAssignedScan(true);
+        try {
+          const tasks = cats
+            .filter(c => !!c.id)
+            .map(c => () => fetchAllProductsForCategory(c.id!));
+
+          const allLists = await runWithLimit(tasks, 5); // limit=5 is a good balance
+
+          if (!live) return;
+
+                  const counts: Record<number, number> = {};
+                  const catsByPid: Record<number, Set<string>> = {};
+
+                  for (let idx = 0; idx < allLists.length; idx++) {
+                    const catName = cats[idx]?.name || "Category";
+                    const list = allLists[idx] || [];
+
+                    for (const p of list) {
+                      if (!p?.id) continue;
+
+                      counts[p.id] = (counts[p.id] || 0) + 1;
+
+                      if (!catsByPid[p.id]) catsByPid[p.id] = new Set<string>();
+                      catsByPid[p.id].add(catName);
+                    }
+                  }
+
+                  setAssignedCounts(counts);
+
+                  // convert Set -> array (sorted for stable display)
+                  const out: Record<number, string[]> = {};
+                  Object.entries(catsByPid).forEach(([pid, set]) => {
+                    out[Number(pid)] = Array.from(set).sort((a, b) => a.localeCompare(b));
+                  });
+
+                  setAssignedCatsByPid(out);
+                  setAssignedUpdatedAt(new Date());
+
+        } catch {
+          if (!live) return;
+          setAssignedCounts({});
+        } finally {
+          if (live) setLoadingAssignedScan(false);
+        }
+      })();
+
+      return () => { live = false; };
+    }, [cats]);
+
+
   // ---------- Filtering for the "All products" search ----------
   const filteredAll = useMemo(() => {
     const t = q.trim().toLowerCase();
-    if (!t) return allProducts;
-    return allProducts.filter(p =>
-      p.name?.toLowerCase().includes(t) ||
-      (p.slug || "").toLowerCase().includes(t)
-    );
-  }, [allProducts, q]);
+
+    // 1) text filter
+    let rows = !t
+      ? allProducts
+      : allProducts.filter(p =>
+          p.name?.toLowerCase().includes(t) ||
+          (p.slug || "").toLowerCase().includes(t)
+        );
+
+    // 2) assigned/unassigned filter
+    rows = rows.filter(p => {
+      const cats = assignedCatsByPid[p.id!] || [];
+      const isAssigned = cats.length > 0;
+
+      if (assignFilter === "assigned") return isAssigned;
+      if (assignFilter === "unassigned") return !isAssigned;
+      return true; // all
+    });
+
+    return rows;
+  }, [allProducts, q, assignFilter, assignedCatsByPid]);
+const assignCounts = useMemo(() => {
+  const total = allProducts.length;
+
+  let assigned = 0;
+  for (const p of allProducts) {
+    const cats = assignedCatsByPid[p.id!] || [];
+    if (cats.length > 0) assigned++;
+  }
+
+  return {
+    total,
+    assigned,
+    unassigned: Math.max(total - assigned, 0),
+  };
+}, [allProducts, assignedCatsByPid]);
+
+
+
+  const assignedIds = useMemo(() => {
+      return new Set(catProducts.map(p => p.id!).filter(Boolean));
+    }, [catProducts]);
 
   // ---------- CRUD ----------
   async function refreshCategories() {
@@ -142,6 +243,38 @@ export default function CategoriesPage() {
       /* keep old state on refresh failure */
     }
   }
+    // --- tiny concurrency limiter (so we don't hammer API) ---
+    async function runWithLimit<T>(tasks: Array<() => Promise<T>>, limit = 5): Promise<T[]> {
+      const results: T[] = [];
+      let i = 0;
+
+      const workers = new Array(Math.min(limit, tasks.length)).fill(0).map(async () => {
+        while (i < tasks.length) {
+          const idx = i++;
+          results[idx] = await tasks[idx]();
+        }
+      });
+
+      await Promise.all(workers);
+      return results;
+    }
+
+    // --- fetch ALL products of a category by paging (safe) ---
+    async function fetchAllProductsForCategory(catId: number) {
+      const pageSize = 300;
+      const maxPages = 20; // safety guard
+      let page = 0;
+      let all: Product[] = [];
+
+      while (page < maxPages) {
+        const chunk = await listProductsByCategory(catId, page, pageSize);
+        all = all.concat(chunk || []);
+        if (!chunk || chunk.length < pageSize) break;
+        page++;
+      }
+      return all;
+    }
+
 
   async function save(form: Partial<Category>) {
     setBusy(true);
@@ -252,6 +385,24 @@ export default function CategoriesPage() {
 
     try {
       await linkProductToCategoryApi(productId, catId);
+                  const catName = cats.find(c => c.id === catId)?.name || "Category";
+
+                  setAssignedCounts(prev => ({
+                    ...prev,
+                    [productId]: (prev[productId] || 0) + 1,
+                  }));
+
+                  setAssignedCatsByPid(prev => {
+                    const next = { ...prev };
+                    const cur = new Set(next[productId] || []);
+                    cur.add(catName);
+                    next[productId] = Array.from(cur).sort((a, b) => a.localeCompare(b));
+                    return next;
+                  });
+
+                  setAssignedUpdatedAt(new Date());
+
+
       setToast({ kind: "ok", msg: "Product linked" });
 
       // If we are still on the same category, refresh the list to show the new product
@@ -272,6 +423,30 @@ export default function CategoriesPage() {
     setCatProducts(prev => prev.filter(x => x.id !== productId));
     try {
       await unlinkProductFromCategoryApi(productId, selectedCatId);
+                 const catName = cats.find(c => c.id === selectedCatId)?.name || "Category";
+
+                 setAssignedCounts(prev => {
+                   const next = { ...prev };
+                   const cur = next[productId] || 0;
+                   if (cur <= 1) delete next[productId];
+                   else next[productId] = cur - 1;
+                   return next;
+                 });
+
+                 setAssignedCatsByPid(prev => {
+                   const next = { ...prev };
+                   const cur = new Set(next[productId] || []);
+                   cur.delete(catName);
+
+                   if (cur.size === 0) delete next[productId];
+                   else next[productId] = Array.from(cur).sort((a, b) => a.localeCompare(b));
+
+                   return next;
+                 });
+
+                 setAssignedUpdatedAt(new Date());
+
+
       setToast({ kind: "ok", msg: "Product unlinked" });
     } catch (e: any) {
       setToast({ kind: "bad", msg: e?.response?.data?.message || "Unlink failed" });
@@ -393,27 +568,99 @@ export default function CategoriesPage() {
                 if (draggingPid) { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }
               }}
             >
-              <div className="pane-hd">All products</div>
+              <div className="pane-hd pane-hd-col">
+                <div className="pane-hd-top">
+                  <div className="pane-hd-left">
+                    <span className="pane-hd-title">All products</span>
+                    <span className="pane-hd-count">({filteredAll.length})</span>
+                  </div>
+                </div>
+
+                <div className="pill-row">
+                  <button className={"pill " + (assignFilter === "all" ? "active" : "")} onClick={() => setAssignFilter("all")}>
+                    All
+                  </button>
+                  <button className={"pill " + (assignFilter === "assigned" ? "active" : "")} onClick={() => setAssignFilter("assigned")}>
+                    Assigned
+                  </button>
+                  <button className={"pill " + (assignFilter === "unassigned" ? "active" : "")} onClick={() => setAssignFilter("unassigned")}>
+                    Unassigned
+                  </button>
+                </div>
+              </div>
+
+
+
               {loadingAllProducts ? (
                 <div className="pad">Loading products…</div>
               ) : (
                 <div className="plist">
-                  {filteredAll.map(p => (
-                    <div
-                      key={p.id}
-                      className={"pitem compact" + (draggingPid === p.id ? " dragging" : "")}
-                      draggable
-                      onDragStart={(e) => onDragStartProduct(e, p)}
-                      onDragEnd={onDragEndProduct}
-                      title="Drag into a category"
-                    >
-                      <div className="pname" title={p.name}>{p.name}</div>
-                      <div className="pright">
-                        <span className="pid">#{p.id}</span>
-                        <span className="price">₹{new Intl.NumberFormat("en-IN").format(p.price)}</span>
+                  {filteredAll.map(p => {
+                            const catNames = assignedCatsByPid[p.id!] || [];
+                            const count = catNames.length;
+                            const isAssigned = count > 0;
+
+                            const badgeText = loadingAssignedScan
+                              ? "Checking…"
+                              : !isAssigned
+                                ? "Unassigned"
+                                : count === 1
+                                  ? catNames[0]
+                                  : `${catNames[0]} +${count - 1}`;
+
+                            const tooltipText = isAssigned ? catNames.join(", ") : "Not assigned to any category";
+
+
+                    return (
+                      <div
+                        key={p.id}
+                        className={"pitem compact" + (draggingPid === p.id ? " dragging" : "")}
+                        draggable
+                        onDragStart={(e) => onDragStartProduct(e, p)}
+                        onDragEnd={onDragEndProduct}
+                        title="Drag into a category"
+                      >
+                        <div className="pcol">
+                          <div className="pname" title={p.name}>{p.name}</div>
+
+                          <div className="pmeta-row">
+                            <span className="pid">#{p.id}</span>
+                            <span className="price">₹{new Intl.NumberFormat("en-IN").format(p.price)}</span>
+
+                            {(() => {
+                              const catNames = assignedCatsByPid[p.id!] || [];
+                              const count = catNames.length;
+                              const isAssigned = count > 0;
+
+                              const badgeText = loadingAssignedScan
+                                ? "Checking…"
+                                : !isAssigned
+                                  ? "Unassigned"
+                                  : count === 1
+                                    ? catNames[0]
+                                    : `${catNames[0]} +${count - 1}`;
+
+                              const tooltipText = isAssigned ? catNames.join(", ") : "Not assigned to any category";
+
+                              return (
+                                <span
+                                  className={"badge " + (isAssigned ? "ok" : "muted")}
+                                  title={tooltipText}
+                                >
+                                  {badgeText}
+                                </span>
+                              );
+                            })()}
+                          </div>
+                        </div>
+
+                        <div className="drag-grip" aria-hidden="true">⋮⋮</div>
                       </div>
-                    </div>
-                  ))}
+
+                    );
+                  })}
+
+
                   {filteredAll.length === 0 && <div className="pad muted">No matches.</div>}
                 </div>
               )}
@@ -1190,6 +1437,344 @@ select:focus {
   background: linear-gradient(135deg, #c62828 0%, #e53935 100%);
   box-shadow: 0 10px 32px rgba(198,40,40,0.35);
 }
+/* ✅ Global assigned/unassigned style (All products pane) */
+.pitem.assigned {
+  border-color: rgba(155, 180, 114, 0.35);
+  background: linear-gradient(135deg, rgba(155,180,114,0.08) 0%, #fff 60%);
+}
+
+.pitem.unassigned {
+  border-color: rgba(0,0,0,0.10);
+}
+
+.badge {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(0,0,0,0.10);
+  background: #f6f6f6;
+  color: #666;
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.badge.ok {
+  background: rgba(155,180,114,0.16);
+  border-color: rgba(155,180,114,0.35);
+  color: #2f4b12;
+}
+
+.badge.muted {
+  background: rgba(240,93,139,0.10);
+  border-color: rgba(240,93,139,0.25);
+  color: #8a2b47;
+}
+/* ✅ Product bubble layout: name on top, meta chips below */
+.pitem.compact {
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+  cursor: grab;
+}
+
+.pcol {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Name: clean + clamp */
+.pname {
+  font-weight: 800;
+  font-size: 14px;
+  line-height: 1.25;
+  color: ${PRIMARY};
+  min-width: 0;
+
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Chips row */
+.pmeta-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Keep pid/price/badge as chips */
+.pid,
+.price,
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  border-radius: 10px;
+  padding: 0 10px;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Badge variants */
+.badge.ok {
+  background: rgba(155, 180, 114, 0.18);
+  border: 1px solid rgba(155, 180, 114, 0.25);
+  color: #2f4b12;
+  font-weight: 800;
+}
+
+.badge.muted {
+  background: rgba(0,0,0,0.04);
+  border: 1px solid rgba(0,0,0,0.06);
+  color: #666;
+  font-weight: 800;
+}
+
+/* Nice little drag grip */
+.drag-grip {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  border: 1px solid ${INK};
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9aa09a;
+  font-weight: 900;
+  user-select: none;
+}
+
+.drag-grip:hover {
+  background: #fafafa;
+  color: ${PRIMARY};
+}
+.pane-hd-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pill-group {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  gap: 8px;
+  padding: 4px;
+  background: #fff;
+  border: 1px solid ${INK};
+  border-radius: 999px;
+  max-width: 100%;
+  overflow-x: auto;          /* ✅ scroll instead of hiding */
+  -webkit-overflow-scrolling: touch;
+}
+
+.pill-group::-webkit-scrollbar { height: 0; }
+
+
+.pill {
+  border: none;
+  background: transparent;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 800;
+  font-size: 12px;
+  color: #666;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.15s ease;
+}
+
+.pill:hover {
+  background: rgba(0,0,0,0.04);
+  color: ${PRIMARY};
+}
+
+.pill.active {
+  background: linear-gradient(135deg, ${GOLD} 0%, #ffe066 100%);
+  color: #5d4800;
+  box-shadow: 0 6px 18px rgba(246,195,32,0.25);
+}
+
+.pill:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.pill-n {
+  height: 22px;
+  min-width: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.06);
+  color: ${PRIMARY};
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.pill.active .pill-n {
+  background: rgba(255,255,255,0.6);
+  color: #5d4800;
+}
+
+/* Pane header becomes a small column: title row + pills row */
+.pane-hd.pane-hd-col {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+
+}
+
+.pane-hd-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Pills line under header */
+.pill-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;            /* ✅ pills wrap on small width */
+}
+
+/* Pill button */
+.pill {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(0,0,0,0.10);
+  background: #fff;
+  color: rgba(74,79,65,0.75);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pill:hover {
+  border-color: rgba(0,0,0,0.18);
+  transform: translateY(-1px);
+}
+
+.pill.active {
+  background: rgba(240,93,139,0.12);
+  border-color: rgba(240,93,139,0.35);
+  color: #4A4F41;
+}
+/* Your column header (title row + pills row) */
+.pane-hd.pane-hd-col {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+/* IMPORTANT: disable the old accent bar on the column wrapper */
+.pane-hd.pane-hd-col::before {
+  content: none !important;
+}
+
+/* Put the accent bar inside the TOP row so it stays on same line */
+.pane-hd-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Add the accent bar here instead */
+.pane-hd-top::before {
+  content: "";
+  width: 3px;
+  height: 14px;
+  background: linear-gradient(180deg, #F05D8B, #F6C320);
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+/* Title + count in ONE line */
+.pane-hd-left {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.pane-hd-title {
+  font-weight: 800;
+}
+
+.pane-hd-count {
+  font-size: 12px;
+  opacity: 0.65;
+  font-weight: 700;
+}
+
+/* Pills under header */
+.pill-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pill {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(0,0,0,.10);
+  background: #fff;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.pill.active {
+  background: rgba(240,93,139,0.12);
+  border-color: rgba(240,93,139,0.35);
+}
+/* Put the accent bar visually, without consuming space */
+.pane-hd-top{
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;            /* gap between left block & right block */
+  padding-left: 12px;   /* space reserved for the bar */
+}
+
+.pane-hd-top::before{
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 14px;
+  background: linear-gradient(180deg, #F05D8B, #F6C320);
+  border-radius: 2px;
+}
+
 
 @keyframes toastSlide {
   0% { transform: translateY(24px); opacity: 0; }
