@@ -78,54 +78,84 @@ public interface MetricsRepo extends JpaRepository<Order, Long> {
 
     // ---------- Trends (orders + revenue) ----------
     @Query(value = """
-        SELECT TO_CHAR(d, 'DD Mon') as label,
-               COALESCE(COUNT(o.id),0) AS orders,
-               COALESCE(SUM(o.grand_total),0) AS revenue
-        FROM (
-          SELECT generate_series(DATE_TRUNC('day', NOW()) - INTERVAL '6 days',
-                                 DATE_TRUNC('day', NOW()),
-                                 INTERVAL '1 day')::timestamp with time zone AS d
-        ) days
-        LEFT JOIN blossombuds_prod.orders o
-          ON DATE_TRUNC('day', o.created_at) = DATE_TRUNC('day', days.d)
-         AND o.status NOT IN ('CANCELLED')
-        GROUP BY 1, days.d
-        ORDER BY days.d
-        """, nativeQuery = true)
+  SELECT TO_CHAR(hours.h, 'HH24:00') AS label,
+         COALESCE(COUNT(o.id),0) AS orders,
+         COALESCE(SUM(o.grand_total),0) AS revenue
+  FROM (
+    SELECT generate_series(
+      date_trunc('day', (NOW() AT TIME ZONE 'Asia/Kolkata')),
+      date_trunc('hour', (NOW() AT TIME ZONE 'Asia/Kolkata')),
+      INTERVAL '1 hour'
+    ) AS h
+  ) hours
+  LEFT JOIN blossombuds_prod.orders o
+    ON date_trunc('hour', (o.created_at AT TIME ZONE 'Asia/Kolkata')) = hours.h
+   AND o.status NOT IN ('CANCELLED')
+  GROUP BY 1, hours.h
+  ORDER BY hours.h
+""", nativeQuery = true)
     List<Object[]> _ordersRevenueByDayRaw();
 
-    @Query(value = """
-        SELECT TO_CHAR(DATE_TRUNC('week', o.created_at), '"W"W IW Mon') AS label,
-               COUNT(*) AS orders, COALESCE(SUM(o.grand_total),0) AS revenue
-        FROM blossombuds_prod.orders o
-        WHERE o.status NOT IN ('CANCELLED')
-        GROUP BY 1, DATE_TRUNC('week', o.created_at)
-        ORDER BY DATE_TRUNC('week', o.created_at) DESC
-        LIMIT :limit
-        """, nativeQuery = true)
-    List<Object[]> _ordersRevenueByWeekRaw(@Param("limit") int limit);
 
     @Query(value = """
-        SELECT TO_CHAR(DATE_TRUNC('month', o.created_at), 'Mon YYYY') AS label,
-               COUNT(*) AS orders, COALESCE(SUM(o.grand_total),0) AS revenue
-        FROM blossombuds_prod.orders o
-        WHERE o.status NOT IN ('CANCELLED')
-        GROUP BY 1, DATE_TRUNC('month', o.created_at)
-        ORDER BY DATE_TRUNC('month', o.created_at) DESC
-        LIMIT :limit
-        """, nativeQuery = true)
-    List<Object[]> _ordersRevenueByMonthRaw(@Param("limit") int limit);
+  SELECT TO_CHAR(days.d, 'Dy DD') AS label,
+         COALESCE(COUNT(o.id),0) AS orders,
+         COALESCE(SUM(o.grand_total),0) AS revenue
+  FROM (
+    SELECT generate_series(
+      date_trunc('week', (NOW() AT TIME ZONE 'Asia/Kolkata')),
+      date_trunc('week', (NOW() AT TIME ZONE 'Asia/Kolkata')) + INTERVAL '6 days',
+      INTERVAL '1 day'
+    ) AS d
+  ) days
+  LEFT JOIN blossombuds_prod.orders o
+    ON date_trunc('day', (o.created_at AT TIME ZONE 'Asia/Kolkata')) = days.d
+   AND o.status NOT IN ('CANCELLED')
+  GROUP BY 1, days.d
+  ORDER BY days.d
+""", nativeQuery = true)
+    List<Object[]> _ordersRevenueByWeekRaw();
+
 
     @Query(value = """
-        SELECT TO_CHAR(DATE_TRUNC('year', o.created_at), 'YYYY') AS label,
-               COUNT(*) AS orders, COALESCE(SUM(o.grand_total),0) AS revenue
-        FROM blossombuds_prod.orders o
-        WHERE o.status NOT IN ('CANCELLED')
-        GROUP BY 1, DATE_TRUNC('year', o.created_at)
-        ORDER BY DATE_TRUNC('year', o.created_at) DESC
-        LIMIT :limit
-        """, nativeQuery = true)
-    List<Object[]> _ordersRevenueByYearRaw(@Param("limit") int limit);
+  SELECT TO_CHAR(days.d, 'DD Mon') AS label,
+         COALESCE(COUNT(o.id),0) AS orders,
+         COALESCE(SUM(o.grand_total),0) AS revenue
+  FROM (
+    SELECT generate_series(
+      date_trunc('month', (NOW() AT TIME ZONE 'Asia/Kolkata')),
+      date_trunc('day',   (NOW() AT TIME ZONE 'Asia/Kolkata')),
+      INTERVAL '1 day'
+    ) AS d
+  ) days
+  LEFT JOIN blossombuds_prod.orders o
+    ON date_trunc('day', (o.created_at AT TIME ZONE 'Asia/Kolkata')) = days.d
+   AND o.status NOT IN ('CANCELLED')
+  GROUP BY 1, days.d
+  ORDER BY days.d
+""", nativeQuery = true)
+    List<Object[]> _ordersRevenueByMonthRaw();
+
+
+    @Query(value = """
+  SELECT TO_CHAR(months.m, 'Mon') AS label,
+         COALESCE(COUNT(o.id),0) AS orders,
+         COALESCE(SUM(o.grand_total),0) AS revenue
+  FROM (
+    SELECT generate_series(
+      date_trunc('year',  (NOW() AT TIME ZONE 'Asia/Kolkata')),
+      date_trunc('month', (NOW() AT TIME ZONE 'Asia/Kolkata')),
+      INTERVAL '1 month'
+    ) AS m
+  ) months
+  LEFT JOIN blossombuds_prod.orders o
+    ON date_trunc('month', (o.created_at AT TIME ZONE 'Asia/Kolkata')) = months.m
+   AND o.status NOT IN ('CANCELLED')
+  GROUP BY 1, months.m
+  ORDER BY months.m
+""", nativeQuery = true)
+    List<Object[]> _ordersRevenueByYearRaw();
+
 
     default List<TrendPoint> ordersRevenueByDay(int days) {
         // Query returns last 7 days in ascending order already.
@@ -138,11 +168,8 @@ public interface MetricsRepo extends JpaRepository<Order, Long> {
                 .collect(Collectors.toList());
     }
 
-    default List<TrendPoint> ordersRevenueByWeek(int limit) {
-        List<Object[]> rowsDesc = _ordersRevenueByWeekRaw(limit);
-        List<Object[]> rowsAsc = new ArrayList<>(rowsDesc);
-        Collections.reverse(rowsAsc);
-        return rowsAsc.stream()
+    default List<TrendPoint> ordersRevenueByWeek(int limitIgnored) {
+        return _ordersRevenueByWeekRaw().stream()
                 .map(r -> new TrendPoint(
                         (String) r[0],
                         ((Number) r[1]).longValue(),
@@ -151,11 +178,8 @@ public interface MetricsRepo extends JpaRepository<Order, Long> {
                 .collect(Collectors.toList());
     }
 
-    default List<TrendPoint> ordersRevenueByMonth(int limit) {
-        List<Object[]> rowsDesc = _ordersRevenueByMonthRaw(limit);
-        List<Object[]> rowsAsc = new ArrayList<>(rowsDesc);
-        Collections.reverse(rowsAsc);
-        return rowsAsc.stream()
+    default List<TrendPoint> ordersRevenueByMonth(int limitIgnored) {
+        return _ordersRevenueByMonthRaw().stream()
                 .map(r -> new TrendPoint(
                         (String) r[0],
                         ((Number) r[1]).longValue(),
@@ -164,11 +188,8 @@ public interface MetricsRepo extends JpaRepository<Order, Long> {
                 .collect(Collectors.toList());
     }
 
-    default List<TrendPoint> ordersRevenueByYear(int limit) {
-        List<Object[]> rowsDesc = _ordersRevenueByYearRaw(limit);
-        List<Object[]> rowsAsc = new ArrayList<>(rowsDesc);
-        Collections.reverse(rowsAsc);
-        return rowsAsc.stream()
+    default List<TrendPoint> ordersRevenueByYear(int limitIgnored) {
+        return _ordersRevenueByYearRaw().stream()
                 .map(r -> new TrendPoint(
                         (String) r[0],
                         ((Number) r[1]).longValue(),
@@ -176,21 +197,27 @@ public interface MetricsRepo extends JpaRepository<Order, Long> {
                 ))
                 .collect(Collectors.toList());
     }
+
 
     // ---------- Shipping / Customers last 12 months ----------
     @Query(value = """
-        SELECT TO_CHAR(m, 'Mon') AS label, COALESCE(SUM(o.shipping_fee),0) AS val
-        FROM (
-          SELECT DATE_TRUNC('month', NOW()) - (s.a || ' months')::interval AS m
-          FROM generate_series(0, 11) AS s(a)
-        ) months
-        LEFT JOIN blossombuds_prod.orders o
-          ON DATE_TRUNC('month', o.created_at) = months.m
-         AND o.status NOT IN ('CANCELLED')
-        GROUP BY 1, months.m
-        ORDER BY months.m
-        """, nativeQuery = true)
+  SELECT TO_CHAR(months.m, 'Mon') AS label,
+         COALESCE(SUM(o.shipping_fee),0) AS val
+  FROM (
+    SELECT generate_series(
+      date_trunc('month', (NOW() AT TIME ZONE 'Asia/Kolkata')) - INTERVAL '11 months',
+      date_trunc('month', (NOW() AT TIME ZONE 'Asia/Kolkata')),
+      INTERVAL '1 month'
+    ) AS m
+  ) months
+  LEFT JOIN blossombuds_prod.orders o
+    ON date_trunc('month', (o.created_at AT TIME ZONE 'Asia/Kolkata')) = months.m
+   AND o.status NOT IN ('CANCELLED')
+  GROUP BY months.m
+  ORDER BY months.m
+""", nativeQuery = true)
     List<Object[]> _shippingByMonth();
+
 
     default List<LabeledValue> shippingCostByMonth(int lastN) {
         return _shippingByMonth().stream()
@@ -202,18 +229,23 @@ public interface MetricsRepo extends JpaRepository<Order, Long> {
     }
 
     @Query(value = """
-        SELECT TO_CHAR(m, 'Mon') AS label, COALESCE(COUNT(c.id),0) AS val
-        FROM (
-          SELECT DATE_TRUNC('month', NOW()) - (s.a || ' months')::interval AS m
-          FROM generate_series(0, 11) AS s(a)
-        ) months
-        LEFT JOIN blossombuds_prod.customers c
-          ON DATE_TRUNC('month', c.created_at) = months.m
-         AND c.active = true
-        GROUP BY 1, months.m
-        ORDER BY months.m
-        """, nativeQuery = true)
+  SELECT TO_CHAR(months.m, 'Mon') AS label,
+         COALESCE(COUNT(c.id),0) AS val
+  FROM (
+    SELECT generate_series(
+      date_trunc('month', (NOW() AT TIME ZONE 'Asia/Kolkata')) - INTERVAL '11 months',
+      date_trunc('month', (NOW() AT TIME ZONE 'Asia/Kolkata')),
+      INTERVAL '1 month'
+    ) AS m
+  ) months
+  LEFT JOIN blossombuds_prod.customers c
+    ON date_trunc('month', (c.created_at AT TIME ZONE 'Asia/Kolkata')) = months.m
+   AND c.active = true
+  GROUP BY months.m
+  ORDER BY months.m
+""", nativeQuery = true)
     List<Object[]> _newCustomersByMonth();
+
 
     default List<LabeledValue> newCustomersByMonth(int lastN) {
         return _newCustomersByMonth().stream()
