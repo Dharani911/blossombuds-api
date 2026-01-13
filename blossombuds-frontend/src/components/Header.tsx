@@ -139,8 +139,15 @@ export default function Header(){
           height:72px; gap:12px;
         }
         @media (max-width: 920px){
-          .hx-row{ grid-template-columns:auto auto 1fr; height:68px; }
+
+          .hx-row{
+            grid-template-columns: 1fr auto;
+            height:68px;
+          }
+
+          .hx-mid{ display:none; }
         }
+
 
         /* Brand */
         .hx-brand{display:flex; align-items:center; gap:10px; min-width:0; justify-self:start;}
@@ -149,10 +156,18 @@ export default function Header(){
           display:inline-block;
           font-family: Georgia, "Times New Roman", serif;
           color: var(--bb-primary);
-          font-weight: 800; letter-spacing:.2px; line-height:1.1;
-          white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-          max-width:58vw;
+          font-weight: 800;
+          letter-spacing:.2px;
+          line-height:1.1;
+
+
+          white-space: normal;
+          overflow: visible;
+          text-overflow: unset;
+          max-width: 100%;
         }
+
+
         @media (max-width: 920px){
           .hx-title{ max-width:46vw; }
         }
@@ -248,6 +263,84 @@ export default function Header(){
           .hx-ink{ transition: none; }
           .hx-ico:hover{ transform:none; box-shadow: 0 10px 26px rgba(0,0,0,.10); }
         }
+        @media (max-width: 920px){
+          .hx-row{
+            grid-template-columns: 1fr auto;
+            height: auto;
+            min-height: 68px;
+            padding: 8px 0;
+            align-items: center;
+          }
+          .hx-mid{ display:none; }
+        }
+.hx-title{
+  display:flex;
+  flex-direction:column;
+  line-height:1.05;
+  white-space: normal;
+  overflow: visible;
+  max-width: 100%;
+}
+@media (max-width: 380px){
+  .hx-title > span{ font-size: 12px; line-height:1.05; }
+}
+.hx-title{
+  display:flex;
+  flex-direction:column;
+  line-height:1.05;
+  min-width:0;
+  max-width:58vw;
+}
+@media (max-width: 920px){
+  .hx-title{ max-width:46vw; }
+}
+
+
+.hx-title-main{
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  font-weight:800;
+  letter-spacing:.2px;
+}
+
+
+.hx-title-sub{
+  font-weight:600;
+  opacity:.9;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+@media (max-width: 380px){
+  .hx-actions{ gap:8px; }
+  .hx-ico{ width:40px; height:40px; }
+  .hx-brand img{ width:40px; height:40px; }
+  .hx-title{ max-width:52vw; }
+}
+
+@media (max-width: 380px){
+  /* give brand more room */
+  .hx-row{ gap:8px; }
+  .hx-actions{ gap:8px; }
+
+
+  .hx-brand img{ width:38px; height:38px; border-radius:10px; }
+  .hx-ico{ width:40px; height:40px; border-radius:11px; }
+
+
+  .hx-title{ max-width:70vw; }
+  .hx-title-main{ font-size:25px; }
+  .hx-title-sub{ font-size:18px; }
+}
+
+
+@media (max-width: 360px){
+  .hx-title{ max-width:80vw; }
+  .hx-title-main{ font-size:22px; }
+  .hx-title-sub{ font-size:15px; }
+}
+
       `}</style>
 
       <div className="hx-shell">
@@ -256,8 +349,8 @@ export default function Header(){
           <Link to="/" className="hx-brand" aria-label="Blossom Buds home">
             <img src={Logo} alt="Blossom Buds logo" width={44} height={44}/>
             <span className="hx-title">
-              Blossom Buds
-              <br/><span style={{fontWeight:600, opacity:.9}}>Floral Artistry</span>
+              <span className="hx-title-main">Blossom Buds</span>
+              <span className="hx-title-sub">Floral Artistry</span>
             </span>
           </Link>
 
