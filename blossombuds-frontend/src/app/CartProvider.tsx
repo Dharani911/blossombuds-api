@@ -1,5 +1,5 @@
 // src/app/CartProvider.tsx
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useMemo, useState } from "react";
 import { getProduct } from "../api/catalog";
 export type CartItem = {
   id: string;
