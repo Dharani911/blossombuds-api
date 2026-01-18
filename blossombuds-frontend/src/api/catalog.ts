@@ -58,18 +58,7 @@ export type PageResp<T> = {
   number: number; // current page index
   size: number;
 };
-
-function normalizePage<T>(data: any): PageResp<T> {
-  if (Array.isArray(data)) {
-    return {
-      content: data as T[],
-      totalPages: 1,
-      totalElements: data.length,
-      number: 0,
-      size: data.length || 0,
-    };
-  }
-  function normalizeProduct(p: any): Product {
+function normalizeProduct(p: any): Product {
     if (!p) return p as Product;
 
     // accept multiple naming styles from backend just in case
@@ -84,6 +73,17 @@ function normalizePage<T>(data: any): PageResp<T> {
       inStock,
     } as Product;
   }
+function normalizePage<T>(data: any): PageResp<T> {
+  if (Array.isArray(data)) {
+    return {
+      content: data as T[],
+      totalPages: 1,
+      totalElements: data.length,
+      number: 0,
+      size: data.length || 0,
+    };
+  }
+
 
 
   // Spring Page OR CachedPage
@@ -217,7 +217,7 @@ export async function listNewArrivals(limit = 12): Promise<Product[]> {
       params: { page: 0, size: limit, sort: "createdAt", dir: "DESC" },
     });
 
-    const rows = unwrap(r1.data).slice(0, limit).map(normalizeProduct);
+    const rows = unwrap(r2.data).slice(0, limit).map(normalizeProduct);
 
     if (rows.length) return rows;
   } catch { /* ignore and try next */ }
@@ -227,7 +227,7 @@ export async function listNewArrivals(limit = 12): Promise<Product[]> {
     const r3 = await http.get("/api/catalog/products", {
       params: { page: 0, size: limit, newArrivals: true, active: true },
     });
-    const rows = unwrap(r1.data).slice(0, limit).map(normalizeProduct);
+    const rows = unwrap(r3.data).slice(0, limit).map(normalizeProduct);
 
     if (rows.length) return rows;
   } catch { /* ignore */ }

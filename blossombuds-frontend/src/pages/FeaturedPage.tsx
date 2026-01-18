@@ -28,6 +28,8 @@ type Product = {
   images?: ProductImage[];
   visible?: boolean;
   isVisible?: boolean;
+  inStock?: boolean;
+  isInStock?: boolean;
   featured?: boolean;
   active?: boolean;
   _coverResolved?: string | null;
@@ -60,10 +62,11 @@ function coverUrlOf(p: Product): string | null {
 }
 
 /** Normalize visibility (handles `visible` and `isVisible`) */
-function isVisibleTrue(p: any): boolean {
+function isVisibleForCustomer(p: any): boolean {
   const v = p?.visible ?? p?.isVisible ?? null;
-  return v === true;
+  return v === true || v == null; // ✅ default visible
 }
+
 
 /** Compact product card */
 function ProductTile({ p, onOpen }: { p: Product; onOpen: (id: number) => void }) {
@@ -79,6 +82,8 @@ function ProductTile({ p, onOpen }: { p: Product; onOpen: (id: number) => void }
   }, [p?.price]);
 
   const img = p._coverResolved ?? coverUrlOf(p);
+const inStock = (p as any)?.inStock ?? (p as any)?.isInStock ?? true;
+const outOfStock = inStock === false;
 
   return (
     <article
@@ -111,16 +116,18 @@ function ProductTile({ p, onOpen }: { p: Product; onOpen: (id: number) => void }
       </div>
 
       <button
-        className="btn add"
+        className={"btn add" + (outOfStock ? " disabled" : "")}
         type="button"
+        disabled={outOfStock}
         onClick={(e) => {
           e.stopPropagation();
-          onOpen(p.id);
+          if (!outOfStock) onOpen(p.id);
         }}
-        aria-label={`Add ${p.name} to cart`}
+        aria-label={outOfStock ? `${p.name} view` : `Add ${p.name} to cart`}
       >
-        Add to cart
+        {outOfStock ? "View" : "Add to cart"}
       </button>
+
     </article>
   );
 }
@@ -160,7 +167,7 @@ export default function FeaturedPage() {
             : [];
         }
 
-        const featuredVisible = rows.filter((p: any) => (p?.active !== false) && isVisibleTrue(p));
+        const featuredVisible = rows.filter((p: any) => (p?.active !== false) && isVisibleForCustomer(p));
 
         if (!alive) return;
 
@@ -373,6 +380,26 @@ const css = `
 }
 .btn.add:hover{ transform: translateY(-1px); box-shadow: 0 14px 32px rgba(240,93,139,.30); }
 .btn.add:active{ transform: translateY(0); }
+.oos{
+  position:absolute;
+  left:10px;
+  top:10px;
+  z-index:2;
+  padding:4px 10px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:900;
+  background: rgba(0,0,0,.72);
+  color:#fff;
+  backdrop-filter: blur(4px);
+}
+
+.btn.add.disabled{
+  opacity:.55;
+  cursor:not-allowed;
+}
+.btn.add.disabled:hover{ transform:none; box-shadow: 0 10px 24px rgba(240,93,139,.24); }
+
 @media (max-width: 480px){
   .btn.add{ height:30px; font-size:12px; margin:6px 8px 8px; }
 }

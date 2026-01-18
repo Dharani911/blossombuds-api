@@ -13,7 +13,8 @@ type ProductLite = {
   active?: boolean | null;
   visible?: boolean | null;
   isVisible?: boolean | null;
-};
+  inStock?: boolean | null;
+  };
 
 type Props = {
   products?: ProductLite[];
@@ -22,10 +23,11 @@ type Props = {
   limit?: number;
 };
 
-function isVisibleTrue(p: Partial<ProductLite> | any): boolean {
+function isVisibleForCustomer(p: Partial<ProductLite> | any): boolean {
   const v = p?.visible ?? p?.isVisible ?? null;
-  return v === true;
+  return v === true || v == null; // ✅ default visible
 }
+
 
 export default function ProductShowcase({
   products,
@@ -35,7 +37,7 @@ export default function ProductShowcase({
 }: Props) {
   const trackRef = useRef<HTMLDivElement>(null);
 
-  const initial = (products || []).filter((p) => p.active !== false && isVisibleTrue(p));
+  const initial = (products || []).filter((p) => p.active !== false && isVisibleForCustomer(p));
 
   const [items, setItems] = useState<ProductLite[]>(initial);
   const [loading, setLoading] = useState(!products);
@@ -46,7 +48,7 @@ export default function ProductShowcase({
   useEffect(() => {
     let live = true;
     if (products && products.length) {
-      setItems(products.filter((p) => p.active !== false && isVisibleTrue(p)));
+      setItems(products.filter((p) => p.active !== false && isVisibleForCustomer(p)));
       setLoading(false);
       return;
     }
@@ -75,9 +77,12 @@ export default function ProductShowcase({
           active: p.active,
           visible: p.visible ?? undefined,
           isVisible: p.isVisible ?? undefined,
+          inStock: (p as any)?.inStock ?? (p as any)?.isInStock ?? true,
+          isInStock: (p as any)?.isInStock ?? undefined,
+
         }));
 
-        setItems(mapped.filter((p) => p.active !== false && isVisibleTrue(p)));
+        setItems(mapped.filter((p) => p.active !== false && isVisibleForCustomer(p)));
       } catch (e: any) {
         if (!live) return;
         setErr(e?.response?.data?.message || "Could not load new arrivals.");
@@ -151,6 +156,8 @@ export default function ProductShowcase({
   const openQuickView = (id: number) => setQvId(id);
   const onAddClick = (id: number) => openQuickView(id);
   const onCardClick = (id: number) => openQuickView(id);
+const inStock = (p as any)?.inStock ?? (p as any)?.isInStock ?? true;
+const outOfStock = inStock === false;
 
   return (
     <section className="ps" aria-label={title}>
@@ -211,9 +218,14 @@ export default function ProductShowcase({
                     <div className="ps-row2">
                       <div className="ps-price">{fmt.format(p.price)}</div>
                       <div className="ps-actions">
-                        <button className="ps-btn" onClick={() => onAddClick(Number(p.id))}>
-                          Add to cart
+                        <button
+                          className={"ps-btn" + (outOfStock ? " disabled" : "")}
+                          disabled={outOfStock}
+                          onClick={() => { if (!outOfStock) onAddClick(Number(p.id)); }}
+                        >
+                          {outOfStock ? "View" : "Add to cart"}
                         </button>
+
                       </div>
                     </div>
                   </div>
@@ -357,4 +369,22 @@ const styles = `
   padding: 8px 10px;
   border-radius: 12px;
 }
+.ps-oos{
+  position:absolute; left:10px; top:10px;
+  z-index:2;
+  padding:4px 10px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:900;
+  background: rgba(0,0,0,.72);
+  color:#fff;
+  backdrop-filter: blur(4px);
+}
+
+.ps-btn.disabled{
+  opacity:.55;
+  cursor:not-allowed;
+}
+.ps-btn.disabled:active{ transform:none; }
+
 `;

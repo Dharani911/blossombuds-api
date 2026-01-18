@@ -31,6 +31,9 @@ const KEYWORDS: { label: string; value: string }[] = [
 /* ----------------------------- Small Product Card ----------------------------- */
 function SmallProductCard({ p, onOpen }: { p: Product; onOpen: (id: number) => void }) {
   const img = p.primaryImageUrl || "";
+  const inStock = (p as any)?.inStock ?? (p as any)?.isInStock ?? true;
+  const outOfStock = inStock === false;
+
   const priceText = (() => {
     const v = (p as any)?.price;
     if (v == null || v === "") return null;
@@ -65,16 +68,18 @@ function SmallProductCard({ p, onOpen }: { p: Product; onOpen: (id: number) => v
       </div>
 
       <button
-        className="btn add"
+        className={"btn add" + (outOfStock ? " disabled" : "")}
         type="button"
+        disabled={outOfStock}
         onClick={(e) => {
           e.stopPropagation();
-          onOpen(p.id);
+          if (!outOfStock) onOpen(p.id);
         }}
-        aria-label={`Open ${p.name}`}
+        aria-label={outOfStock ? `${p.name} is out of stock` : `Open ${p.name}`}
       >
-        Add to cart
+        {outOfStock ? "View" : "Add to cart"}
       </button>
+
     </article>
   );
 }
@@ -1320,6 +1325,28 @@ const css = `
   position:relative;
   z-index:6;
 }
+.oos-badge{
+  position:absolute;
+  left:8px; top:8px;
+  padding:4px 8px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:900;
+  background: rgba(0,0,0,.72);
+  color:#fff;
+  backdrop-filter: blur(4px);
+}
+
+.btn.add.disabled{
+  opacity:.55;
+  cursor:not-allowed;
+  box-shadow:none;
+}
+.btn.add.disabled:hover{
+  transform:none;
+  box-shadow:none;
+}
+
 /* Topbar */
 .topbar{
   display:grid;
