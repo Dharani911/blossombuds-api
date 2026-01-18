@@ -158,6 +158,7 @@ export default function ProductQuickView({ productId, onClose }: Props) {
         })
         .filter(Boolean)
         .join(" / "),
+        selectedValueIds: Object.values(sel).filter(Boolean),
         inStock: (p as any)?.inStock !== false,
         unavailable: (p as any)?.inStock === false || (p as any)?.active === false || (p as any)?.visible === false,
         lastCheckedAt: Date.now(),

@@ -25,25 +25,18 @@ const styles = `
 .card{ background:#fff; border:1px solid var(--ink); border-radius:16px; box-shadow:0 12px 36px rgba(0,0,0,.08); overflow:hidden; }
 
 .items{ padding:8px; }
-.items-list{
-  display:block;
-}
+.items-list{ display:block; }
+
 @media (min-width: 981px){
   .items{
     padding:8px;
     display:flex;
     flex-direction:column;
-    max-height: 460px;          /* ✅ limit how tall the items section can grow */
+    max-height: 460px;
   }
 
-  .items-head{
-    flex:0 0 auto;
-  }
-
-  .items-list{
-    flex:1 1 auto;
-    overflow:auto;              /* ✅ internal scroll when many items */
-  }
+  .items-head{ flex:0 0 auto; }
+  .items-list{ flex:1 1 auto; overflow:auto; }
 }
 
 /* ---------- DESKTOP ROW ---------- */
@@ -55,7 +48,6 @@ const styles = `
   padding: 10px 8px;
   border-bottom: 1px dashed var(--ink);
 }
-
 .row:last-child{ border-bottom:none; }
 
 .thumb{ width:96px; height:72px; border-radius:10px; overflow:hidden; background:#f5f5f5; display:grid; place-items:center; }
@@ -129,123 +121,106 @@ const styles = `
     min-width: 24px;
     text-align: center;
   }
+
   .price-remove-wrap {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
   }
-
 }
 
 /* ---------- MOBILE VIEW ---------- */
 @media (max-width: 768px) {
   .row {
-      display: grid;
-      grid-template-columns: 60px 1fr auto auto;
-      grid-template-rows: auto auto;
-      gap: 6px;
-      padding: 10px 6px;
-      align-items: center;
-      border-bottom: 1px dashed var(--ink);
-    }
+    display: grid;
+    grid-template-columns: 60px 1fr auto auto;
+    grid-template-rows: auto auto;
+    gap: 6px;
+    padding: 10px 6px;
+    align-items: center;
+    border-bottom: 1px dashed var(--ink);
+  }
 
-   .thumb {
-      grid-row: 1 / span 2;
-      width: 60px;
-      height: 60px;
-      border-radius: 8px;
-      overflow: hidden;
-      background: #f5f5f5;
-      display: grid;
-      place-items: center;
-    }
+  .thumb {
+    grid-row: 1 / span 2;
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+  }
 
   .meta {
-      grid-column: 2;
-      grid-row: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      min-width: 0;
-    }
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
 
   .qty-mini {
-      grid-column: 3;
-      grid-row: 2;
-      justify-self: end;          /* ✅ vertical line with price */
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 3px 10px;
-      border-radius: 999px;
-      border: 1px solid var(--ink);
-      background: #fff;
-      font-size: 12px;
-      font-weight: 700;
-      box-shadow: 0 4px 10px rgba(0,0,0,.06);
-    }
-
+    grid-column: 3;
+    grid-row: 2;
+    justify-self: end;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--ink);
+    background: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    box-shadow: 0 4px 10px rgba(0,0,0,.06);
+  }
 
   .qty-mini button {
-      width: 22px;
-      height: 22px;
-      font-size: 14px;
-      font-weight: 800;
-      border-radius: 999px;
-      border: 1px solid var(--ink);
-      background: #f8f8f8;
-      display: grid;
-      place-items: center;
-      padding: 0;
-      line-height: 1;
-    }
+    width: 22px;
+    height: 22px;
+    font-size: 14px;
+    font-weight: 800;
+    border-radius: 999px;
+    border: 1px solid var(--ink);
+    background: #f8f8f8;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    line-height: 1;
+  }
 
   .qty-mini span {
     min-width: 18px;
     text-align: center;
   }
 
-
   .rm {
-      grid-column: 4;
-      grid-row: 1 / span 2;   /* ✅ spans price + qty rows */
-      align-self: center;      /* ✅ vertically centered */
-      font-size: 16px;
-      width: 26px;
-      height: 26px;
-      color: var(--danger);
-      display: grid;
-      place-items: center;
-      cursor: pointer;
-    }
+    grid-column: 4;
+    grid-row: 1 / span 2;
+    align-self: center;
+    font-size: 16px;
+    width: 26px;
+    height: 26px;
+  }
 
   .name {
     font-size: 13px;
     font-weight: 800;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   .variant {
     font-size: 11px;
     opacity: 0.7;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
+
   .price-remove-wrap {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 6px;
-    }
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
 }
 
-
 /* --- SUMMARY AND BUTTONS (unchanged) --- */
-
 .items-head, .sum-head{ padding:10px 12px; border-bottom:1px solid var(--ink); background:linear-gradient(180deg, rgba(246,195,32,.08), rgba(255,255,255,.95)); font-weight:900; font-size:13px; }
 
 .sum{ position:relative; }
@@ -281,19 +256,38 @@ const styles = `
 .link{ text-decoration:none; color: var(--primary); font-weight:800; opacity:.85; }
 .hr{ height:1px; background: var(--ink); margin:4px 0; }
 .small{ font-size:12px; opacity:.75; }
+
+/* ✅ only show pill when unavailable */
 .stock{
   display:inline-flex;
   align-items:center;
+  justify-content:center;
   height:22px;
-  padding:0 8px;
+  padding:0 10px;
   border-radius:999px;
   font-size:11px;
   font-weight:900;
   border:1px solid rgba(0,0,0,.10);
   width: fit-content;
+  white-space: nowrap;
 }
-.stock.ok{ background: rgba(0,160,80,.10); }
 .stock.bad{ background: rgba(240,93,139,.12); color: var(--danger); }
+
+/* ✅ this pill takes the same "slot" as qty-mini */
+.stock-slot{
+  justify-self: end;          /* line up with qty on desktop/mobile */
+}
+@media (min-width: 769px){
+  .stock-slot{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    padding: 6px 10px;        /* visually matches qty-mini padding */
+    border-radius: 10px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+    background: #fff;
+  }
+}
 
 .notice{
   padding:10px 12px;
@@ -304,10 +298,78 @@ const styles = `
   font-weight:800;
   font-size:13px;
 }
+@media (max-width: 768px) {
+  .row {
+    display: grid;
+    grid-template-columns: 60px 1fr 110px auto; /* ✅ fixed qty column */
+    grid-template-rows: auto auto;
+    gap: 6px;
+    padding: 10px 6px;
+    align-items: center;
+    border-bottom: 1px dashed var(--ink);
+  }
+
+  /* ✅ meta spans 2 rows so layout never jumps */
+  .meta {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    align-self: center;
+  }
+
+  /* ✅ price stays in row1 of the fixed column */
+  .price-remove-wrap {
+    grid-column: 3;
+    grid-row: 1;
+    width: 110px;                /* ✅ match the column */
+    justify-self: end;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;     /* price at end */
+    gap: 6px;
+  }
+
+  /* ✅ qty always sits row2 col3 (stable) */
+  .qty-mini {
+    grid-column: 3;
+    grid-row: 2;
+    width: 110px;                 /* ✅ match the column */
+    justify-self: end;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--ink);
+    background: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    box-shadow: 0 4px 10px rgba(0,0,0,.06);
+  }
+
+  /* ✅ unavailable pill uses the exact same slot as qty */
+  .stock-slot {
+    grid-column: 3;
+    grid-row: 2;
+    width: 110px;                 /* ✅ match the column */
+    justify-self: end;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
 `;
 
 function isAwsSignedUrl(url: string) {
-  return /[?&]X-Amz-Algorithm=AWS4-HMAC-SHA256/i.test(url) || /[?&]X-Amz-Signature=/i.test(url);
+  return (
+    /[?&]X-Amz-Algorithm=AWS4-HMAC-SHA256/i.test(url) ||
+    /[?&]X-Amz-Signature=/i.test(url)
+  );
 }
 function cacheBust(url: string) {
   if (!url) return url;
@@ -325,9 +387,7 @@ function Thumb({ productId, src, alt }: { productId?: number; src?: string; alt:
 
     if (!productId) {
       setImgSrc(src ? cacheBust(src) : null);
-      return () => {
-        alive = false;
-      };
+      return () => { alive = false; };
     }
 
     async function resolveFreshUrl() {
@@ -358,9 +418,7 @@ function Thumb({ productId, src, alt }: { productId?: number; src?: string; alt:
     setImgSrc(null);
     resolveFreshUrl();
 
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, [productId, src, refreshKey]);
 
   function handleError() {
@@ -395,18 +453,15 @@ export default function CartPage() {
   const nav = useNavigate();
   const location = useLocation();
 
-  // ✅ include refresh from cart context
   const { items, total, remove, setQty, clear, refresh } = useCart();
-
   const [checking, setChecking] = useState(false);
 
-  // ✅ derived flag: any unavailable item in cart
   const hasUnavailable = useMemo(
     () => items.some((it: any) => it.unavailable === true),
     [items]
   );
 
-  // ✅ (1) Refresh when Cart page opens (force)
+  // Refresh when Cart page opens (force)
   useEffect(() => {
     let live = true;
     (async () => {
@@ -414,39 +469,35 @@ export default function CartPage() {
         setChecking(true);
         await refresh(true);
       } catch {
-        // ignore
       } finally {
         if (live) setChecking(false);
       }
     })();
-    return () => {
-      live = false;
-    };
+    return () => { live = false; };
   }, [refresh]);
 
-  // ✅ (2) Refresh right before checkout, then block if unavailable
   async function handleProceed() {
     if (!user?.id) {
       nav("/login", { state: { background: location, from: location } });
       return;
     }
 
+    let updated = items;
     try {
       setChecking(true);
-      await refresh(true);
+      updated = await refresh(true);
     } finally {
       setChecking(false);
     }
 
-    // after refresh, block checkout if any item is unavailable
-    const stillBad = (items as any[]).some((it) => it.unavailable === true);
-    if (stillBad) {
-      // keep user on cart page; UI message will show
-      return;
-    }
+    const stillBad = (updated as any[]).some((it) => it.unavailable === true);
+    if (stillBad) return;
 
     nav("/checkout");
   }
+
+  // ✅ helper: treat "unavailable" as the only time we show the pill & hide qty
+  const isUnavailable = (it: any) => it?.unavailable === true;
 
   return (
     <div className="cart-wrap">
@@ -470,7 +521,6 @@ export default function CartPage() {
         </div>
       ) : (
         <div className="grid">
-          {/* LEFT: items */}
           <section className="card items">
             <div className="items-head">Items</div>
 
@@ -478,6 +528,7 @@ export default function CartPage() {
               {items.map((it: any) => (
                 <div className="row" key={it.id}>
                   <Thumb productId={it.productId} src={it.image} alt={it.name} />
+
                   <div className="meta">
                     <div className="name">{it.name}</div>
                     {it.variant && (
@@ -486,29 +537,24 @@ export default function CartPage() {
                       </div>
                     )}
 
-                    {/* ✅ Stock status */}
-                    {it.unavailable ? (
-                      <span className="stock bad">Unavailable</span>
-                    ) : it.inStock === true ? (
-                      <span className="stock ok">In stock</span>
-                    ) : null}
-
+                    {/* ✅ no "in stock" pill at all */}
                     <span className="small">{inr(it.price)} each</span>
                   </div>
 
-                  <div className="qty-mini">
-                    <button onClick={() => setQty(it.id, Math.max(1, it.qty - 1))}>
-                      −
-                    </button>
-                    <span>{it.qty}</span>
-                    <button
-                      onClick={() => setQty(it.id, it.qty + 1)}
-                      disabled={it.unavailable === true}
-                      title={it.unavailable ? "Unavailable" : undefined}
-                    >
-                      +
-                    </button>
-                  </div>
+                  {/* ✅ If unavailable => pill replaces qty completely */}
+                  {isUnavailable(it) ? (
+                    <div className="stock-slot">
+                      <span className="stock bad">Unavailable</span>
+                    </div>
+                  ) : (
+                    <div className="qty-mini">
+                      <button onClick={() => setQty(it.id, Math.max(1, it.qty - 1))}>
+                        −
+                      </button>
+                      <span>{it.qty}</span>
+                      <button onClick={() => setQty(it.id, it.qty + 1)}>+</button>
+                    </div>
+                  )}
 
                   <div className="price-remove-wrap">
                     <div className="line">{inr(it.price * it.qty)}</div>
@@ -521,11 +567,9 @@ export default function CartPage() {
             </div>
           </section>
 
-          {/* RIGHT: summary */}
           <aside className="card sum">
             <div className="sum-head">Order Summary</div>
             <div className="sum-inner">
-              {/* ✅ show warning if any unavailable */}
               {hasUnavailable && (
                 <div className="notice">
                   Some items in your cart are unavailable (hidden/out of stock). Remove them to continue.
@@ -572,7 +616,6 @@ export default function CartPage() {
                   Clear Cart
                 </button>
 
-                {/* Optional manual refresh button (nice for debugging/admin toggles) */}
                 <button
                   className="danger"
                   onClick={async () => {

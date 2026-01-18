@@ -1,5 +1,5 @@
 // src/pages/CheckoutPage.tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../app/AuthProvider";
 import { useCart } from "../app/CartProvider";
@@ -404,6 +404,28 @@ svg.icon { width: 24px; height: 24px; }
     cursor:pointer;
     padding:0 2px;
   }
+/* ✅ Unavailable items in summary */
+.item.unavailable{
+  opacity: .55;
+  filter: blur(.6px);
+  transform: scale(.995);
+  pointer-events: none;
+}
+
+.item .tag-bad{
+  display:inline-flex;
+  align-items:center;
+  height:20px;
+  padding:0 8px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:900;
+  border:1px solid rgba(215,38,61,.25);
+  background: rgba(240,93,139,.12);
+  color:#b0003a;
+  margin-left:8px;
+  filter:none; /* keep tag readable if you later change blur behavior */
+}
 
 `;
 
@@ -613,6 +635,22 @@ useEffect(() => {
   const hasUnavailableItems = useMemo(() => {
     return (items || []).some((it: any) => it?.unavailable === true || it?.inStock === false);
   }, [items]);
+const redirectedRef = React.useRef(false);
+
+useEffect(() => {
+  // ✅ Only redirect after refresh has finished checking
+  if (checkingCart) return;
+
+  if (hasUnavailableItems && !redirectedRef.current) {
+    redirectedRef.current = true;
+
+    setErr("Some items became unavailable. Please review your cart and remove them to continue.");
+    nav("/cart", {
+      replace: true,
+      state: { reason: "unavailable_from_checkout" },
+    });
+  }
+}, [hasUnavailableItems, checkingCart, nav]);
 
   // When toggling flow, pick selection from the right bucket
   useEffect(() => {
@@ -1437,16 +1475,22 @@ useEffect(() => {
           <div className="section-head">Order Summary</div>
           <div className="sum-inner">
             <div className="items">
-              {items.map(it => (
-                <div key={it.id} className="item">
+              {items.map(it => {
+              const isBad = (it as any)?.unavailable === true || (it as any)?.inStock === false;
+              return (
+                <div key={it.id} className={`item ${isBad ? "unavailable" : ""}`}>
                   <div>
-                    <div className="name">{it.name}</div>
+                    <div className="name">
+                      {it.name}
+                      {isBad && <span className="tag-bad">Unavailable</span>}
+                    </div>
+
                     {it.variant && <div className="muted">{it.variant}</div>}
                     <div className="small">{it.qty} × {inr(it.price)}</div>
                   </div>
                   <div className="line">{inr(it.price * it.qty)}</div>
-                </div>
-              ))}
+                </div>);
+              })}
             </div>
 
             <div className="row-sum">
@@ -1510,7 +1554,7 @@ useEffect(() => {
                 <button
                   className="btn primary"
                   onClick={onSendWhatsAppInternational}
-                  disabled={submitting || hasUnavailableItems}
+                  disabled={submitting || checkingCart || hasUnavailableItems}
                   title={hasUnavailableItems ? "Remove out-of-stock items to continue" : undefined}
                 >
 
@@ -1521,7 +1565,7 @@ useEffect(() => {
                 <button
                   className="btn primary"
                   onClick={onPlaceDomestic}
-                  disabled={submitting || !user?.id || shippingLoading || hasUnavailableItems}
+                  disabled={submitting ||checkingCart || !user?.id || shippingLoading || hasUnavailableItems}
                   title={hasUnavailableItems ? "Remove out-of-stock items to continue" : undefined}
                 >
 

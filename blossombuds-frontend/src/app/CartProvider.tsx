@@ -8,7 +8,7 @@ import React, {
   useState,
   useCallback,
 } from "react";
-import { getProduct } from "../api/catalog";
+import { getProduct, getProductOptionsWithValues } from "../api/catalog";
 
 export type CartItem = {
   id: string;
@@ -18,6 +18,9 @@ export type CartItem = {
   qty: number;
   image?: string;
   variant?: string;
+
+  // ✅ NEW: used to re-check variant visibility + reprice on refresh
+  selectedValueIds?: number[];
 
   inStock?: boolean;        // last-known stock (from backend)
   unavailable?: boolean;    // true if inactive/hidden/out-of-stock/missing
@@ -49,6 +52,77 @@ function visibleForCustomer(p: any) {
 function inStockForCustomer(p: any) {
   const s = p?.inStock ?? p?.isInStock ?? p?.instock ?? null;
   return s !== false; // default in stock
+}
+
+// Treat option value's price as ABSOLUTE (not delta), but allow fallback fields
+function readValuePrice(v: any): number | undefined {
+  const cand = [v?.price, v?.finalPrice, v?.absolutePrice, v?.amount];
+  for (const c of cand) if (typeof c === "number") return Number(c);
+  if (typeof v?.priceDelta === "number") return Number(v.priceDelta);
+  return undefined;
+}
+
+function normalizeSelectedValueIds(it: any): number[] {
+  // ✅ supports older carts:
+  // if selectedValueIds missing, try parse from id "pid:1,2,3"
+  if (Array.isArray(it.selectedValueIds) && it.selectedValueIds.length) {
+    return it.selectedValueIds;
+  }
+
+  const parts = String(it.id || "").split(":");
+  if (parts.length >= 2 && parts[1] && parts[1] !== "base") {
+    return parts[1]
+      .split(",")
+      .map((x: string) => Number(x))
+      .filter((n: number) => Number.isFinite(n));
+  }
+  return [];
+}
+
+function computeVariantStatusAndPrice(
+  basePrice: number,
+  options: any[] | null | undefined,
+  selectedValueIds: number[]
+): { unitPrice: number; variantUnavailable: boolean } {
+  // No variant => just use base
+  if (!selectedValueIds.length) {
+    return { unitPrice: basePrice, variantUnavailable: false };
+  }
+
+  // Variant exists but options couldn't be loaded => safest block checkout
+  if (!Array.isArray(options) || options.length === 0) {
+    return { unitPrice: basePrice, variantUnavailable: true };
+  }
+
+  let unitPrice = basePrice;
+  let variantUnavailable = false;
+
+  // Walk options in order and apply selected values (absolute pricing)
+  for (const o of options) {
+    const values = (o?.values || []) as any[];
+    const selected = values.find((v) => selectedValueIds.includes(v.id));
+    if (!selected) continue;
+
+    const visible = (selected as any)?.visible !== false;
+    const active = (selected as any)?.active !== false;
+    if (!visible || !active) variantUnavailable = true;
+
+    const vp = readValuePrice(selected);
+    if (typeof vp === "number") unitPrice = vp;
+  }
+
+  // If user selected IDs that don't exist anymore => unavailable
+  const allValueIds = new Set(
+    options.flatMap((o) => (o?.values || []).map((v: any) => v.id))
+  );
+  for (const id of selectedValueIds) {
+    if (!allValueIds.has(id)) {
+      variantUnavailable = true;
+      break;
+    }
+  }
+
+  return { unitPrice, variantUnavailable };
 }
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
@@ -101,6 +175,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           qty: copy[idx].qty + qty,
           // keep unavailable if already true; otherwise leave unknown until refresh
           unavailable: copy[idx].unavailable === true ? true : undefined,
+          // keep latest selectedValueIds if provided
+          selectedValueIds:
+            incoming.selectedValueIds?.length ? incoming.selectedValueIds : copy[idx].selectedValueIds,
         };
         return copy;
       }
@@ -110,6 +187,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         {
           ...incoming,
           qty,
+          selectedValueIds: incoming.selectedValueIds?.length ? incoming.selectedValueIds : undefined,
           inStock: incoming.inStock ?? undefined,
           unavailable: incoming.unavailable ?? undefined,
           lastCheckedAt: incoming.lastCheckedAt ?? undefined,
@@ -118,7 +196,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const remove = (id: string) => setItems((prev) => prev.filter((p) => p.id !== id));
+  const remove = (id: string) =>
+    setItems((prev) => prev.filter((p) => p.id !== id));
 
   const setQty = (id: string, qty: number) =>
     setItems((prev) =>
@@ -142,17 +221,23 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const refreshingRef = useRef(false);
 
   /**
-   * Refresh availability from backend.
+   * Refresh availability + latest pricing from backend.
    * - Dedupe by productId (one call per product, even if multiple variants)
    * - Throttled by lastCheckedAt unless force=true
+   * - Updates:
+   *    - product availability (active/visible/inStock)
+   *    - variant availability (selected value visible/active/existing)
+   *    - latest price (base or selected value absolute price)
    */
-  const refresh = useCallback(async (force: boolean = false) => {
-    if (refreshingRef.current) return;
+  const refresh = useCallback(async (force: boolean = false): Promise<CartItem[]> => {
+    // Always return a list
+    if (refreshingRef.current) return itemsRef.current;
+
     refreshingRef.current = true;
 
     try {
       const snapshot = itemsRef.current;
-      if (!snapshot.length) return;
+      if (!snapshot.length) return [];
 
       const THROTTLE_MS = 60_000;
 
@@ -169,49 +254,89 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         .filter(([_, meta]) => force || now() - meta.lastCheckedAt > THROTTLE_MS)
         .map(([pid]) => pid);
 
-      if (!productIdsToCheck.length) return;
+      if (!productIdsToCheck.length) return itemsRef.current;
 
-      const fetched = await Promise.allSettled(
+      // Fetch products + their options (for pricing/variant validation)
+      const fetchedProducts = await Promise.allSettled(
         productIdsToCheck.map((pid) => getProduct(pid))
       );
+      const fetchedOptions = await Promise.allSettled(
+        productIdsToCheck.map((pid) => getProductOptionsWithValues(pid))
+      );
 
-      const statusByProduct = new Map<number, { inStock: boolean; unavailable: boolean; checkedAt: number }>();
+      const statusByProduct = new Map<
+        number,
+        {
+          inStock: boolean;
+          unavailable: boolean;
+          checkedAt: number;
+          basePrice: number;
+          options: any[] | null;
+        }
+      >();
 
-      fetched.forEach((res, idx) => {
-        const pid = productIdsToCheck[idx];
+      productIdsToCheck.forEach((pid, idx) => {
         const checkedAt = now();
 
-        if (res.status !== "fulfilled") {
-          statusByProduct.set(pid, { inStock: false, unavailable: true, checkedAt });
+        const prodRes = fetchedProducts[idx];
+        if (prodRes.status !== "fulfilled") {
+          statusByProduct.set(pid, {
+            inStock: false,
+            unavailable: true,
+            checkedAt,
+            basePrice: 0,
+            options: null,
+          });
           return;
         }
 
-        const p: any = res.value;
+        const p: any = prodRes.value;
         const active = p?.active !== false;
         const visible = visibleForCustomer(p);
         const inStock = inStockForCustomer(p);
+        const baseUnavailable = !(active && visible && inStock);
+        const basePrice = Number(p?.price ?? 0);
 
-        const unavailable = !(active && visible && inStock);
-        statusByProduct.set(pid, { inStock, unavailable, checkedAt });
+        const optRes = fetchedOptions[idx];
+        const options = optRes.status === "fulfilled" ? ((optRes.value as any[]) ?? []) : null;
+
+        statusByProduct.set(pid, {
+          inStock,
+          unavailable: baseUnavailable,
+          checkedAt,
+          basePrice,
+          options,
+        });
       });
-const base = itemsRef.current;
 
-      const nextItems = base.map((it) => {
+      const base = itemsRef.current;
+
+      const nextItems: CartItem[] = base.map((it: any) => {
         const st = statusByProduct.get(it.productId);
         if (!st) return it;
+
+        const selectedValueIds = normalizeSelectedValueIds(it);
+        const { unitPrice, variantUnavailable } = computeVariantStatusAndPrice(
+          st.basePrice,
+          st.options,
+          selectedValueIds
+        );
+
+        const unavailable = st.unavailable || variantUnavailable;
+
         return {
           ...it,
+          selectedValueIds,
+          price: unitPrice, // ✅ update price always
           inStock: st.inStock,
-          unavailable: st.unavailable,
+          unavailable,
           lastCheckedAt: st.checkedAt,
         };
       });
-      itemsRef.current = nextItems;
-     // ✅ update state (UI will reflect)
-           setItems(nextItems);
 
-           // ✅ return fresh items (so Checkout/Cart button logic can block correctly)
-           return nextItems;
+      itemsRef.current = nextItems;
+      setItems(nextItems);
+      return nextItems;
     } finally {
       refreshingRef.current = false;
     }
