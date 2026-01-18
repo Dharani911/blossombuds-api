@@ -420,12 +420,30 @@ export default function CheckoutPage() {
   const { user } = useAuth();
   const nav = useNavigate();
   const location = useLocation();
-  const { items, total, clear } = useCart();
+  const { items, total, clear, refresh } = useCart();
+  const [checkingCart, setCheckingCart] = useState(false);
   const { number: waNumber } = useWhatsAppNumber();
 
   useEffect(() => {
     if (!items.length) nav("/cart");
   }, [items.length, nav]);
+useEffect(() => {
+  let alive = true;
+
+  (async () => {
+    try {
+      setCheckingCart(true);
+      await refresh(true); // ✅ pulls latest product visible/inStock and updates cart items
+    } catch {
+      // ignore (optional: setErr("Could not refresh cart"))
+    } finally {
+      if (alive) setCheckingCart(false);
+    }
+  })();
+
+  return () => { alive = false; };
+  // refresh is stable if from context; include it to satisfy lint
+}, [refresh]);
 
   // flow toggle
   const [international, setInternational] = useState(false);
@@ -684,6 +702,12 @@ export default function CheckoutPage() {
 
   async function onSendWhatsAppInternational() {
     if (!user?.id) { setErr("Please login to continue."); return; }
+    setCheckingCart(true);
+      try {
+        await refresh(true); // ✅ re-check right now
+      } finally {
+        setCheckingCart(false);
+      }
         if ((items as any[]).some(it => it?.unavailable === true || it?.inStock === false)) {
           setErr("Some items are out of stock. Please remove them from cart to continue.");
           return;
@@ -763,6 +787,12 @@ export default function CheckoutPage() {
 
   async function onPlaceDomestic() {
     if (!user?.id) { setErr("Please login to continue."); return; }
+    setCheckingCart(true);
+      try {
+        await refresh(true); // ✅ re-check right now
+      } finally {
+        setCheckingCart(false);
+      }
     if ((items as any[]).some(it => it?.unavailable === true || it?.inStock === false)) {
       setErr("Some items are out of stock. Please remove them from cart to continue.");
       return;

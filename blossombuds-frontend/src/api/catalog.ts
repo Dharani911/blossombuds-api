@@ -24,6 +24,8 @@ export type Product = {
   currency?: string | null;
   primaryImageUrl?: string | null;
   active?: boolean | null;
+  visible?: boolean | null;     // ✅ add if backend sends it
+  isVisible?: boolean | null;   // ✅ add if backend sends it
   inStock?: boolean | null;
 };
 
@@ -58,21 +60,34 @@ export type PageResp<T> = {
   number: number; // current page index
   size: number;
 };
+
+/* =========================
+ * Normalizers
+ * ========================= */
+
+/** Normalize a product coming from backend (supports multiple key styles). */
 function normalizeProduct(p: any): Product {
-    if (!p) return p as Product;
+  if (!p) return p as Product;
 
-    // accept multiple naming styles from backend just in case
-    const inStock =
-      typeof p.inStock === "boolean" ? p.inStock :
-      typeof p.instock === "boolean" ? p.instock :
-      typeof p.in_stock === "boolean" ? p.in_stock :
-      null;
+  const inStock =
+    typeof p.inStock === "boolean" ? p.inStock :
+    typeof p.instock === "boolean" ? p.instock :
+    typeof p.in_stock === "boolean" ? p.in_stock :
+    null;
 
-    return {
-      ...p,
-      inStock,
-    } as Product;
-  }
+  // Keep visible fields as-is; UI should treat null/undefined as "visible"
+  const visible =
+    typeof p.visible === "boolean" ? p.visible : (typeof p.isVisible === "boolean" ? p.isVisible : null);
+
+  return {
+    ...p,
+    inStock,
+    visible: typeof p.visible === "boolean" ? p.visible : (typeof p.isVisible === "boolean" ? p.isVisible : p.visible),
+    isVisible: typeof p.isVisible === "boolean" ? p.isVisible : (typeof p.visible === "boolean" ? p.visible : p.isVisible),
+  } as Product;
+}
+
+/** Normalizes common page shapes (Spring Page / CachedPage / legacy array). */
 function normalizePage<T>(data: any): PageResp<T> {
   if (Array.isArray(data)) {
     return {
@@ -84,15 +99,11 @@ function normalizePage<T>(data: any): PageResp<T> {
     };
   }
 
-
-
   // Spring Page OR CachedPage
   const content = Array.isArray(data?.content) ? (data.content as T[]) : null;
   if (content) {
-    const pageNumber =
-      data.number ?? data.page ?? data.pageNumber ?? 0; // support CachedPage
-    const pageSize =
-      data.size ?? data.pageSize ?? content.length ?? 0;
+    const pageNumber = data.number ?? data.page ?? data.pageNumber ?? 0;
+    const pageSize = data.size ?? data.pageSize ?? content.length ?? 0;
 
     return {
       content,
@@ -117,28 +128,24 @@ function normalizePage<T>(data: any): PageResp<T> {
   return { content: [], totalPages: 0, totalElements: 0, number: 0, size: 0 };
 }
 
-
 /* =========================
  * Categories (public)
  * Controller: CategoryController @ /api/catalog/categories
  * ========================= */
 
-/** List all active categories (public). */
 export async function listCategories(params?: Record<string, any>): Promise<Category[]> {
   const { data } = await http.get("/api/catalog/categories", { params });
   return Array.isArray(data) ? (data as Category[]) : [];
 }
 
-// alias to avoid mismatched imports across files
+// alias
 export const getCategories = listCategories;
 
-/** Get one category by id (public). */
 export async function getCategory(id: number): Promise<Category> {
   const { data } = await http.get(`/api/catalog/categories/${id}`);
   return data as Category;
 }
 
-/** List products under a category, normalized to PageResp (public). */
 export async function listProductsByCategory(
   categoryId: number,
   page = 0,
@@ -147,18 +154,19 @@ export async function listProductsByCategory(
   const { data } = await http.get(`/api/catalog/categories/${categoryId}/products`, {
     params: { page, size },
   });
-  //return normalizePage<Product>(data);
+
   const pageResp = normalizePage<Product>(data);
-    return {
-      ...pageResp,
-      content: (pageResp.content || []).map(normalizeProduct),
-    };
+  return {
+    ...pageResp,
+    content: (pageResp.content || []).map(normalizeProduct),
+  };
 }
 
-/** Build children list on FE by filtering all categories by parentId. */
 export async function listChildCategories(parentId: number): Promise<Category[]> {
   const all = await listCategories();
-  return (all || []).filter((c: any) => Number(c.parentId ?? c.parent?.id ?? c.parent_id) === Number(parentId));
+  return (all || []).filter(
+    (c: any) => Number(c.parentId ?? c.parent?.id ?? c.parent_id) === Number(parentId)
+  );
 }
 
 /* =========================
@@ -166,14 +174,11 @@ export async function listChildCategories(parentId: number): Promise<Category[]>
  * Controller: CatalogController @ /api/catalog/products
  * ========================= */
 
-/** Get product by id (public). */
 export async function getProduct(id: number): Promise<Product> {
   const { data } = await http.get(`/api/catalog/products/${id}`);
   return normalizeProduct(data);
-
 }
 
-/** Optional: list all products paged (not required for categories page). */
 export async function listProductsPage(page = 0, size = 24): Promise<PageResp<Product>> {
   const { data } = await http.get("/api/catalog/products", { params: { page, size } });
   const pageResp = normalizePage<Product>(data);
@@ -183,16 +188,7 @@ export async function listProductsPage(page = 0, size = 24): Promise<PageResp<Pr
   };
 }
 
-
-/**
- * New Arrivals (public).
- * Tries common server patterns:
- *  - sort by createdAt desc
- *  - fallback to id desc
- *  - final fallback to first page
- */
 export async function listNewArrivals(limit = 12): Promise<Product[]> {
-  // helper to unwrap Page/content/array shapes
   const unwrap = (data: any): Product[] => {
     if (Array.isArray(data)) return data as Product[];
     if (Array.isArray(data?.content)) return data.content as Product[];
@@ -200,27 +196,21 @@ export async function listNewArrivals(limit = 12): Promise<Product[]> {
     return [];
   };
 
-  // 1) explicit “new-arrivals” endpoint
+  // 1) explicit endpoint
   try {
-    const r1 = await http.get("/api/catalog/products/new-arrivals", {
-      params: { limit },
-    });
-
+    const r1 = await http.get("/api/catalog/products/new-arrivals", { params: { limit } });
     const rows = unwrap(r1.data).slice(0, limit).map(normalizeProduct);
-
     if (rows.length) return rows;
-  } catch { /* ignore and try next */ }
+  } catch {}
 
-  // 2) sort by createdAt desc on general products list
+  // 2) sort createdAt desc
   try {
     const r2 = await http.get("/api/catalog/products", {
       params: { page: 0, size: limit, sort: "createdAt", dir: "DESC" },
     });
-
     const rows = unwrap(r2.data).slice(0, limit).map(normalizeProduct);
-
     if (rows.length) return rows;
-  } catch { /* ignore and try next */ }
+  } catch {}
 
   // 3) flag-style filter
   try {
@@ -228,11 +218,9 @@ export async function listNewArrivals(limit = 12): Promise<Product[]> {
       params: { page: 0, size: limit, newArrivals: true, active: true },
     });
     const rows = unwrap(r3.data).slice(0, limit).map(normalizeProduct);
-
     if (rows.length) return rows;
-  } catch { /* ignore */ }
+  } catch {}
 
-  // last resort: empty list (component shows "No new arrivals" message)
   return [];
 }
 
@@ -247,12 +235,8 @@ export async function listProductImages(productId: number): Promise<ProductImage
 
 /* =========================
  * Options + Values (public)
- * Controllers:
- *  - GET /api/catalog/products/{productId}/options
- *  - GET /api/catalog/options/{optionId}/values
  * ========================= */
 
-/** Fetch options for a product (without values). */
 export async function listProductOptions(
   productId: number
 ): Promise<{ id: number; name: string; required?: boolean | null; active?: boolean | null }[]> {
@@ -260,13 +244,11 @@ export async function listProductOptions(
   return Array.isArray(data) ? data : [];
 }
 
-/** Fetch values for a specific option. */
 export async function listOptionValues(optionId: number): Promise<ProductOptionValue[]> {
   const { data } = await http.get(`/api/catalog/options/${optionId}/values`);
   return Array.isArray(data) ? (data as ProductOptionValue[]) : [];
 }
 
-/** Public helper: options + their values in one call for the Product page. */
 export async function getProductOptionsWithValues(
   productId: number
 ): Promise<ProductOptionWithValues[]> {
@@ -288,7 +270,6 @@ export async function getProductOptionsWithValues(
 
 /* =========================
  * Categories for a product (public)
- * Controller: GET /api/catalog/products/{productId}/categories
  * ========================= */
 export async function listCategoriesForProduct(productId: number): Promise<Category[]> {
   const { data } = await http.get(`/api/catalog/products/${productId}/categories`);
@@ -296,22 +277,17 @@ export async function listCategoriesForProduct(productId: number): Promise<Categ
 }
 
 export default {
-  // categories
   listCategories,
-  getCategories, // alias
+  getCategories,
   getCategory,
   listChildCategories,
   listProductsByCategory,
-  // products
   getProduct,
   listProductsPage,
   listNewArrivals,
-  // images
   listProductImages,
-  // options + values
   listProductOptions,
   listOptionValues,
   getProductOptionsWithValues,
-  // reverse lookup
   listCategoriesForProduct,
 };

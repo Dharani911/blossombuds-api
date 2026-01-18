@@ -1,5 +1,5 @@
 // src/pages/CartPage.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../app/AuthProvider";
 import { useCart } from "../app/CartProvider";
@@ -262,6 +262,7 @@ const styles = `
   cursor:pointer; box-shadow:0 12px 28px rgba(240,93,139,.28); transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
 }
 .primary:hover{ transform: translateY(-1px); box-shadow:0 16px 40px rgba(240,93,139,.36); background:#f1497b; }
+.primary:disabled{ opacity:.55; cursor:not-allowed; transform:none; box-shadow:none; }
 
 .secondary{
   height:40px; border:none; border-radius:12px; background: var(--gold); color:#2b2b2b; font-weight:900;
@@ -294,78 +295,76 @@ const styles = `
 .stock.ok{ background: rgba(0,160,80,.10); }
 .stock.bad{ background: rgba(240,93,139,.12); color: var(--danger); }
 
+.notice{
+  padding:10px 12px;
+  border-radius:14px;
+  border:1px solid rgba(240,93,139,.25);
+  background:#fff3f5;
+  color:#8a0024;
+  font-weight:800;
+  font-size:13px;
+}
 `;
 
-/** Helpers */
 function isAwsSignedUrl(url: string) {
   return /[?&]X-Amz-Algorithm=AWS4-HMAC-SHA256/i.test(url) || /[?&]X-Amz-Signature=/i.test(url);
 }
 function cacheBust(url: string) {
   if (!url) return url;
-  if (isAwsSignedUrl(url)) return url; // DO NOT touch presigned URLs
+  if (isAwsSignedUrl(url)) return url;
   const sep = url.includes("?") ? "&" : "?";
   return `${url}${sep}cb=${Date.now()}`;
 }
 
-/** Robust thumbnail loader for presigned URLs. */
-function Thumb({
-  productId,
-  src,
-  alt,
-}: { productId?: number; src?: string; alt: string }) {
+function Thumb({ productId, src, alt }: { productId?: number; src?: string; alt: string }) {
   const [imgSrc, setImgSrc] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let alive = true;
 
-    // 🚫 If we don't have a productId, don't hit the API at all.
     if (!productId) {
       setImgSrc(src ? cacheBust(src) : null);
-      return () => { alive = false; };
+      return () => {
+        alive = false;
+      };
     }
 
     async function resolveFreshUrl() {
-      // 1) Try product images API (fresh pre-signed URLs)
       try {
         const imgs = await listProductImages(productId);
         if (!alive) return;
         const first = (imgs || [])
-          .filter(im => !!im?.url)
-          .sort((a,b)=> (a.sortOrder ?? 0) - (b.sortOrder ?? 0))[0];
+          .filter((im) => !!im?.url)
+          .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))[0];
         if (first?.url) {
           setImgSrc(cacheBust(first.url));
           return;
         }
-      } catch {
-        /* ignore */
-      }
+      } catch {}
 
-      // 2) Fallback to product primary image
       try {
         const p = await getProduct(productId);
         if (!alive) return;
-        if (p?.primaryImageUrl) {
-          setImgSrc(cacheBust(p.primaryImageUrl));
+        if ((p as any)?.primaryImageUrl) {
+          setImgSrc(cacheBust((p as any).primaryImageUrl));
           return;
         }
-      } catch {
-        /* ignore */
-      }
+      } catch {}
 
-      // 3) Last resort: the cart-stored src
       if (alive) setImgSrc(src ? cacheBust(src) : null);
     }
 
     setImgSrc(null);
     resolveFreshUrl();
 
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [productId, src, refreshKey]);
 
   function handleError() {
-    // If a presigned URL expired (403), re-resolve a *fresh* one:
-    setRefreshKey(k => k + 1);
+    setRefreshKey((k) => k + 1);
   }
 
   return (
@@ -379,23 +378,73 @@ function Thumb({
   );
 }
 
-
-function inr(n: number){
-  try { return new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:2}).format(n||0); }
-  catch { return `₹${(n||0).toFixed(2)}`; }
+function inr(n: number) {
+  try {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      maximumFractionDigits: 2,
+    }).format(n || 0);
+  } catch {
+    return `₹${(n || 0).toFixed(2)}`;
+  }
 }
 
-export default function CartPage(){
+export default function CartPage() {
   const { user } = useAuth();
   const nav = useNavigate();
   const location = useLocation();
-  const { items, total, remove, setQty, clear } = useCart();
 
-  function handleProceed() {
+  // ✅ include refresh from cart context
+  const { items, total, remove, setQty, clear, refresh } = useCart();
+
+  const [checking, setChecking] = useState(false);
+
+  // ✅ derived flag: any unavailable item in cart
+  const hasUnavailable = useMemo(
+    () => items.some((it: any) => it.unavailable === true),
+    [items]
+  );
+
+  // ✅ (1) Refresh when Cart page opens (force)
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        setChecking(true);
+        await refresh(true);
+      } catch {
+        // ignore
+      } finally {
+        if (live) setChecking(false);
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [refresh]);
+
+  // ✅ (2) Refresh right before checkout, then block if unavailable
+  async function handleProceed() {
     if (!user?.id) {
       nav("/login", { state: { background: location, from: location } });
       return;
     }
+
+    try {
+      setChecking(true);
+      await refresh(true);
+    } finally {
+      setChecking(false);
+    }
+
+    // after refresh, block checkout if any item is unavailable
+    const stillBad = (items as any[]).some((it) => it.unavailable === true);
+    if (stillBad) {
+      // keep user on cart page; UI message will show
+      return;
+    }
+
     nav("/checkout");
   }
 
@@ -405,13 +454,19 @@ export default function CartPage(){
 
       <header className="cart-head">
         <h1>Your Cart</h1>
-        {items.length>0 && <span className="small">{items.length} item{items.length>1?"s":""}</span>}
+        {items.length > 0 && (
+          <span className="small">
+            {items.length} item{items.length > 1 ? "s" : ""}
+          </span>
+        )}
       </header>
 
-      {items.length===0 ? (
+      {items.length === 0 ? (
         <div className="cart-empty">
           <p>Your cart is empty.</p>
-          <Link to="/categories" className="cta">Start shopping</Link>
+          <Link to="/categories" className="cta">
+            Start shopping
+          </Link>
         </div>
       ) : (
         <div className="grid">
@@ -420,51 +475,63 @@ export default function CartPage(){
             <div className="items-head">Items</div>
 
             <div className="items-list">
-              {items.map(it=>(
+              {items.map((it: any) => (
                 <div className="row" key={it.id}>
                   <Thumb productId={it.productId} src={it.image} alt={it.name} />
                   <div className="meta">
                     <div className="name">{it.name}</div>
-                    {it.variant && <div className="variant" title={it.variant}>{it.variant}</div>}
+                    {it.variant && (
+                      <div className="variant" title={it.variant}>
+                        {it.variant}
+                      </div>
+                    )}
 
                     {/* ✅ Stock status */}
-                    {(it as any).unavailable ? (
-                      <span className="stock bad">Out of stock</span>
-                    ) : (it as any).inStock === true ? (
+                    {it.unavailable ? (
+                      <span className="stock bad">Unavailable</span>
+                    ) : it.inStock === true ? (
                       <span className="stock ok">In stock</span>
                     ) : null}
 
                     <span className="small">{inr(it.price)} each</span>
                   </div>
 
-
                   <div className="qty-mini">
-                    <button onClick={() => setQty(it.id, Math.max(1, it.qty - 1))}>−</button>
+                    <button onClick={() => setQty(it.id, Math.max(1, it.qty - 1))}>
+                      −
+                    </button>
                     <span>{it.qty}</span>
                     <button
                       onClick={() => setQty(it.id, it.qty + 1)}
-                      disabled={(it as any).unavailable === true}
-                      title={(it as any).unavailable ? "Out of stock" : undefined}
+                      disabled={it.unavailable === true}
+                      title={it.unavailable ? "Unavailable" : undefined}
                     >
                       +
                     </button>
-
                   </div>
 
                   <div className="price-remove-wrap">
                     <div className="line">{inr(it.price * it.qty)}</div>
-                    <button className="rm" onClick={() => remove(it.id)}>✕</button>
+                    <button className="rm" onClick={() => remove(it.id)}>
+                      ✕
+                    </button>
                   </div>
                 </div>
               ))}
             </div>
           </section>
 
-
           {/* RIGHT: summary */}
           <aside className="card sum">
             <div className="sum-head">Order Summary</div>
             <div className="sum-inner">
+              {/* ✅ show warning if any unavailable */}
+              {hasUnavailable && (
+                <div className="notice">
+                  Some items in your cart are unavailable (hidden/out of stock). Remove them to continue.
+                </div>
+              )}
+
               <div className="row-sum">
                 <span className="lbl">Subtotal</span>
                 <span className="val">{inr(total)}</span>
@@ -476,16 +543,48 @@ export default function CartPage(){
               </div>
 
               <div className="actions">
-                <button className="primary" onClick={handleProceed}>Proceed to Checkout</button>
-                <button className="secondary" onClick={()=>nav("/categories")}>Continue Shopping</button>
+                <button
+                  className="primary"
+                  onClick={handleProceed}
+                  disabled={checking || hasUnavailable}
+                  title={
+                    hasUnavailable
+                      ? "Remove unavailable items to proceed"
+                      : checking
+                      ? "Checking availability…"
+                      : undefined
+                  }
+                >
+                  {checking ? "Checking…" : "Proceed to Checkout"}
+                </button>
+
+                <button className="secondary" onClick={() => nav("/categories")}>
+                  Continue Shopping
+                </button>
+
                 <button
                   className="danger"
-                  onClick={()=>{
+                  onClick={() => {
                     const ok = confirm("Clear all items from your cart?");
                     if (ok) clear();
                   }}
                 >
                   Clear Cart
+                </button>
+
+                {/* Optional manual refresh button (nice for debugging/admin toggles) */}
+                <button
+                  className="danger"
+                  onClick={async () => {
+                    try {
+                      setChecking(true);
+                      await refresh(true);
+                    } finally {
+                      setChecking(false);
+                    }
+                  }}
+                >
+                  Refresh Availability
                 </button>
               </div>
             </div>

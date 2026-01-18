@@ -116,13 +116,9 @@ const outOfStock = inStock === false;
       </div>
 
       <button
-        className={"btn add" + (outOfStock ? " disabled" : "")}
+        className={"btn add" }
         type="button"
-        disabled={outOfStock}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (!outOfStock) onOpen(p.id);
-        }}
+
         aria-label={outOfStock ? `${p.name} view` : `Add ${p.name} to cart`}
       >
         {outOfStock ? "View" : "Add to cart"}

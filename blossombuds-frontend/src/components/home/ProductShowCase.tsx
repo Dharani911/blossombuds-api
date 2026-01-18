@@ -14,7 +14,7 @@ type ProductLite = {
   visible?: boolean | null;
   isVisible?: boolean | null;
   inStock?: boolean | null;
-  };
+};
 
 type Props = {
   products?: ProductLite[];
@@ -23,11 +23,17 @@ type Props = {
   limit?: number;
 };
 
+/** Visible logic: if backend doesn't send visible, default = visible */
 function isVisibleForCustomer(p: Partial<ProductLite> | any): boolean {
   const v = p?.visible ?? p?.isVisible ?? null;
-  return v === true || v == null; // ✅ default visible
+  return v === true || v == null;
 }
 
+/** Stock logic: if backend doesn't send inStock, default = in stock */
+function isOutOfStock(p: Partial<ProductLite> | any): boolean {
+  const v = p?.inStock;
+  return v === false;
+}
 
 export default function ProductShowcase({
   products,
@@ -37,25 +43,29 @@ export default function ProductShowcase({
 }: Props) {
   const trackRef = useRef<HTMLDivElement>(null);
 
-  const initial = (products || []).filter((p) => p.active !== false && isVisibleForCustomer(p));
+  const initial = (products || []).filter(
+    (p) => p.active !== false && isVisibleForCustomer(p)
+  );
 
   const [items, setItems] = useState<ProductLite[]>(initial);
   const [loading, setLoading] = useState(!products);
   const [err, setErr] = useState<string | null>(null);
-
   const [qvId, setQvId] = useState<number | null>(null);
 
   useEffect(() => {
     let live = true;
+
     if (products && products.length) {
       setItems(products.filter((p) => p.active !== false && isVisibleForCustomer(p)));
       setLoading(false);
       return;
     }
+
     (async () => {
       try {
         setLoading(true);
         setErr(null);
+
         const res = await listNewArrivals(limit);
         if (!live) return;
 
@@ -69,19 +79,27 @@ export default function ProductShowcase({
             p.coverUrl ||
             p.primaryImage?.url ||
             (Array.isArray(p.images)
-              ? p.images.find((i: any) => i?.primary || i?.isPrimary)?.url ||
-                p.images[0]?.url
+              ? p.images.find((i: any) => i?.primary || i?.isPrimary)?.url || p.images[0]?.url
               : undefined) ||
             undefined,
           slug: p.slug || undefined,
           active: p.active,
           visible: p.visible ?? undefined,
           isVisible: p.isVisible ?? undefined,
-          inStock: (p as any)?.inStock ?? (p as any)?.isInStock ?? true,
-          isInStock: (p as any)?.isInStock ?? undefined,
-
+          // ✅ stock normalization (default true if missing)
+          inStock:
+            typeof p.inStock === "boolean"
+              ? p.inStock
+              : typeof p.isInStock === "boolean"
+              ? p.isInStock
+              : typeof p.instock === "boolean"
+              ? p.instock
+              : typeof p.in_stock === "boolean"
+              ? p.in_stock
+              : true,
         }));
 
+        // ✅ visible=false products should not appear to customer
         setItems(mapped.filter((p) => p.active !== false && isVisibleForCustomer(p)));
       } catch (e: any) {
         if (!live) return;
@@ -90,15 +108,18 @@ export default function ProductShowcase({
         if (live) setLoading(false);
       }
     })();
+
     return () => {
       live = false;
     };
   }, [products, limit]);
 
+  // backfill images
   useEffect(() => {
     let live = true;
     const withoutImg = items.filter((p) => !p.imageUrl);
     if (!withoutImg.length) return;
+
     (async () => {
       try {
         const updates = await Promise.all(
@@ -106,9 +127,9 @@ export default function ProductShowcase({
             try {
               const imgs = await listProductImages(p.id);
               const best =
-                imgs?.find((i: any) => i?.primary)?.url ||
-                imgs?.find((i: any) => (i?.sortOrder ?? 9999) === 0)?.url ||
-                imgs?.[0]?.url ||
+                (imgs as any)?.find((i: any) => i?.primary)?.url ||
+                (imgs as any)?.find((i: any) => (i?.sortOrder ?? 9999) === 0)?.url ||
+                (imgs as any)?.[0]?.url ||
                 null;
               return { id: p.id, url: best };
             } catch {
@@ -116,7 +137,9 @@ export default function ProductShowcase({
             }
           })
         );
+
         if (!live) return;
+
         if (updates.some((u) => u.url)) {
           setItems((prev) =>
             prev.map((it) => {
@@ -129,6 +152,7 @@ export default function ProductShowcase({
         /* ignore */
       }
     })();
+
     return () => {
       live = false;
     };
@@ -154,10 +178,6 @@ export default function ProductShowcase({
   );
 
   const openQuickView = (id: number) => setQvId(id);
-  const onAddClick = (id: number) => openQuickView(id);
-  const onCardClick = (id: number) => openQuickView(id);
-const inStock = (p as any)?.inStock ?? (p as any)?.isInStock ?? true;
-const outOfStock = inStock === false;
 
   return (
     <section className="ps" aria-label={title}>
@@ -195,51 +215,56 @@ const outOfStock = inStock === false;
               </article>
             ))
           : items.map((p) => {
+              const outOfStock = isOutOfStock(p);
+
               return (
                 <article
                   key={p.id}
                   className="ps-card"
                   role="button"
                   tabIndex={0}
-                  onClick={() => onCardClick(Number(p.id))}
+                  onClick={() => openQuickView(Number(p.id))}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") onCardClick(Number(p.id));
+                    if (e.key === "Enter" || e.key === " ") openQuickView(Number(p.id));
                   }}
                 >
                   <div className="ps-img" aria-label={p.name}>
+                    {outOfStock && <div className="ps-oos">Out of stock</div>}
+
                     {p.imageUrl ? (
                       <img src={p.imageUrl} alt="" loading="lazy" decoding="async" />
                     ) : (
                       <div className="ps-ph" aria-hidden="true" />
                     )}
                   </div>
+
                   <div className="ps-body" onClick={(e) => e.stopPropagation()}>
                     <div className="ps-title">{p.name}</div>
+
                     <div className="ps-row2">
                       <div className="ps-price">{fmt.format(p.price)}</div>
+
                       <div className="ps-actions">
                         <button
-                          className={"ps-btn" + (outOfStock ? " disabled" : "")}
-                          disabled={outOfStock}
-                          onClick={() => { if (!outOfStock) onAddClick(Number(p.id)); }}
+                          className={"ps-btn" }
+
+
                         >
                           {outOfStock ? "View" : "Add to cart"}
                         </button>
-
                       </div>
                     </div>
                   </div>
                 </article>
               );
             })}
+
         {!loading && items.length === 0 && (
           <div className="ps-empty">No new arrivals right now. Check back soon!</div>
         )}
       </div>
 
-      {qvId != null && (
-        <ProductQuickView productId={qvId} onClose={() => setQvId(null)} />
-      )}
+      {qvId != null && <ProductQuickView productId={qvId} onClose={() => setQvId(null)} />}
     </section>
   );
 }
@@ -294,7 +319,7 @@ const styles = `
           mask-image: linear-gradient(90deg, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
 }
 
-/* card sizing: a tad tighter on phones */
+/* card sizing */
 .ps-card{
   flex: 0 0 auto;
   width: clamp(200px, 70vw, 280px);
@@ -311,17 +336,10 @@ const styles = `
 @media (hover:hover){
   .ps-card:hover{ transform: translateY(-2px); box-shadow: 0 18px 44px rgba(0,0,0,.12); }
 }
-.ps-card:focus-visible{
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--bb-accent, #F05D8B), transparent 70%), 0 12px 34px rgba(0,0,0,.10);
-  border-color: color-mix(in oklab, var(--bb-accent), transparent 60%);
-}
-.ps-card.skel{ overflow:hidden; }
 
-/* image: keep 3:2 like before for visual rhythm */
+/* image */
 .ps-img{ position:relative; display:block; background:#f3f3f3; cursor:pointer; }
-.ps-img::after{
-  content:""; display:block; width:100%; padding-top: 66.6667%; /* 3:2 */
-}
+.ps-img::after{ content:""; display:block; width:100%; padding-top: 66.6667%; }
 .ps-img img{
   position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
   border-bottom: 1px solid rgba(0,0,0,.06);
@@ -331,6 +349,19 @@ const styles = `
   position:absolute; inset:0; display:block;
   background: linear-gradient(135deg, #f2f2f2, #f8f8f8);
   border-bottom: 1px solid rgba(0,0,0,.06);
+}
+
+/* Out of stock badge */
+.ps-oos{
+  position:absolute; left:10px; top:10px;
+  z-index:2;
+  padding:4px 10px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:900;
+  background: rgba(0,0,0,.72);
+  color:#fff;
+  backdrop-filter: blur(4px);
 }
 
 /* body */
@@ -346,12 +377,14 @@ const styles = `
 .ps-actions{ display:flex; gap: 8px; }
 .ps-btn{
   display:inline-flex; align-items:center; justify-content:center; padding:.5rem .85rem;
-  border-radius:999px; border:none; cursor:pointer; background:var(--bb-accent); color:#fff; font-weight:900; text-decoration:none;
+  border-radius:999px; border:none; cursor:pointer; background:var(--bb-accent); color:#fff; font-weight:900;
   font-size: 13px;
 }
 .ps-btn:active{ transform: translateY(1px); }
+.ps-btn.disabled{ opacity:.55; cursor:not-allowed; }
+.ps-btn.disabled:active{ transform:none; }
 
-/* empty + skeletons + error */
+/* empty + skeleton + error */
 .ps-empty{ color: var(--bb-primary); opacity:.75; padding: 12px 0; }
 .sk{
   background: linear-gradient(90deg,#eee,#f8f8f8,#eee); background-size:200% 100%; animation: sk 1.2s linear infinite; border-radius:8px;
@@ -369,22 +402,4 @@ const styles = `
   padding: 8px 10px;
   border-radius: 12px;
 }
-.ps-oos{
-  position:absolute; left:10px; top:10px;
-  z-index:2;
-  padding:4px 10px;
-  border-radius:999px;
-  font-size:11px;
-  font-weight:900;
-  background: rgba(0,0,0,.72);
-  color:#fff;
-  backdrop-filter: blur(4px);
-}
-
-.ps-btn.disabled{
-  opacity:.55;
-  cursor:not-allowed;
-}
-.ps-btn.disabled:active{ transform:none; }
-
 `;

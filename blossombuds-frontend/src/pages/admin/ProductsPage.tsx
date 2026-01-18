@@ -41,15 +41,17 @@ function Toggle({
   onChange,
   title,
   disabled,
+  tone = "mint", // "mint" | "pink"
 }: {
   checked: boolean;
   onChange: (val: boolean) => void;
   title?: string;
   disabled?: boolean;
+  tone?: "mint" | "pink";
 }) {
   return (
     <button
-      className={"switch" + (checked ? " on" : "")}
+      className={"switch" + (checked ? " on" : "") + " " + tone}
       onClick={() => !disabled && onChange(!checked)}
       title={title}
       aria-label={title || (checked ? "On" : "Off")}
@@ -60,6 +62,7 @@ function Toggle({
     </button>
   );
 }
+
 function fmtRange(from: number, to: number, total: number) {
   if (total === 0) return "0 results";
   return `${from}–${to} of ${new Intl.NumberFormat("en-IN").format(total)}`;
@@ -301,28 +304,42 @@ export default function ProductsPage() {
                     </td>
 
                     <td className="actions">
-                      <StarButton
-                        on={!!row.featured}
-                        saving={!!busyFeature[row.id]}
-                        onClick={() => onToggleFeatured(row)}
-                        title={row.featured ? "Unfeature" : "Feature"}
-                      />
-                      <Toggle
-                        checked={isVisible}
-                        onChange={(val) => onToggleVisible(row, val)}
-                        title={isVisible ? "Hide" : "Show"}
-                        disabled={isLocked(row.id)}
-                      />
-                      <Toggle
-                        checked={inStock}
-                        onChange={(val) => onToggleStock(row, val)}
-                        title={inStock ? "Mark out of stock" : "Mark in stock"}
-                        disabled={isLocked(row.id)}
-                      />
+                      <div className="flag-actions">
+                        <div className="flag">
+                          <small>Featured</small>
+                          <StarButton
+                            on={!!row.featured}
+                            saving={!!busyFeature[row.id]}
+                            onClick={() => onToggleFeatured(row)}
+                            title={row.featured ? "Unfeature" : "Feature"}
+                          />
+                        </div>
+
+                        <div className="flag">
+                          <small>Visible</small>
+                          <Toggle tone="pink"
+                            checked={isVisible}
+                            onChange={(val) => onToggleVisible(row, val)}
+                            title={isVisible ? "Hide" : "Show"}
+                            disabled={isLocked(row.id)}
+                          />
+                        </div>
+
+                        <div className="flag">
+                          <small>Stock</small>
+                          <Toggle tone="mint"
+                            checked={inStock}
+                            onChange={(val) => onToggleStock(row, val)}
+                            title={inStock ? "Mark out of stock" : "Mark in stock"}
+                            disabled={isLocked(row.id)}
+                          />
+                        </div>
+                      </div>
 
                       <button className="ghost" onClick={() => setModal({ mode: "edit", data: row })}>Edit</button>
                       <button className="ghost bad" onClick={() => onDelete(row.id)}>Delete</button>
                     </td>
+
                   </tr>
                 );
               })}
@@ -2240,6 +2257,28 @@ const css = `
 .sk-price { width: 80px; margin-left: auto; }
 .sk-flags { width: 180px; }
 .sk-actions { height: 32px; width: 200px; margin-left: auto; }
+.flag-actions{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+.flag{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 8px;
+  border:1px dashed rgba(0,0,0,.10);
+  border-radius:12px;
+  background:#fff;
+}
+.flag small{
+  font-size:11px;
+  font-weight:800;
+  opacity:.65;
+  text-transform:uppercase;
+  letter-spacing:.4px;
+}
 
 @keyframes wave {
   0% { background-position: 200% 0; }
@@ -2280,6 +2319,17 @@ const css = `
   background: rgba(198,40,40,0.10);
   color: #b71c1c;
 }
+.switch.pink.on{
+  background: linear-gradient(135deg, rgba(240,93,139,0.18) 0%, rgba(240,93,139,0.08) 100%);
+  border-color: rgba(240,93,139,0.35);
+}
+.switch.pink.on .knob{ background: #F05D8B; }
+
+.switch.mint.on{
+  background: linear-gradient(135deg, rgba(115,194,167,0.2) 0%, rgba(115,194,167,0.1) 100%);
+  border-color: rgba(115,194,167,0.4);
+}
+.switch.mint.on .knob{ background: #73C2A7; }
 
 @keyframes toastSlide {
   0% { transform: translateY(24px); opacity: 0; }

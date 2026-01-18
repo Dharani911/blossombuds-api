@@ -68,13 +68,10 @@ function SmallProductCard({ p, onOpen }: { p: Product; onOpen: (id: number) => v
       </div>
 
       <button
-        className={"btn add" + (outOfStock ? " disabled" : "")}
+        className={"btn add" }
         type="button"
-        disabled={outOfStock}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (!outOfStock) onOpen(p.id);
-        }}
+
+
         aria-label={outOfStock ? `${p.name} is out of stock` : `Open ${p.name}`}
       >
         {outOfStock ? "View" : "Add to cart"}
