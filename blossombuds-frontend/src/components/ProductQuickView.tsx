@@ -121,6 +121,8 @@ export default function ProductQuickView({ productId, onClose }: Props) {
       return `₹${unitPrice.toFixed(2)}`;
     }
   }, [unitPrice]);
+  const isOutOfStock = (p as any)?.inStock === false;
+  const isUnavailable = (p as any)?.active === false || (p as any)?.visible === false || isOutOfStock;
 
   function pick(optionId: number, valueId: number) {
     setSel(s => ({ ...s, [optionId]: valueId }));
@@ -128,6 +130,13 @@ export default function ProductQuickView({ productId, onClose }: Props) {
 
   function onAdd() {
     if (!p || adding) return;
+    const out = (p as any)?.inStock === false;
+        const inactive = (p as any)?.active === false;
+        const hidden = (p as any)?.visible === false;
+        if (out || inactive || hidden) {
+          alert(out ? "Out of stock." : "This product is not available right now.");
+          return;
+        }
     for (const o of opts) {
       if (o.required && !sel[o.id]) {
         alert(`Please select: ${o.name}`);
@@ -149,6 +158,9 @@ export default function ProductQuickView({ productId, onClose }: Props) {
         })
         .filter(Boolean)
         .join(" / "),
+        inStock: (p as any)?.inStock !== false,
+        unavailable: (p as any)?.inStock === false || (p as any)?.active === false || (p as any)?.visible === false,
+        lastCheckedAt: Date.now(),
     });
     setQty(1);
     setTimeout(() => setAdding(false), 650);
@@ -234,7 +246,12 @@ export default function ProductQuickView({ productId, onClose }: Props) {
             <div className="pqv-info">
               <h1 className="pqv-title">{p.name}</h1>
               <div className="pqv-price">{priceText}</div>
-
+               {isOutOfStock && (
+                <div className="pqv-stock bad" role="status">Out of stock</div>
+              )}
+              {!isOutOfStock && (p as any)?.inStock === true && (
+                <div className="pqv-stock ok" role="status">In stock</div>
+              )}
               {opts.map((o, idx) => {
                 const act = o.values.filter(v => v.active !== false && (v as any)?.visible !== false);
                 if (act.length === 0) return null;
@@ -299,13 +316,15 @@ export default function ProductQuickView({ productId, onClose }: Props) {
               {/* -------------------------------------- */}
 
               <div className="pqv-actions">
-                <button
-                  className={"pqv-btn" + (adding ? " pulse" : "")}
-                  onClick={onAdd}
-                  disabled={adding}
-                >
-                  {adding ? "Added!" : "Add to cart"}
-                </button>
+                                <button
+                                  className={"pqv-btn" + (adding ? " pulse" : "")}
+                                  onClick={onAdd}
+                                  disabled={adding || isUnavailable}
+                                  title={isOutOfStock ? "Out of stock" : undefined}
+                                >
+                                  {isOutOfStock ? "Out of stock" : adding ? "Added!" : "Add to cart"}
+                                </button>
+
                 <Link to="/cart" className="pqv-btn secondary">Go to cart</Link>
               </div>
 
@@ -567,6 +586,24 @@ const styles = `
   font-size:14px;
   color:#333;
   white-space: pre-wrap;  /* 👈 preserve spaces + line breaks */
+}
+.pqv-stock{
+  display:inline-flex;
+  align-items:center;
+  height:28px;
+  padding:0 10px;
+  border-radius:999px;
+  font-weight:900;
+  font-size:12px;
+  border:1px solid rgba(0,0,0,.08);
+  margin-bottom:10px;
+  width: fit-content;
+}
+.pqv-stock.ok{
+  background: rgba(0, 160, 80, .10);
+}
+.pqv-stock.bad{
+  background: rgba(240, 93, 139, .12);
 }
 
 `;

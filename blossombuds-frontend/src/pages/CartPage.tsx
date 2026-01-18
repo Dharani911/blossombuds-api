@@ -280,6 +280,19 @@ const styles = `
 .link{ text-decoration:none; color: var(--primary); font-weight:800; opacity:.85; }
 .hr{ height:1px; background: var(--ink); margin:4px 0; }
 .small{ font-size:12px; opacity:.75; }
+.stock{
+  display:inline-flex;
+  align-items:center;
+  height:22px;
+  padding:0 8px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:900;
+  border:1px solid rgba(0,0,0,.10);
+  width: fit-content;
+}
+.stock.ok{ background: rgba(0,160,80,.10); }
+.stock.bad{ background: rgba(240,93,139,.12); color: var(--danger); }
 
 `;
 
@@ -413,13 +426,29 @@ export default function CartPage(){
                   <div className="meta">
                     <div className="name">{it.name}</div>
                     {it.variant && <div className="variant" title={it.variant}>{it.variant}</div>}
+
+                    {/* ✅ Stock status */}
+                    {(it as any).unavailable ? (
+                      <span className="stock bad">Out of stock</span>
+                    ) : (it as any).inStock === true ? (
+                      <span className="stock ok">In stock</span>
+                    ) : null}
+
                     <span className="small">{inr(it.price)} each</span>
                   </div>
+
 
                   <div className="qty-mini">
                     <button onClick={() => setQty(it.id, Math.max(1, it.qty - 1))}>−</button>
                     <span>{it.qty}</span>
-                    <button onClick={() => setQty(it.id, it.qty + 1)}>+</button>
+                    <button
+                      onClick={() => setQty(it.id, it.qty + 1)}
+                      disabled={(it as any).unavailable === true}
+                      title={(it as any).unavailable ? "Out of stock" : undefined}
+                    >
+                      +
+                    </button>
+
                   </div>
 
                   <div className="price-remove-wrap">

@@ -592,6 +592,9 @@ export default function CheckoutPage() {
     () => (addrList || []).filter(a => INDIA_ID && a.countryId && Number(a.countryId) !== Number(INDIA_ID)),
     [addrList, INDIA_ID]
   );
+  const hasUnavailableItems = useMemo(() => {
+    return (items || []).some((it: any) => it?.unavailable === true || it?.inStock === false);
+  }, [items]);
 
   // When toggling flow, pick selection from the right bucket
   useEffect(() => {
@@ -681,6 +684,11 @@ export default function CheckoutPage() {
 
   async function onSendWhatsAppInternational() {
     if (!user?.id) { setErr("Please login to continue."); return; }
+        if ((items as any[]).some(it => it?.unavailable === true || it?.inStock === false)) {
+          setErr("Some items are out of stock. Please remove them from cart to continue.");
+          return;
+        }
+
     if (!selectedAddrId) { setErr("Please select an international address."); return; }
     const addr = internationalAddresses.find(a => a.id === selectedAddrId);
     if (!addr) { setErr("Please select an international address."); return; }
@@ -755,6 +763,10 @@ export default function CheckoutPage() {
 
   async function onPlaceDomestic() {
     if (!user?.id) { setErr("Please login to continue."); return; }
+    if ((items as any[]).some(it => it?.unavailable === true || it?.inStock === false)) {
+      setErr("Some items are out of stock. Please remove them from cart to continue.");
+      return;
+    }
 
     const selectedAddress = domesticAddresses.find(a => a.id === selectedAddrId) || null;
     if (!selectedAddress) { setErr("Please add/select an Indian address."); return; }
@@ -1457,15 +1469,32 @@ export default function CheckoutPage() {
                   {500 - (orderNotes?.length || 0)} characters left
                 </div>
               </div>)}
+            {hasUnavailableItems && (
+              <div className="small" style={{ color: "#b0003a", fontWeight: 900 }}>
+                Some items are out of stock. Please remove them from cart to continue.
+              </div>
+            )}
 
             <div className="actions">
               {international ? (
-                <button className="btn primary" onClick={onSendWhatsAppInternational} disabled={submitting}>
+                <button
+                  className="btn primary"
+                  onClick={onSendWhatsAppInternational}
+                  disabled={submitting || hasUnavailableItems}
+                  title={hasUnavailableItems ? "Remove out-of-stock items to continue" : undefined}
+                >
+
                   {submitting ? "Opening WhatsApp…" : "Send on WhatsApp"}
                 </button>
               ) : (
 
-                <button className="btn primary" onClick={onPlaceDomestic} disabled={submitting || !user?.id || shippingLoading}>
+                <button
+                  className="btn primary"
+                  onClick={onPlaceDomestic}
+                  disabled={submitting || !user?.id || shippingLoading || hasUnavailableItems}
+                  title={hasUnavailableItems ? "Remove out-of-stock items to continue" : undefined}
+                >
+
                   {submitting ? "Processing…" : "Proceed to Pay"}
                 </button>
               )}

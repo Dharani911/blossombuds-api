@@ -76,6 +76,9 @@ public class Product {
     @LastModifiedDate
     private LocalDateTime modifiedAt;
 
+    @Column(name = "in_stock", nullable = false)
+    private Boolean inStock = true;
+
     @OneToMany(mappedBy = "product", fetch = FetchType.LAZY)
     @JsonIgnore
     @ToString.Exclude @EqualsAndHashCode.Exclude

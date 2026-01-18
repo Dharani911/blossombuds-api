@@ -18,6 +18,8 @@ public class ProductDto {
 
     private Boolean visible;   // default true if null
     private Boolean featured;  // default false if null
+    /** Indicates whether the product is currently in stock. */
+    private Boolean inStock;
 
 
     /** Read-only: when created (useful for "new arrivals"). */

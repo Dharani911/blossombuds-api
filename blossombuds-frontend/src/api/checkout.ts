@@ -54,6 +54,8 @@ export type CheckoutResponse =
       currency?: string;
       razorpayOrder?: Record<string, any>;
       whatsappUrl?: undefined;
+      message?: string;
+            errors?: Array<{ productId?: number; message: string }>;
     }
   | {
       type: "WHATSAPP";
@@ -61,6 +63,8 @@ export type CheckoutResponse =
       currency?: undefined;
       razorpayOrder?: undefined;
       whatsappUrl?: string;
+      message?: string;
+            errors?: Array<{ productId?: number; message: string }>;
     };
 
 /** Start checkout (calls your /api/checkout). */
@@ -69,8 +73,19 @@ export async function startCheckout(order: OrderDto, items: OrderItemDto[]) {
     order,
     items,
   } satisfies CheckoutRequest);
+
+
+  if ((data as any)?.errors?.length) {
+    const msg =
+      (data as any)?.message ||
+      (data as any).errors.map((e: any) => e.message).join("\n") ||
+      "Checkout blocked.";
+    throw new Error(msg);
+  }
+
   return data;
 }
+
 
 /** If you choose to create the Razorpay order in a separate step. */
 export async function createRzpOrder(orderId: number) {

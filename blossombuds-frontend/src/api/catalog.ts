@@ -24,6 +24,7 @@ export type Product = {
   currency?: string | null;
   primaryImageUrl?: string | null;
   active?: boolean | null;
+  inStock?: boolean | null;
 };
 
 export type ProductImage = {
@@ -68,6 +69,22 @@ function normalizePage<T>(data: any): PageResp<T> {
       size: data.length || 0,
     };
   }
+  function normalizeProduct(p: any): Product {
+    if (!p) return p as Product;
+
+    // accept multiple naming styles from backend just in case
+    const inStock =
+      typeof p.inStock === "boolean" ? p.inStock :
+      typeof p.instock === "boolean" ? p.instock :
+      typeof p.in_stock === "boolean" ? p.in_stock :
+      null;
+
+    return {
+      ...p,
+      inStock,
+    } as Product;
+  }
+
 
   // Spring Page OR CachedPage
   const content = Array.isArray(data?.content) ? (data.content as T[]) : null;
@@ -130,7 +147,12 @@ export async function listProductsByCategory(
   const { data } = await http.get(`/api/catalog/categories/${categoryId}/products`, {
     params: { page, size },
   });
-  return normalizePage<Product>(data);
+  //return normalizePage<Product>(data);
+  const pageResp = normalizePage<Product>(data);
+    return {
+      ...pageResp,
+      content: (pageResp.content || []).map(normalizeProduct),
+    };
 }
 
 /** Build children list on FE by filtering all categories by parentId. */
@@ -147,14 +169,20 @@ export async function listChildCategories(parentId: number): Promise<Category[]>
 /** Get product by id (public). */
 export async function getProduct(id: number): Promise<Product> {
   const { data } = await http.get(`/api/catalog/products/${id}`);
-  return data as Product;
+  return normalizeProduct(data);
+
 }
 
 /** Optional: list all products paged (not required for categories page). */
 export async function listProductsPage(page = 0, size = 24): Promise<PageResp<Product>> {
   const { data } = await http.get("/api/catalog/products", { params: { page, size } });
-  return normalizePage<Product>(data);
+  const pageResp = normalizePage<Product>(data);
+  return {
+    ...pageResp,
+    content: (pageResp.content || []).map(normalizeProduct),
+  };
 }
+
 
 /**
  * New Arrivals (public).
@@ -178,7 +206,8 @@ export async function listNewArrivals(limit = 12): Promise<Product[]> {
       params: { limit },
     });
 
-    const rows = unwrap(r1.data).slice(0, limit);
+    const rows = unwrap(r1.data).slice(0, limit).map(normalizeProduct);
+
     if (rows.length) return rows;
   } catch { /* ignore and try next */ }
 
@@ -188,7 +217,8 @@ export async function listNewArrivals(limit = 12): Promise<Product[]> {
       params: { page: 0, size: limit, sort: "createdAt", dir: "DESC" },
     });
 
-    const rows = unwrap(r2.data).slice(0, limit);
+    const rows = unwrap(r1.data).slice(0, limit).map(normalizeProduct);
+
     if (rows.length) return rows;
   } catch { /* ignore and try next */ }
 
@@ -197,7 +227,8 @@ export async function listNewArrivals(limit = 12): Promise<Product[]> {
     const r3 = await http.get("/api/catalog/products", {
       params: { page: 0, size: limit, newArrivals: true, active: true },
     });
-    const rows = unwrap(r3.data).slice(0, limit);
+    const rows = unwrap(r1.data).slice(0, limit).map(normalizeProduct);
+
     if (rows.length) return rows;
   } catch { /* ignore */ }
 

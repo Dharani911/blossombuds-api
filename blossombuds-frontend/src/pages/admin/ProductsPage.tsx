@@ -108,7 +108,9 @@ export default function ProductsPage() {
   // Separate per-row locks
   const [busyFeature, setBusyFeature] = useState<Record<number, boolean>>({});
   const [busyVisible, setBusyVisible] = useState<Record<number, boolean>>({});
-  const isLocked = (id: number) => !!busyFeature[id] || !!busyVisible[id];
+  const [busyStock, setBusyStock] = useState<Record<number, boolean>>({});
+  const isLocked = (id: number) => !!busyFeature[id] || !!busyVisible[id] || !!busyStock[id];
+
 
   useEffect(() => {
     let alive = true;
@@ -154,6 +156,41 @@ export default function ProductsPage() {
       setToast({ kind: "bad", msg: e?.response?.data?.message || "Delete failed" });
     }
   }
+  async function onToggleStock(p: Product, next: boolean) {
+    if (isLocked(p.id)) return;
+
+    setBusyStock(m => ({ ...m, [p.id]: true }));
+
+    const prev = Boolean((p as any).inStock ?? (p as any).isInStock ?? true);
+
+    // optimistic UI
+    setData(d => d
+      ? ({ ...d, content: d.content.map(x => x.id === p.id ? ({ ...x, inStock: next } as any) : x) })
+      : d
+    );
+
+    try {
+      const updated = await updateProduct(p.id, { inStock: next } as any);
+      const server = Boolean((updated as any).inStock ?? (updated as any).isInStock ?? next);
+
+      setData(d => d
+        ? ({ ...d, content: d.content.map(x => x.id === p.id ? ({ ...x, inStock: server } as any) : x) })
+        : d
+      );
+
+      setToast({ kind: "ok", msg: server ? "Marked in stock" : "Marked out of stock" });
+    } catch (e: any) {
+      // revert
+      setData(d => d
+        ? ({ ...d, content: d.content.map(x => x.id === p.id ? ({ ...x, inStock: prev } as any) : x) })
+        : d
+      );
+      setToast({ kind: "bad", msg: e?.response?.data?.message || "Failed to update stock" });
+    } finally {
+      setBusyStock(m => ({ ...m, [p.id]: false }));
+    }
+  }
+
 
   // Toggle VISIBLE — use updateProduct(id, { visible: ... })
   async function onToggleVisible(p: Product, nextVisible: boolean) {
@@ -232,7 +269,9 @@ export default function ProductsPage() {
                   <th key="slug">Slug</th>,
                   <th key="price" style={{ width: 120, textAlign: "right" }}>Price</th>,
                   <th key="flags" style={{ width: 200 }}>Flags</th>,
+                  <th key="stock" style={{ width: 140 }}>Stock</th>,
                   <th key="actions" style={{ width: 340 }}></th>,
+
                 ]}
               </tr>
             </thead>
@@ -240,6 +279,8 @@ export default function ProductsPage() {
             <tbody>
               {filtered.map(row => {
                 const isVisible = Boolean((row as any).visible ?? (row as any).isVisible);
+                const inStock = Boolean((row as any).inStock ?? (row as any).isInStock ?? true);
+
                 return (
                   <tr key={row.id}>
                     <td>#{row.id}</td>
@@ -253,6 +294,12 @@ export default function ProductsPage() {
                       {!!row.featured && <span className="pill gold">Featured</span>}
                       {row.active === false && <span className="pill off">Inactive</span>}
                     </td>
+                    <td>
+                      <span className={"pill " + (inStock ? "ok" : "off")}>
+                        {inStock ? "In stock" : "Out"}
+                      </span>
+                    </td>
+
                     <td className="actions">
                       <StarButton
                         on={!!row.featured}
@@ -266,6 +313,13 @@ export default function ProductsPage() {
                         title={isVisible ? "Hide" : "Show"}
                         disabled={isLocked(row.id)}
                       />
+                      <Toggle
+                        checked={inStock}
+                        onChange={(val) => onToggleStock(row, val)}
+                        title={inStock ? "Mark out of stock" : "Mark in stock"}
+                        disabled={isLocked(row.id)}
+                      />
+
                       <button className="ghost" onClick={() => setModal({ mode: "edit", data: row })}>Edit</button>
                       <button className="ghost bad" onClick={() => onDelete(row.id)}>Delete</button>
                     </td>
@@ -350,6 +404,9 @@ function ProductModal({
 
   const [showAdvanced, setShowAdvanced] = useState(false);
   const id = initial?.id;
+const [inStock, setInStock] = useState<boolean>(
+  Boolean((initial as any)?.inStock ?? (initial as any)?.isInStock ?? true)
+);
 
   useEffect(() => {
     if (mode === "add" || !slug) setSlug(slugifyName(name));
@@ -377,8 +434,10 @@ function ProductModal({
       price: Number(price) || 0,
       visible,
       featured,
+      inStock, // ✅ ADD THIS
       ...(featured ? { featuredRank: featuredRank === "" ? null : Number(featuredRank) } : { featuredRank: null }),
     } as any;
+
 
     try {
       if (mode === "add") {
@@ -453,6 +512,12 @@ function ProductModal({
                     <StarButton on={featured} onClick={() => setFeatured(!featured)} title={featured ? "Unfeature" : "Feature"} />
                     <span>Featured</span>
                   </label>
+
+                  <label className="check">
+                    <Toggle checked={inStock} onChange={setInStock} title={inStock ? "In stock" : "Out of stock"} />
+                    <span>In stock</span>
+                  </label>
+
 
                   {featured && (
                     <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -2209,6 +2274,11 @@ const css = `
   right: 16px;
   bottom: 16px;
   z-index: 101;
+}
+.pill.off { background: rgba(0,0,0,0.06); color:#666; }
+.pill.off {
+  background: rgba(198,40,40,0.10);
+  color: #b71c1c;
 }
 
 @keyframes toastSlide {

@@ -3,11 +3,13 @@ package com.blossombuds.service;
 import com.blossombuds.domain.CheckoutIntent;
 import com.blossombuds.domain.Country;
 import com.blossombuds.domain.Customer;
+import com.blossombuds.domain.Product;
 import com.blossombuds.dto.OrderDto;
 import com.blossombuds.dto.OrderItemDto;
 import com.blossombuds.repository.CheckoutIntentRepository;
 import com.blossombuds.repository.CountryRepository;
 import com.blossombuds.repository.CustomerRepository;
+import com.blossombuds.repository.ProductRepository;
 import com.blossombuds.service.payments.RazorpayService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AllArgsConstructor;
@@ -38,7 +40,7 @@ public class CheckoutService {
     private final RazorpayService rzpService;
     private final CheckoutTxService checkoutTxService;
     private final ObjectMapper om = new ObjectMapper();
-
+    private final ProductRepository productRepo;
     /** Starts checkout. India → returns RZP order payload; Intl → WhatsApp URL. */
     /*@Transactional
     public Decision startCheckout(OrderDto orderDraft, List<OrderItemDto> items) {
@@ -117,7 +119,7 @@ public class CheckoutService {
 
         Country country = countryRepo.findById(orderDraft.getShipCountryId())
                 .orElseThrow(() -> new IllegalArgumentException("Country not found: " + shipCountryId));
-
+        assertAllItemsInStock(items);
         // International
         if (!isIndia(country)) {
             log.info("[CHECKOUT][INTL] Building WhatsApp URL for non-India destination");
@@ -151,6 +153,42 @@ public class CheckoutService {
                 rzpOrderId, ci.getId(), java.time.Duration.between(t0, Instant.now()).toMillis());
 
         return Decision.rzpOrder(rzp, currency);
+    }
+    /** Ensures every checkout item refers to an active, visible, in-stock product. */
+    private void assertAllItemsInStock(List<OrderItemDto> items) {
+        for (OrderItemDto it : items) {
+            if (it == null) continue;
+
+
+            Long productId = it.getProductId();
+
+            if (productId == null) {
+                log.warn("[CHECKOUT][STOCK][FAIL] Missing productId in item");
+                throw new IllegalArgumentException("Invalid item: missing productId");
+            }
+
+            Product p = productRepo.findById(productId)
+                    .orElseThrow(() -> {
+                        log.warn("[CHECKOUT][STOCK][FAIL] Product not found id={}", productId);
+                        return new IllegalArgumentException("Product not found: " + productId);
+                    });
+
+            // Keep rules strict at checkout time
+            if (Boolean.FALSE.equals(p.getActive())) {
+                log.warn("[CHECKOUT][STOCK][FAIL] Product inactive id={} name='{}'", p.getId(), p.getName());
+                throw new IllegalArgumentException("Product unavailable: " + p.getName());
+            }
+            if (Boolean.FALSE.equals(p.getVisible())) {
+                log.warn("[CHECKOUT][STOCK][FAIL] Product not visible id={} name='{}'", p.getId(), p.getName());
+                throw new IllegalArgumentException("Product unavailable: " + p.getName());
+            }
+            if (Boolean.FALSE.equals(p.getInStock())) {
+                log.warn("[CHECKOUT][STOCK][FAIL] Out of stock id={} name='{}'", p.getId(), p.getName());
+                throw new IllegalArgumentException("Out of stock: " + p.getName());
+            }
+        }
+
+        log.info("[CHECKOUT][STOCK][OK] itemsCount={}", items.size());
     }
 
     // ---------- helpers ----------

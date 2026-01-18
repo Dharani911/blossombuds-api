@@ -305,7 +305,7 @@ public class CatalogService {
         p.setPrice(dto.getPrice());
         p.setVisible(dto.getVisible() != null ? dto.getVisible() : Boolean.TRUE);
         p.setFeatured(dto.getFeatured() != null ? dto.getFeatured() : Boolean.FALSE);
-
+        p.setInStock(dto.getInStock() != null ? dto.getInStock() : Boolean.TRUE);
         p.setActive(dto.getActive() != null ? dto.getActive() : Boolean.TRUE);
         Product saved = productRepo.save(p);
         log.info("[PRODUCT][CREATE][OK] id={} visible={} featured={}", saved.getId(), saved.getVisible(), saved.getFeatured());
@@ -367,6 +367,7 @@ public class CatalogService {
         if (dto.getPrice() != null) p.setPrice(dto.getPrice());
         if (dto.getVisible() != null)     p.setVisible(dto.getVisible());
         if (dto.getFeatured() != null)    p.setFeatured(dto.getFeatured());
+        if (dto.getInStock() != null)    p.setInStock(dto.getInStock());
         if (dto.getActive() != null) p.setActive(dto.getActive());
         log.info("[PRODUCT][UPDATE][OK] id={}", id);
         return toDto(p); // dirty checking
@@ -1247,6 +1248,7 @@ public class CatalogService {
         d.setPrice(p.getPrice());
         d.setVisible(p.getVisible());
         d.setFeatured(p.getFeatured());
+        d.setInStock(p.getInStock());
         d.setActive(p.getActive());
         return d;
     }
@@ -1287,6 +1289,13 @@ public class CatalogService {
         return CachedPage.from(pg); // implement a small helper: content, page, size, total, totalPages, etc.
     }
 
+    /** Ensures the product is purchasable before adding to cart / creating order. */
+    private void assertInStock(Product p) {
+        if (p == null) throw new IllegalArgumentException("Product is required");
+        if (Boolean.FALSE.equals(p.getInStock())) {
+            throw new IllegalArgumentException("Product is out of stock");
+        }
+    }
 
     @Cacheable(cacheNames = PRODUCTS_BY_CATEGORY, key = "'cat=' + #categoryId + ':p=' + #page + ':s=' + #size")
     public CachedPage<ProductDto> listProductsByCategoryDto(Long categoryId, int page, int size) {

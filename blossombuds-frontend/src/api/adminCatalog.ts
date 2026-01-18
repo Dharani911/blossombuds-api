@@ -29,9 +29,11 @@ export type ProductDto = {
   price: number;
   active?: boolean;
   visible?: boolean;
+  inStock?: boolean;              // ✅ ADD
   featured?: boolean;
   featuredRank?: number | null;
 };
+
 
 export type Product = {
   id: number;
@@ -41,9 +43,11 @@ export type Product = {
   price: number;
   active: boolean;
   visible?: boolean;
+  inStock?: boolean;              // ✅ ADD
   featured?: boolean;
   featuredRank?: number | null;
 };
+
 
 export type ProductImageDto = {
   id: number;
@@ -128,35 +132,62 @@ export async function toggleProductActive(p: Product) {
     price: p.price,
     active: !p.active,
     visible: p.visible,
+    inStock: (p as any).inStock,     // ✅ ADD
     featured: p.featured,
+    featuredRank: (p as any).featuredRank ?? null, // optional safety
   };
   const { data } = await adminHttp.put<Product>(`/api/catalog/products/${p.id}`, payload);
   return data;
 }
 
+
 export async function toggleProductVisible(p: Product) {
   const nextVisible = !Boolean(p.visible);
 
-  // send both keys to be safe with different backends
   const payload: ProductDto & { isVisible?: boolean } = {
     name: p.name,
     slug: p.slug ?? undefined,
     description: p.description ?? undefined,
     price: p.price,
-    active: p.active,                 // keep active as-is (delete uses this separately)
-    visible: nextVisible,             // current API
-    isVisible: nextVisible,           // alt backend key (no harm if ignored)
+    active: p.active,
+    visible: nextVisible,
+    isVisible: nextVisible,
+    inStock: (p as any).inStock,
     featured: p.featured,
+    featuredRank: (p as any).featuredRank ?? null, // optional safety
   };
 
   const { data } = await adminHttp.put<Product>(`/api/catalog/products/${p.id}`, payload);
 
-  // normalize the response so caller always gets a concrete boolean
   const normalized: Product = {
     ...data,
     visible: (data as any)?.visible ?? (data as any)?.isVisible ?? nextVisible,
+    inStock: (data as any)?.inStock ?? (data as any)?.isInStock ?? (p as any).inStock, // ✅ ADD
   };
   return normalized;
+}
+
+export async function toggleProductInStock(p: Product) {
+  const next = !Boolean((p as any).inStock ?? (p as any).isInStock ?? true);
+
+  const payload: ProductDto = {
+    name: p.name,
+    slug: p.slug ?? undefined,
+    description: p.description ?? undefined,
+    price: p.price,
+    active: p.active,
+    visible: p.visible,
+    inStock: next,
+    featured: p.featured,
+    featuredRank: (p as any).featuredRank ?? null,
+  };
+
+  const { data } = await adminHttp.put<Product>(`/api/catalog/products/${p.id}`, payload);
+
+  return {
+    ...data,
+    inStock: (data as any)?.inStock ?? (data as any)?.isInStock ?? next,
+  } as Product;
 }
 
 
