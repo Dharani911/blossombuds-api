@@ -177,6 +177,9 @@ export default function ProductQuickView({ productId, onClose }: Props) {
   const goto = (i: number) => setCur(Math.max(0, Math.min(images.length - 1, i)));
   const next = () => setCur(i => (i >= images.length - 1 ? 0 : i + 1));
   const prev = () => setCur(i => (i <= 0 ? Math.max(0, images.length - 1) : i - 1));
+useEffect(() => {
+  if (isUnavailable) setQty(1);
+}, [isUnavailable]);
 
   useEffect(() => {
     if (!hasNav) return;
@@ -247,12 +250,7 @@ export default function ProductQuickView({ productId, onClose }: Props) {
             <div className="pqv-info">
               <h1 className="pqv-title">{p.name}</h1>
               <div className="pqv-price">{priceText}</div>
-               {isOutOfStock && (
-                <div className="pqv-stock bad" role="status">Out of stock</div>
-              )}
-              {!isOutOfStock && (p as any)?.inStock === true && (
-                <div className="pqv-stock ok" role="status">In stock</div>
-              )}
+
               {opts.map((o, idx) => {
                 const act = o.values.filter(v => v.active !== false && (v as any)?.visible !== false);
                 if (act.length === 0) return null;
@@ -279,41 +277,48 @@ export default function ProductQuickView({ productId, onClose }: Props) {
               })}
 
               {/* ---------- Qty with steppers ---------- */}
-              <div className="pqv-qty" role="group" aria-label="Quantity">
-                <label htmlFor="pqv-qty" className="qty-label">Qty</label>
-                <div className="qty-wrap">
-                  <button
-                    type="button"
-                    className="qty-btn"
-                    aria-label="Decrease quantity"
-                    onClick={() => setQty(q => Math.max(1, q - 1))}
-                    disabled={qty <= 1}
-                  >
-                    −
-                  </button>
-                  <input
-                    id="pqv-qty"
-                    type="number"
-                    inputMode="numeric"
-                    min={1}
-                    step={1}
-                    value={qty}
-                    onChange={(e) => {
-                      const v = Math.max(1, Number(e.target.value || 1));
-                      setQty(v);
-                    }}
-                    onFocus={(e) => e.currentTarget.select()}
-                  />
-                  <button
-                    type="button"
-                    className="qty-btn"
-                    aria-label="Increase quantity"
-                    onClick={() => setQty(q => q + 1)}
-                  >
-                    +
-                  </button>
+              {/* ---------- Qty with steppers ---------- */}
+              {!isUnavailable && (
+                <div className="pqv-qty" role="group" aria-label="Quantity">
+                  <label htmlFor="pqv-qty" className="qty-label">Qty</label>
+                  <div className="qty-wrap">
+                    <button
+                      type="button"
+                      className="qty-btn"
+                      aria-label="Decrease quantity"
+                      onClick={() => setQty(q => Math.max(1, q - 1))}
+                      disabled={qty <= 1}
+                    >
+                      −
+                    </button>
+
+                    <input
+                      id="pqv-qty"
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      step={1}
+                      value={qty}
+                      onChange={(e) => {
+                        const v = Math.max(1, Number(e.target.value || 1));
+                        setQty(v);
+                      }}
+                      onFocus={(e) => e.currentTarget.select()}
+                    />
+
+                    <button
+                      type="button"
+                      className="qty-btn"
+                      aria-label="Increase quantity"
+                      onClick={() => setQty(q => q + 1)}
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
+              {/* -------------------------------------- */}
+
               {/* -------------------------------------- */}
 
               <div className="pqv-actions">

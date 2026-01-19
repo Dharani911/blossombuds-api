@@ -26,6 +26,7 @@ const KEYWORDS: { label: string; value: string }[] = [
   { label: "Rose", value: "rose" },
   { label: "December Poo", value: "december poo" },
   { label: "Bloom", value: "bloom" },
+  { label: "Sheet", value: "sheet" },
 ];
 
 /* ----------------------------- Small Product Card ----------------------------- */
