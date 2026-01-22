@@ -502,7 +502,15 @@ useEffect(() => {
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const subtotal = useMemo(() => total, [total]);
+  const itemsSubtotalBeforeDiscount = useMemo(() => {
+    return (items || []).reduce((sum, it: any) => {
+      const unit = Number(it?.originalPrice ?? it?.price ?? 0);
+      return sum + unit * Number(it?.qty ?? 0);
+    }, 0);
+  }, [items]);
+
+  const subtotal = useMemo(() => total, [total]); // this is discounted subtotal (payable subtotal)
+
   const discountTotal = couponAmt || 0;
   const loginCta = !user?.id;
 
@@ -789,11 +797,12 @@ useEffect(() => {
     setShippingErr(null);
     try {
       // We purposely use itemsSubtotal BEFORE discounts (to match your service’s threshold logic)
-      const { data } = await http.post<{ fee: number; free: boolean }>(`/api/shipping/preview`, {
-        itemsSubtotal: subtotal,
+      const { data } = await http.post(`/api/shipping/preview`, {
+        itemsSubtotal: itemsSubtotalBeforeDiscount,  // ✅ pre-discount
         stateId: addr.stateId ?? null,
         districtId: addr.districtId ?? null,
       });
+
       const fee = Number(data?.fee ?? 0);
       setShippingFee(isFinite(fee) ? fee : 0);
     } catch (e: any) {
@@ -1486,7 +1495,20 @@ useEffect(() => {
                     </div>
 
                     {it.variant && <div className="muted">{it.variant}</div>}
-                    <div className="small">{it.qty} × {inr(it.price)}</div>
+                    <div className="small">
+                      {it.qty} ×{" "}
+                      {it.originalPrice != null && Number(it.originalPrice) > Number(it.price) ? (
+                        <>
+                          <span style={{ textDecoration: "line-through", opacity: 0.65, marginRight: 6 }}>
+                            {inr(Number(it.originalPrice))}
+                          </span>
+                          <span style={{ fontWeight: 900 }}>{inr(Number(it.price))}</span>
+                        </>
+                      ) : (
+                        <>{inr(Number(it.price))}</>
+                      )}
+                    </div>
+
                   </div>
                   <div className="line">{inr(it.price * it.qty)}</div>
                 </div>);

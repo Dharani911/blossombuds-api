@@ -15,4 +15,7 @@ public class ProductOptionValueDto {
     private Integer sortOrder;
     private Boolean visible;
     private Boolean active;
+    private BigDecimal originalPrice;
+    private BigDecimal finalPrice;
+    private Boolean discounted;
 }

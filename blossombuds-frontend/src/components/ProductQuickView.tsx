@@ -113,14 +113,62 @@ export default function ProductQuickView({ productId, onClose }: Props) {
     }
     return Number(p?.price ?? 0);
   }, [opts, sel, p?.price]);
+  const isExcluded = Boolean((p as any)?.excludeFromGlobalDiscount); // true => NO discount
+  const discountEligible = !isExcluded;
 
-  const priceText = useMemo(() => {
+  function formatINR(n: number) {
+    const x = Number(n || 0);
     try {
-      return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(unitPrice);
+      return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(x);
     } catch {
-      return `₹${unitPrice.toFixed(2)}`;
+      return `₹${x.toFixed(2)}`;
     }
-  }, [unitPrice]);
+  }
+
+  // derive discount percent from backend if available
+  const discountPercent = useMemo(() => {
+    if (!p) return 0;
+
+    // if backend provides it, prefer it
+    const pct = Number((p as any)?.discountPercentOff ?? 0);
+    if (Number.isFinite(pct) && pct > 0) return pct;
+
+    // else compute from originalPrice/finalPrice if available
+    const op = (p as any)?.originalPrice;
+    const fp = (p as any)?.finalPrice;
+    const original = Number(op ?? p.price ?? 0);
+    const final = Number(fp ?? 0);
+
+    if (original > 0 && final > 0 && final < original) {
+      const computed = (1 - final / original) * 100;
+      return Math.round(computed * 100) / 100; // keep 2 decimals
+    }
+    return 0;
+  }, [p]);
+
+  // Apply discount percent to the currently selected unitPrice (base or option absolute price)
+  const displayPrices = useMemo(() => {
+    const original = Number(unitPrice ?? 0);
+
+    if (!discountEligible || discountPercent <= 0) {
+      return {
+        showDiscount: false,
+        original,
+        final: original,
+      };
+    }
+
+    const final = Math.max(0, Math.round((original * (100 - discountPercent)) ) / 100);
+    return {
+      showDiscount: final < original,
+      original,
+      final,
+    };
+  }, [unitPrice, discountEligible, discountPercent]);
+
+    const priceText = useMemo(() => formatINR(displayPrices.final), [displayPrices.final]);
+    const originalPriceText = useMemo(() => formatINR(displayPrices.original), [displayPrices.original]);
+
   const isOutOfStock = (p as any)?.inStock === false;
   const isUnavailable = (p as any)?.active === false || (p as any)?.visible === false || isOutOfStock;
 
@@ -148,7 +196,7 @@ export default function ProductQuickView({ productId, onClose }: Props) {
       id: `${p.id}:${Object.values(sel).sort().join(",") || "base"}`,
       productId: p.id,   // ✅ NEW
       name: p.name,
-      price: unitPrice,
+      price: displayPrices.final,
       qty: Math.max(1, qty | 0),
       image: images[0]?.url || p.primaryImageUrl || "",
       variant: opts
@@ -249,7 +297,22 @@ useEffect(() => {
             {/* INFO + OPTIONS */}
             <div className="pqv-info">
               <h1 className="pqv-title">{p.name}</h1>
-              <div className="pqv-price">{priceText}</div>
+              <div className="pqv-price">
+                {displayPrices.showDiscount ? (
+                  <div className="pqv-price-row">
+                    <span className="pqv-price-old">{originalPriceText}</span>
+                    <span className="pqv-price-new">{priceText}</span>
+                    <span className="pqv-price-badge">
+                      {Math.round(discountPercent)}% OFF
+                    </span>
+                  </div>
+                ) : (
+                  <div className="pqv-price-row">
+                    <span className="pqv-price-new">{priceText}</span>
+                  </div>
+                )}
+              </div>
+
 
               {opts.map((o, idx) => {
                 const act = o.values.filter(v => v.active !== false && (v as any)?.visible !== false);
@@ -441,6 +504,41 @@ const styles = `
   padding: 44px 12px 12px; height:100%; min-height:0;
   overflow-x:hidden;
 }
+.pqv-price-row{
+  display:flex;
+  align-items:baseline;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+.pqv-price-old{
+  opacity:.55;
+  text-decoration: line-through;
+  font-weight:800;
+  font-size: 14px;
+  color:#111;
+}
+
+.pqv-price-new{
+  font-weight: 950;
+  color: var(--bb-accent);
+  font-size: clamp(16px, 4.2vw, 18px);
+}
+
+.pqv-price-badge{
+  display:inline-flex;
+  align-items:center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-weight: 900;
+  font-size: 11px;
+  letter-spacing: .3px;
+  background: rgba(240,93,139,.10);
+  border: 1px solid rgba(240,93,139,.25);
+  color: #8a2345;
+}
+
 @media (max-width: 980px){
   .pqv-grid{
     display: block;

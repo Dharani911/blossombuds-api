@@ -58,6 +58,12 @@ public class Product {
 
     @Column(name = "featured_rank", nullable = false)
     private Integer featuredRank = 0;
+    /**
+     * If true, this product will NOT receive the global discount (base + options).
+     * Default false.
+     */
+    @Column(name = "exclude_from_global_discount", nullable = false)
+    private Boolean excludeFromGlobalDiscount = Boolean.FALSE;
 
     @Column(name = "created_by", length = 120)
     @CreatedBy

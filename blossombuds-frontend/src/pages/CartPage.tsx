@@ -538,7 +538,21 @@ export default function CartPage() {
                     )}
 
                     {/* ✅ no "in stock" pill at all */}
-                    <span className="small">{inr(it.price)} each</span>
+                   <span className="small">
+                     {it.originalPrice != null && Number(it.originalPrice) > Number(it.price) ? (
+                       <>
+                         <span style={{ textDecoration: "line-through", opacity: 0.65, marginRight: 6 }}>
+                           {inr(it.originalPrice)}
+                         </span>
+                         <span style={{ fontWeight: 900 }}>{inr(it.price)}</span> each
+                       </>
+                     ) : (
+                       <>
+                         {inr(it.price)} each
+                       </>
+                     )}
+                   </span>
+
                   </div>
 
                   {/* ✅ If unavailable => pill replaces qty completely */}

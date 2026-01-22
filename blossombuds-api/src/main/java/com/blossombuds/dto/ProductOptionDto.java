@@ -3,6 +3,8 @@ package com.blossombuds.dto;
 
 import lombok.Data;
 
+import java.math.BigDecimal;
+
 /** DTO for per-product option definition. */
 @Data
 public class ProductOptionDto {
@@ -15,4 +17,7 @@ public class ProductOptionDto {
     private Integer sortOrder;
     private Boolean visible;
     private Boolean active;
+    private Boolean discounted;
+    private BigDecimal discountPercentOff;
+    private String discountLabel;
 }

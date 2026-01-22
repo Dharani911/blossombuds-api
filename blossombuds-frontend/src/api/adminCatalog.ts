@@ -32,6 +32,7 @@ export type ProductDto = {
   inStock?: boolean;              // ✅ ADD
   featured?: boolean;
   featuredRank?: number | null;
+  excludeFromGlobalDiscount?: boolean;
 };
 
 
@@ -46,6 +47,13 @@ export type Product = {
   inStock?: boolean;              // ✅ ADD
   featured?: boolean;
   featuredRank?: number | null;
+  excludeFromGlobalDiscount?: boolean;
+
+    originalPrice?: number | null;
+    finalPrice?: number | null;
+    discountPercentOff?: number | null;
+    discountLabel?: string | null;
+    discounted?: boolean | null;
 };
 
 
@@ -96,26 +104,27 @@ export type Category = {
 /** ---------- Products ---------- */
 
 export async function listProducts(page = 0, size = 20, sort = "createdAt", dir: "ASC" | "DESC" = "DESC") {
-  const { data } = await adminHttp.get<Page<Product>>(`/api/catalog/products`, {
-    params: { page, size, sort, dir },
-  });
-  return data;
+  const { data } = await adminHttp.get<Page<Product>>(`/api/catalog/products`, { params: { page, size, sort, dir } });
+  return {
+    ...data,
+    content: (data.content || []).map(normalizeAdminProduct),
+  };
 }
-
 
 export async function getProduct(id: number) {
   const { data } = await adminHttp.get<Product>(`/api/catalog/products/${id}`);
-  return data;
+  return normalizeAdminProduct(data);
 }
+
 
 export async function createProduct(dto: ProductDto) {
   const { data } = await adminHttp.post<Product>(`/api/catalog/products`, dto);
-  return data;
+  return normalizeAdminProduct(data);
 }
 
 export async function updateProduct(id: number, dto: ProductDto) {
   const { data } = await adminHttp.put<Product>(`/api/catalog/products/${id}`, dto);
-  return data;
+  return normalizeAdminProduct(data);
 }
 
 export async function deleteProduct(id: number) {
@@ -135,9 +144,12 @@ export async function toggleProductActive(p: Product) {
     inStock: (p as any).inStock,     // ✅ ADD
     featured: p.featured,
     featuredRank: (p as any).featuredRank ?? null, // optional safety
+    excludeFromGlobalDiscount: (p as any).excludeFromGlobalDiscount,
+
   };
   const { data } = await adminHttp.put<Product>(`/api/catalog/products/${p.id}`, payload);
-  return data;
+  return normalizeAdminProduct(data);
+
 }
 
 
@@ -155,16 +167,18 @@ export async function toggleProductVisible(p: Product) {
     inStock: (p as any).inStock,
     featured: p.featured,
     featuredRank: (p as any).featuredRank ?? null, // optional safety
+    excludeFromGlobalDiscount: (p as any).excludeFromGlobalDiscount,
+
   };
 
   const { data } = await adminHttp.put<Product>(`/api/catalog/products/${p.id}`, payload);
 
-  const normalized: Product = {
+  return normalizeAdminProduct({
     ...data,
     visible: (data as any)?.visible ?? (data as any)?.isVisible ?? nextVisible,
-    inStock: (data as any)?.inStock ?? (data as any)?.isInStock ?? (p as any).inStock, // ✅ ADD
-  };
-  return normalized;
+    inStock: (data as any)?.inStock ?? (data as any)?.isInStock ?? (p as any).inStock,
+  });
+
 }
 
 export async function toggleProductInStock(p: Product) {
@@ -180,14 +194,17 @@ export async function toggleProductInStock(p: Product) {
     inStock: next,
     featured: p.featured,
     featuredRank: (p as any).featuredRank ?? null,
+    excludeFromGlobalDiscount: (p as any).excludeFromGlobalDiscount,
+
   };
 
   const { data } = await adminHttp.put<Product>(`/api/catalog/products/${p.id}`, payload);
 
-  return {
+  return normalizeAdminProduct({
     ...data,
     inStock: (data as any)?.inStock ?? (data as any)?.isInStock ?? next,
-  } as Product;
+  });
+
 }
 
 
@@ -202,39 +219,40 @@ export async function toggleProductInStock(p: Product) {
 export async function setProductFeatured(id: number, featured: boolean) {
   if (featured) {
     const { data } = await adminHttp.post<Product>(`/api/catalog/products/${id}/featured`);
-    return data;
+    return normalizeAdminProduct(data);;
   } else {
     await adminHttp.delete(`/api/catalog/products/${id}/featured`);
     // controller returns 204, so fetch the updated row
-    const data = await getProduct(id);
-    return data;
+    return await getProduct(id);
+
   }
 }
 
 /** Lists for Featured page and New Arrivals (public endpoints are fine in admin) */
 
 export async function listFeaturedProducts(page = 0, size = 24) {
-  const { data } = await adminHttp.get<Page<Product>>(
-    `/api/catalog/products/featured`,
-    { params: { page, size } }
-  );
-  return data;
+  const { data } = await adminHttp.get<Page<Product>>(`/api/catalog/products/featured`, { params: { page, size } });
+  return { ...data, content: (data.content || []).map(normalizeAdminProduct) };
 }
 
 export async function listFeaturedTop(limit = 12) {
-  const { data } = await adminHttp.get<Product[]>(
-    `/api/catalog/products/featured/top`,
-    { params: { limit } }
-  );
-  return data;
+  const { data } = await adminHttp.get<Product[]>(`/api/catalog/products/featured/top`, { params: { limit } });
+  return (Array.isArray(data) ? data : []).map(normalizeAdminProduct);
 }
 
 export async function listNewArrivals(limit = 24) {
-  const { data } = await adminHttp.get<Product[]>(
-    `/api/catalog/products/new-arrivals`,
-    { params: { limit } }
-  );
-  return Array.isArray(data) ? data : [];
+  const { data } = await adminHttp.get<Product[]>(`/api/catalog/products/new-arrivals`, { params: { limit } });
+  return (Array.isArray(data) ? data : []).map(normalizeAdminProduct);
+}
+
+function normalizeAdminProduct(p: any): Product {
+  return {
+    ...p,
+    price: Number(p?.price ?? 0),
+    originalPrice: p?.originalPrice == null ? null : Number(p.originalPrice),
+    finalPrice: p?.finalPrice == null ? null : Number(p.finalPrice),
+    discountPercentOff: p?.discountPercentOff == null ? null : Number(p.discountPercentOff),
+  } as Product;
 }
 
 /** ---------- Images (multipart) ---------- */

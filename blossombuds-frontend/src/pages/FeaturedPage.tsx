@@ -33,6 +33,11 @@ type Product = {
   featured?: boolean;
   active?: boolean;
   _coverResolved?: string | null;
+  excludeFromGlobalDiscount?: boolean | null;
+    excludedFromDiscount?: boolean | null;
+    discountPercentOff?: number | null;
+    originalPrice?: number | null;
+    finalPrice?: number | null;
 };
 
 /** Resolve best image URL */
@@ -84,6 +89,43 @@ function ProductTile({ p, onOpen }: { p: Product; onOpen: (id: number) => void }
   const img = p._coverResolved ?? coverUrlOf(p);
 const inStock = (p as any)?.inStock ?? (p as any)?.isInStock ?? true;
 const outOfStock = inStock === false;
+  const fmt = useMemo(() => {
+    try {
+      return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
+    } catch {
+      return null;
+    }
+  }, []);
+
+  function formatINR(n: number) {
+    if (!Number.isFinite(n)) return "";
+    return fmt ? fmt.format(n) : `₹${n}`;
+  }
+  function getDiscountView(p: Product) {
+    const isExcluded = Boolean((p as any)?.excludeFromGlobalDiscount ?? (p as any)?.excludedFromDiscount);
+
+    const base = Number((p as any)?.price ?? 0);
+    if (!Number.isFinite(base) || base <= 0) return null;
+
+    const orig = Number((p as any)?.originalPrice ?? base);
+    const finFromApi = (p as any)?.finalPrice != null ? Number((p as any)?.finalPrice) : null;
+
+    let pct = Number((p as any)?.discountPercentOff ?? 0);
+    if (!Number.isFinite(pct) || pct < 0) pct = 0;
+    pct = Math.min(95, pct);
+
+    if (isExcluded || pct <= 0) {
+      return { showDiscount: false, original: orig, final: orig, pct: 0 };
+    }
+
+    const fin =
+      finFromApi != null && Number.isFinite(finFromApi) && finFromApi < orig
+        ? finFromApi
+        : Math.round(orig * (1 - pct / 100));
+
+    const showDiscount = fin < orig;
+    return { showDiscount, original: orig, final: fin, pct };
+  }
 
   return (
     <article
@@ -93,7 +135,8 @@ const outOfStock = inStock === false;
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") onOpen(p.id);
       }}
-      aria-label={`${p.name}${priceText ? `, ${priceText}` : ""}`}
+      aria-label={`${p.name}`}
+
     >
       <div className="media">
         {img ? <img src={img} alt={p.name} loading="lazy" /> : <div className="ph" aria-hidden />}
@@ -112,7 +155,23 @@ const outOfStock = inStock === false;
 
       <div className="meta">
         <div className="name" title={p.name}>{p.name}</div>
-        {priceText && <div className="price">{priceText}</div>}
+        {(() => {
+          const dv = getDiscountView(p);
+          if (!dv) return null;
+
+          if (!dv.showDiscount) {
+            return <div className="price">{formatINR(dv.final)}</div>;
+          }
+
+          return (
+            <div className="price price-discount">
+              <span className="old">{formatINR(dv.original)}</span>
+              <span className="new">{formatINR(dv.final)}</span>
+              <span className="off">{dv.pct}% OFF</span>
+            </div>
+          );
+        })()}
+
       </div>
 
       <button
@@ -417,4 +476,30 @@ const css = `
   border-radius:12px; height: 220px;
 }
 @keyframes shimmer{ from{ background-position: 200% 0; } to { background-position: -200% 0; } }
+.price-discount{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  align-items:baseline;
+}
+.price-discount .old{
+  font-weight:800;
+  opacity:.6;
+  text-decoration: line-through;
+  color:#444;
+}
+.price-discount .new{
+  font-weight:900;
+  color: var(--bb-accent);
+}
+.price-discount .off{
+  font-size:11px;
+  font-weight:900;
+  padding:2px 6px;
+  border-radius:999px;
+  background: rgba(240,93,139,.12);
+  border: 1px solid rgba(240,93,139,.22);
+  color: var(--bb-accent);
+}
+
 `;

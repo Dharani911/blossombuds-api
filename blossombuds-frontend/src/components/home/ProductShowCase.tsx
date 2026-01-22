@@ -14,6 +14,12 @@ type ProductLite = {
   visible?: boolean | null;
   isVisible?: boolean | null;
   inStock?: boolean | null;
+    // ✅ discount support
+    excludeFromGlobalDiscount?: boolean | null;
+    discountPercentOff?: number | null;
+    originalPrice?: number | null;
+    finalPrice?: number | null;
+
 };
 
 type Props = {
@@ -21,6 +27,8 @@ type Props = {
   title?: string;
   viewAllTo?: string;
   limit?: number;
+
+
 };
 
 /** Visible logic: if backend doesn't send visible, default = visible */
@@ -97,6 +105,10 @@ export default function ProductShowcase({
               : typeof p.in_stock === "boolean"
               ? p.in_stock
               : true,
+              excludeFromGlobalDiscount: p.excludeFromGlobalDiscount ?? p.excludedFromDiscount ?? false,
+                        discountPercentOff: typeof p.discountPercentOff === "number" ? p.discountPercentOff : null,
+                        originalPrice: typeof p.originalPrice === "number" ? p.originalPrice : null,
+                        finalPrice: typeof p.finalPrice === "number" ? p.finalPrice : null,
         }));
 
         // ✅ visible=false products should not appear to customer
@@ -176,6 +188,40 @@ export default function ProductShowcase({
       }),
     []
   );
+  function formatINR(n: number) {
+    try {
+      return fmt.format(n);
+    } catch {
+      return `₹${n}`;
+    }
+  }
+
+  function getDiscountView(p: ProductLite) {
+    const isExcluded = Boolean(p.excludeFromGlobalDiscount);
+
+    const base = Number(p.price ?? 0);
+    if (!Number.isFinite(base) || base <= 0) return null;
+
+    // If backend already provides original/final, use them
+    const orig = Number(p.originalPrice ?? base);
+    const finFromApi = p.finalPrice != null ? Number(p.finalPrice) : null;
+
+    // Percent (prefer backend)
+    let pct = Number(p.discountPercentOff ?? 0);
+    if (!Number.isFinite(pct) || pct < 0) pct = 0;
+    pct = Math.min(95, pct);
+
+    if (isExcluded || pct <= 0) {
+      return { showDiscount: false, original: orig, final: orig, pct: 0 };
+    }
+
+    const fin = (finFromApi != null && Number.isFinite(finFromApi) && finFromApi < orig)
+      ? finFromApi
+      : Math.round(orig * (1 - pct / 100));
+
+    const showDiscount = fin < orig;
+    return { showDiscount, original: orig, final: fin, pct };
+  }
 
   const openQuickView = (id: number) => setQvId(id);
 
@@ -242,7 +288,23 @@ export default function ProductShowcase({
                     <div className="ps-title">{p.name}</div>
 
                     <div className="ps-row2">
-                      <div className="ps-price">{fmt.format(p.price)}</div>
+                      {(() => {
+                        const dv = getDiscountView(p);
+                        if (!dv) return <div className="ps-price">{formatINR(Number(p.price ?? 0))}</div>;
+
+                        if (!dv.showDiscount) {
+                          return <div className="ps-price">{formatINR(dv.final)}</div>;
+                        }
+
+                        return (
+                          <div className="ps-price ps-price-discount">
+                            <span className="old">{formatINR(dv.original)}</span>
+                            <span className="new">{formatINR(dv.final)}</span>
+                            <span className="off">{dv.pct}% OFF</span>
+                          </div>
+                        );
+                      })()}
+
 
                       <div className="ps-actions">
                         <button
@@ -402,4 +464,30 @@ const styles = `
   padding: 8px 10px;
   border-radius: 12px;
 }
+.ps-price-discount{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  align-items:baseline;
+}
+.ps-price-discount .old{
+  font-weight:800;
+  opacity:.6;
+  text-decoration: line-through;
+  color:#444;
+}
+.ps-price-discount .new{
+  font-weight:900;
+  color: var(--bb-accent);
+}
+.ps-price-discount .off{
+  font-size:11px;
+  font-weight:900;
+  padding:2px 6px;
+  border-radius:999px;
+  background: rgba(240,93,139,.12);
+  border: 1px solid rgba(240,93,139,.22);
+  color: var(--bb-accent);
+}
+
 `;

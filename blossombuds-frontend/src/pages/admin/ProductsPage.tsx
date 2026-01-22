@@ -94,6 +94,33 @@ function StarButton({
     </button>
   );
 }
+function DiscountButton({
+  on,
+  saving,
+  onClick,
+  title,
+}: {
+  on: boolean;              // ✅ just on/off
+  saving?: boolean;
+  onClick: () => void;
+  title?: string;
+}) {
+  return (
+    <button
+      className={"pct-btn" + (on ? " on" : "") + (saving ? " saving" : "")}
+      onClick={onClick}
+      title={title || (on ? "Disable discount" : "Enable discount")}
+      aria-label={title || (on ? "Disable discount" : "Enable discount")}
+      type="button"
+      disabled={saving}
+    >
+      <span className="pct-shape" aria-hidden>%</span>
+
+      {saving && <span className="spin" aria-hidden />}
+    </button>
+  );
+}
+
 
 export default function ProductsPage() {
   const [page, setPage] = useState(0);
@@ -112,7 +139,10 @@ export default function ProductsPage() {
   const [busyFeature, setBusyFeature] = useState<Record<number, boolean>>({});
   const [busyVisible, setBusyVisible] = useState<Record<number, boolean>>({});
   const [busyStock, setBusyStock] = useState<Record<number, boolean>>({});
-  const isLocked = (id: number) => !!busyFeature[id] || !!busyVisible[id] || !!busyStock[id];
+  const [busyDiscount, setBusyDiscount] = useState<Record<number, boolean>>({});
+  const isLocked = (id: number) =>
+    !!busyFeature[id] || !!busyVisible[id] || !!busyStock[id] || !!busyDiscount[id];
+
 
 
   useEffect(() => {
@@ -193,6 +223,60 @@ export default function ProductsPage() {
       setBusyStock(m => ({ ...m, [p.id]: false }));
     }
   }
+async function onToggleDiscount(p: Product, nextExclude: boolean) {
+  if (isLocked(p.id)) return;
+
+  setBusyDiscount(m => ({ ...m, [p.id]: true }));
+
+  const prevExclude = Boolean((p as any).excludeFromGlobalDiscount);
+
+  // optimistic
+  setData(d => d
+    ? ({
+        ...d,
+        content: d.content.map(x =>
+          x.id === p.id ? ({ ...x, excludeFromGlobalDiscount: nextExclude } as any) : x
+        ),
+      })
+    : d
+  );
+
+  try {
+    const updated = await updateProduct(p.id, { excludeFromGlobalDiscount: nextExclude } as any);
+    const serverExclude = Boolean((updated as any).excludeFromGlobalDiscount ?? nextExclude);
+
+    setData(d => d
+      ? ({
+          ...d,
+          content: d.content.map(x =>
+            x.id === p.id ? ({ ...x, excludeFromGlobalDiscount: serverExclude } as any) : x
+          ),
+        })
+      : d
+    );
+
+    setToast({
+      kind: "ok",
+      msg: serverExclude ? "Excluded from global sale" : "Included in global sale",
+    });
+  } catch (e: any) {
+    // revert
+    setData(d => d
+      ? ({
+          ...d,
+          content: d.content.map(x =>
+            x.id === p.id ? ({ ...x, excludeFromGlobalDiscount: prevExclude } as any) : x
+          ),
+        })
+      : d
+    );
+    setToast({ kind: "bad", msg: e?.response?.data?.message || "Failed to toggle discount" });
+  } finally {
+    setBusyDiscount(m => ({ ...m, [p.id]: false }));
+  }
+}
+
+
 
 
   // Toggle VISIBLE — use updateProduct(id, { visible: ... })
@@ -283,6 +367,10 @@ export default function ProductsPage() {
               {filtered.map(row => {
                 const isVisible = Boolean((row as any).visible ?? (row as any).isVisible);
                 const inStock = Boolean((row as any).inStock ?? (row as any).isInStock ?? true);
+                const exclude = Boolean((row as any).excludeFromGlobalDiscount);
+                const discountOn = !exclude; // discount applies when NOT excluded
+
+
 
                 return (
                   <tr key={row.id}>
@@ -296,6 +384,8 @@ export default function ProductsPage() {
                       </span>
                       {!!row.featured && <span className="pill gold">Featured</span>}
                       {row.active === false && <span className="pill off">Inactive</span>}
+                      {discountOn && <span className="pill pink">Discount</span>}
+
                     </td>
                     <td>
                       <span className={"pill " + (inStock ? "ok" : "off")}>
@@ -313,6 +403,17 @@ export default function ProductsPage() {
                             onClick={() => onToggleFeatured(row)}
                             title={row.featured ? "Unfeature" : "Feature"}
                           />
+                        </div>
+                        <div className="flag">
+                          <small>Discount</small>
+                          <DiscountButton
+                            on={discountOn}
+                            saving={!!busyDiscount[row.id]}
+                            onClick={() => onToggleDiscount(row, !exclude)}
+                            title={discountOn ? "Discount ON" : "Discount OFF"}
+                          />
+
+
                         </div>
 
                         <div className="flag">
@@ -424,6 +525,10 @@ function ProductModal({
 const [inStock, setInStock] = useState<boolean>(
   Boolean((initial as any)?.inStock ?? (initial as any)?.isInStock ?? true)
 );
+const [excludeFromGlobalDiscount, setExcludeFromGlobalDiscount] = useState<boolean>(
+  Boolean((initial as any)?.excludeFromGlobalDiscount ?? false)
+);
+
 
   useEffect(() => {
     if (mode === "add" || !slug) setSlug(slugifyName(name));
@@ -451,7 +556,8 @@ const [inStock, setInStock] = useState<boolean>(
       price: Number(price) || 0,
       visible,
       featured,
-      inStock, // ✅ ADD THIS
+      inStock,
+      excludeFromGlobalDiscount,
       ...(featured ? { featuredRank: featuredRank === "" ? null : Number(featuredRank) } : { featuredRank: null }),
     } as any;
 
@@ -534,6 +640,20 @@ const [inStock, setInStock] = useState<boolean>(
                     <Toggle checked={inStock} onChange={setInStock} title={inStock ? "In stock" : "Out of stock"} />
                     <span>In stock</span>
                   </label>
+                        <label className="check">
+                        <label className="check">
+                          <Toggle
+                            checked={!excludeFromGlobalDiscount} // checked means Discount ON
+                            onChange={(val) => setExcludeFromGlobalDiscount(!val)} // ON => exclude=false
+                            title={!excludeFromGlobalDiscount ? "Discount ON" : "Discount OFF"}
+                          />
+                          <span>Discount</span>
+                        </label>
+
+</label>
+
+
+
 
 
                   {featured && (
@@ -2367,6 +2487,52 @@ const css = `
   .form .grid2 {
     grid-template-columns: 1fr;
   }
+}
+/* ═══════════════════════════ DISCOUNT BUTTON ═══════════════════════════ */
+.pct-btn{
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  min-width: 70px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(0,0,0,.08);
+  background: #fff;
+  cursor: pointer;
+  font-weight: 800;
+  transition: all .15s ease;
+}
+.pct-btn:hover{
+  border-color: rgba(240,93,139,0.35);
+  background: rgba(240,93,139,0.04);
+}
+.pct-btn .pct-shape{
+  font-size: 16px;
+  line-height: 1;
+  color: #bbb;
+  transition: transform .15s ease, color .15s ease;
+}
+.pct-btn:hover .pct-shape{ transform: scale(1.08); }
+.pct-btn {
+  font-size: 12px;
+  opacity: .8;
+  min-width: 42px;
+    gap: 0;
+    justify-content: center;
+}
+.pct-btn.on{
+  border-color: rgba(240,93,139,0.45);
+  background: linear-gradient(135deg, rgba(240,93,139,0.10) 0%, rgba(255,139,167,0.06) 100%);
+}
+.pct-btn.on .pct-shape{ color: #F05D8B; }
+.pct-btn.saving{ opacity: .6; cursor: wait; }
+
+/* extra pill */
+.pill.pink{
+  background: linear-gradient(135deg, rgba(240,93,139,0.16) 0%, rgba(240,93,139,0.08) 100%);
+  color: #8a2345;
 }
 
 @media (max-width: 768px) {

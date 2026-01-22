@@ -30,13 +30,14 @@ import java.awt.*;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.io.*;
+import java.math.BigDecimal;
 import java.net.URL;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Date;
+import java.time.LocalDateTime;
+import java.util.*;
 import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Caching;
@@ -61,7 +62,7 @@ public class CatalogService {
     private final ProductImageRepository imageRepo;
     private final ProductOptionRepository optionRepo;
     private final ProductOptionValueRepository valueRepo;
-
+    private final GlobalSaleConfigRepository globalSaleRepo;
     private static final String CATEGORIES = "catalog.categories";
     private static final String PRODUCT_BY_ID = "catalog.productById";
     private static final String PRODUCTS_PAGE = "catalog.products.page";
@@ -69,6 +70,8 @@ public class CatalogService {
     private static final String FEATURED_PAGE = "catalog.featured.page";
     private static final String FEATURED_TOP = "catalog.featured.top";
     private static final String NEW_ARRIVALS = "catalog.newArrivals";
+    private static final String OPTIONS_WITH_VALUES = "catalog.productOptionsWithValues";
+
     //private static final String PRODUCT_IMAGES = "catalog.productImages"; // keep TTL short if you cache
 
     private final AmazonS3 r2Client;
@@ -306,6 +309,10 @@ public class CatalogService {
         p.setVisible(dto.getVisible() != null ? dto.getVisible() : Boolean.TRUE);
         p.setFeatured(dto.getFeatured() != null ? dto.getFeatured() : Boolean.FALSE);
         p.setInStock(dto.getInStock() != null ? dto.getInStock() : Boolean.TRUE);
+        p.setExcludeFromGlobalDiscount(
+                dto.getExcludeFromGlobalDiscount() != null ? dto.getExcludeFromGlobalDiscount() : Boolean.FALSE
+        );
+
         p.setActive(dto.getActive() != null ? dto.getActive() : Boolean.TRUE);
         Product saved = productRepo.save(p);
         log.info("[PRODUCT][CREATE][OK] id={} visible={} featured={}", saved.getId(), saved.getVisible(), saved.getFeatured());
@@ -368,6 +375,10 @@ public class CatalogService {
         if (dto.getVisible() != null)     p.setVisible(dto.getVisible());
         if (dto.getFeatured() != null)    p.setFeatured(dto.getFeatured());
         if (dto.getInStock() != null)    p.setInStock(dto.getInStock());
+        if (dto.getExcludeFromGlobalDiscount() != null) {
+            p.setExcludeFromGlobalDiscount(dto.getExcludeFromGlobalDiscount());
+        }
+
         if (dto.getActive() != null) p.setActive(dto.getActive());
         log.info("[PRODUCT][UPDATE][OK] id={}", id);
         return toDto(p); // dirty checking
@@ -1011,6 +1022,7 @@ public class CatalogService {
     // ─────────────────────────────── Options ────────────────────────────────
 
     /** Creates an option for a product. */
+    @CacheEvict(cacheNames = OPTIONS_WITH_VALUES, allEntries = true)
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public ProductOption createProductOption(ProductOptionDto dto) {
@@ -1054,6 +1066,7 @@ public class CatalogService {
     }
 
     /** Updates an option’s mutable fields. */
+    @CacheEvict(cacheNames = OPTIONS_WITH_VALUES, allEntries = true)
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public ProductOption updateProductOption(ProductOptionDto dto) {
@@ -1074,6 +1087,7 @@ public class CatalogService {
     }
 
     /** Soft-deletes a product option (active=false via @SQLDelete). */
+    @CacheEvict(cacheNames = OPTIONS_WITH_VALUES, allEntries = true)
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void deleteProductOption(Long optionId) {
@@ -1088,6 +1102,7 @@ public class CatalogService {
     // ───────────────────────────── Option Values ─────────────────────────────
 
     /** Creates a value under an option. */
+    @CacheEvict(cacheNames = OPTIONS_WITH_VALUES, allEntries = true)
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public ProductOptionValue createProductOptionValue(ProductOptionValueDto dto) {
@@ -1136,6 +1151,7 @@ public class CatalogService {
     }
 
     /** Updates an option value’s mutable fields. */
+    @CacheEvict(cacheNames = OPTIONS_WITH_VALUES, allEntries = true)
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public ProductOptionValue updateProductOptionValue(ProductOptionValueDto dto) {
@@ -1155,6 +1171,7 @@ public class CatalogService {
     }
 
     /** Soft-deletes an option value (active=false via @SQLDelete). */
+    @CacheEvict(cacheNames = OPTIONS_WITH_VALUES, allEntries = true)
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void deleteProductOptionValue(Long optionId, Long valueId) {
@@ -1239,19 +1256,45 @@ public class CatalogService {
         return p; // dirty checking persists
     }
     /** Maps a Product entity to a cache-safe DTO. */
+    /** Maps a Product entity to a cache-safe DTO (discount-aware). */
     private ProductDto toDto(Product p) {
         ProductDto d = new ProductDto();
         d.setId(p.getId());
         d.setSlug(p.getSlug());
         d.setName(p.getName());
         d.setDescription(p.getDescription());
-        d.setPrice(p.getPrice());
+        d.setPrice(p.getPrice()); // keep original field
+
         d.setVisible(p.getVisible());
         d.setFeatured(p.getFeatured());
         d.setInStock(p.getInStock());
         d.setActive(p.getActive());
+
+        d.setExcludeFromGlobalDiscount(p.getExcludeFromGlobalDiscount());
+
+        BigDecimal original = p.getPrice() == null ? BigDecimal.ZERO : p.getPrice();
+        d.setOriginalPrice(original);
+
+        Optional<GlobalSaleConfig> cfgOpt = getEffectiveGlobalSaleNow();
+        if (cfgOpt.isPresent() && isDiscountEligible(p) && isValidPercent(cfgOpt.get().getPercentOff())) {
+            GlobalSaleConfig cfg = cfgOpt.get();
+            BigDecimal finalPrice = applyPercentOff(original, cfg.getPercentOff());
+            boolean discounted = finalPrice.compareTo(original) < 0;
+
+            d.setFinalPrice(finalPrice);
+            d.setDiscountPercentOff(cfg.getPercentOff());
+            d.setDiscountLabel(cfg.getLabel());
+            d.setDiscounted(discounted);
+        } else {
+            d.setFinalPrice(original);
+            d.setDiscountPercentOff(BigDecimal.ZERO);
+            d.setDiscountLabel(null);
+            d.setDiscounted(Boolean.FALSE);
+        }
+
         return d;
     }
+
 
     /** Maps a Category entity to a cache-safe DTO. */
     private CategoryDto toDto(Category c) {
@@ -1271,23 +1314,25 @@ public class CatalogService {
                 .map(this::toDto)
                 .toList();
     }
-    @Cacheable(cacheNames = PRODUCT_BY_ID, key = "'id=' + #id")
+    @Cacheable(cacheNames = PRODUCT_BY_ID, key = "'id=' + #id + ':' + #root.target.discountCacheStamp()")
     public ProductDto getProductDto(Long id) {
         return toDto(getProduct(id));
     }
 
 
-    @Cacheable(cacheNames = PRODUCTS_PAGE, key = "'p=' + #page + ':s=' + #size + ':sort=' + #sort + ':dir=' + #dir")
+    @Cacheable(
+            cacheNames = PRODUCTS_PAGE,
+            key = "'p=' + #page + ':s=' + #size + ':sort=' + #sort + ':dir=' + #dir + ':' + #root.target.discountCacheStamp()"
+    )
     public CachedPage<ProductDto> listProductsDto(int page, int size, String sort, String dir) {
-
         Sort s = Sort.by("createdAt");
         if (sort != null && !sort.isBlank()) s = Sort.by(sort);
         s = "ASC".equalsIgnoreCase(dir) ? s.ascending() : s.descending();
 
         Page<ProductDto> pg = productRepo.findAll(PageRequest.of(page, size, s)).map(this::toDto);
-
-        return CachedPage.from(pg); // implement a small helper: content, page, size, total, totalPages, etc.
+        return CachedPage.from(pg);
     }
+
 
     /** Ensures the product is purchasable before adding to cart / creating order. */
     private void assertInStock(Product p) {
@@ -1297,14 +1342,14 @@ public class CatalogService {
         }
     }
 
-    @Cacheable(cacheNames = PRODUCTS_BY_CATEGORY, key = "'cat=' + #categoryId + ':p=' + #page + ':s=' + #size")
+    @Cacheable(cacheNames = PRODUCTS_BY_CATEGORY, key = "'cat=' + #categoryId + ':p=' + #page + ':s=' + #size + ':' + #root.target.discountCacheStamp()" )
     public CachedPage<ProductDto> listProductsByCategoryDto(Long categoryId, int page, int size) {
         Page<ProductDto> pg = productRepo.findActiveByCategoryId(categoryId, PageRequest.of(page, size))
                 .map(this::toDto);
         return CachedPage.from(pg);
     }
 
-    @Cacheable(cacheNames = FEATURED_PAGE, key = "'p=' + #page + ':s=' + #size")
+    @Cacheable(cacheNames = FEATURED_PAGE, key = "'p=' + #page + ':s=' + #size + ':' + #root.target.discountCacheStamp()")
     public CachedPage<ProductDto> listFeaturedProductsDto(int page, int size) {
         Page<ProductDto> pg = productRepo.findByFeaturedTrue(PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")))
                 .map(this::toDto);
@@ -1312,7 +1357,7 @@ public class CatalogService {
     }
 
 
-    @Cacheable(cacheNames = FEATURED_TOP, key = "'lim=' + #limit")
+    @Cacheable(cacheNames = FEATURED_TOP, key = "'lim=' + #limit + ':' + #root.target.discountCacheStamp()")
     public List<ProductDto> listFeaturedTopDto(int limit) {
         int lim = Math.max(1, Math.min(100, limit));
         return productRepo.findByFeaturedTrue(PageRequest.of(0, lim, Sort.by(Sort.Direction.DESC, "createdAt")))
@@ -1321,7 +1366,7 @@ public class CatalogService {
                 .map(this::toDto)
                 .toList();
     }
-    @Cacheable(cacheNames = NEW_ARRIVALS, key = "'lim=' + #limit")
+    @Cacheable(cacheNames = NEW_ARRIVALS, key = "'lim=' + #limit + ':' + #root.target.discountCacheStamp()")
     public List<ProductDto> listNewArrivalsDto(int limit) {
         return listNewArrivals(limit).stream().map(this::toDto).toList();
     }
@@ -1329,6 +1374,160 @@ public class CatalogService {
     @Cacheable(cacheNames = CATEGORIES, key = "'id=' + #id")
     public CategoryDto getCategoryDto(Long id) {
         return toDto(getCategory(id));
+    }
+
+    private Optional<GlobalSaleConfig> getEffectiveGlobalSaleNow() {
+        return globalSaleRepo.findEffectiveConfig(LocalDateTime.now());
+    }
+
+    private static boolean isDiscountEligible(Product p) {
+        if (p == null) return false;
+        if (Boolean.FALSE.equals(p.getActive())) return false;
+        if (Boolean.FALSE.equals(p.getVisible())) return false;
+        if (Boolean.TRUE.equals(p.getExcludeFromGlobalDiscount())) return false;
+        return true;
+    }
+
+    private static boolean isValidPercent(BigDecimal pct) {
+        return pct != null
+                && pct.compareTo(BigDecimal.ZERO) > 0
+                && pct.compareTo(new BigDecimal("100.00")) < 0;
+    }
+
+    private static BigDecimal applyPercentOff(BigDecimal original, BigDecimal percentOff) {
+        if (original == null) original = BigDecimal.ZERO;
+        if (!isValidPercent(percentOff)) return original;
+
+        // final = original * (100 - percent) / 100
+        BigDecimal hundred = new BigDecimal("100.00");
+        BigDecimal factor = hundred.subtract(percentOff).divide(hundred, 6, java.math.RoundingMode.HALF_UP);
+        BigDecimal finalPrice = original.multiply(factor);
+
+        // currency rounding
+        return finalPrice.setScale(2, java.math.RoundingMode.HALF_UP);
+    }
+
+    /**
+     * IMPORTANT: Makes cache keys discount-aware.
+     * If discount config changes (or expires), this stamp changes and cached DTO pages refresh naturally.
+     */
+    public String discountCacheStamp() {
+        Optional<GlobalSaleConfig> cfgOpt = getEffectiveGlobalSaleNow();
+        if (cfgOpt.isEmpty()) return "disc:none";
+
+        GlobalSaleConfig cfg = cfgOpt.get();
+        BigDecimal pct = cfg.getPercentOff() == null ? BigDecimal.ZERO : cfg.getPercentOff();
+        String mod = (cfg.getModifiedAt() != null) ? cfg.getModifiedAt().toString() : "null";
+
+        return "disc:id=" + cfg.getId() + "|pct=" + pct + "|mod=" + mod;
+    }
+    /** Lists product options with values as DTOs (discount-aware, storefront payload). */
+    @Cacheable(cacheNames = OPTIONS_WITH_VALUES, key = "'pid=' + #productId + ':' + #root.target.discountCacheStamp()")
+    public List<ProductOptionWithValuesDto> listProductOptionsWithValuesDto(Long productId) {
+        if (productId == null) throw new IllegalArgumentException("productId is required");
+
+        // load product once (needed for exclude flag + eligibility)
+        Product p = getProduct(productId);
+
+        // load options + values
+        List<ProductOption> options = optionRepo.findByProduct_IdOrderBySortOrderAscIdAsc(productId);
+        List<ProductOptionWithValuesDto> out = new ArrayList<>();
+
+        Optional<GlobalSaleConfig> cfgOpt = getEffectiveGlobalSaleNow();
+        boolean eligible = cfgOpt.isPresent() && isDiscountEligible(p) && isValidPercent(cfgOpt.get().getPercentOff());
+
+        BigDecimal pct = eligible ? cfgOpt.get().getPercentOff() : BigDecimal.ZERO;
+        String label = eligible ? cfgOpt.get().getLabel() : null;
+
+        for (ProductOption o : options) {
+            ProductOptionWithValuesDto od = toDto(o, eligible, pct, label);
+
+            List<ProductOptionValue> vals = valueRepo.findByOption_IdOrderBySortOrderAscIdAsc(o.getId());
+            List<ProductOptionValueDto> vds = vals.stream()
+                    .map(v -> toDto(v, eligible, pct))
+                    .toList();
+
+            od.setValues(vds);
+            out.add(od);
+        }
+
+        return out;
+    }
+    /** Maps a ProductOption entity to a DTO (includes discount context). */
+    private ProductOptionWithValuesDto toDto(ProductOption o, boolean discounted, BigDecimal percentOff, String label) {
+        ProductOptionWithValuesDto d = new ProductOptionWithValuesDto();
+        d.setId(o.getId());
+        d.setProductId(o.getProduct() != null ? o.getProduct().getId() : null);
+        d.setName(o.getName());
+        d.setInputType(o.getInputType());
+        d.setRequired(o.getRequired());
+        d.setMaxSelect(o.getMaxSelect());
+        d.setSortOrder(o.getSortOrder());
+        d.setVisible(o.getVisible());
+        d.setActive(o.getActive());
+
+        d.setDiscounted(discounted);
+        d.setDiscountPercentOff(discounted ? percentOff : BigDecimal.ZERO);
+        d.setDiscountLabel(discounted ? label : null);
+
+        return d;
+    }
+
+    /** Maps a ProductOptionValue entity to a DTO (treats priceDelta as ABSOLUTE variant price). */
+    private ProductOptionValueDto toDto(ProductOptionValue v, boolean discounted, BigDecimal percentOff) {
+        ProductOptionValueDto d = new ProductOptionValueDto();
+        d.setId(v.getId());
+        d.setOptionId(v.getOption() != null ? v.getOption().getId() : null);
+        d.setValueCode(v.getValueCode());
+        d.setValueLabel(v.getValueLabel());
+        d.setPriceDelta(v.getPriceDelta());
+        d.setSortOrder(v.getSortOrder());
+        d.setVisible(v.getVisible());
+        d.setActive(v.getActive());
+
+        // Discount UI helpers only if this value has a price (since null means "use product base price")
+        BigDecimal original = v.getPriceDelta();
+        if (original != null && discounted && isValidPercent(percentOff)) {
+            BigDecimal fin = applyPercentOff(original, percentOff);
+            d.setOriginalPrice(original);
+            d.setFinalPrice(fin);
+            d.setDiscounted(fin.compareTo(original) < 0);
+        } else if (original != null) {
+            d.setOriginalPrice(original);
+            d.setFinalPrice(original);
+            d.setDiscounted(Boolean.FALSE);
+        } else {
+            d.setOriginalPrice(null);
+            d.setFinalPrice(null);
+            d.setDiscounted(Boolean.FALSE);
+        }
+
+        return d;
+    }
+    private void assertNoOverlappingEnabledDiscount(GlobalSaleConfigDto dto, Long excludeId) {
+        if (dto == null) throw new IllegalArgumentException("GlobalSaleConfigDto is required");
+
+        // Only block overlaps if admin is trying to enable this discount
+        if (!Boolean.TRUE.equals(dto.getEnabled())) return;
+
+        LocalDateTime startsAt = dto.getStartsAt();
+        LocalDateTime endsAt = dto.getEndsAt();
+
+        // sanity: if both set, start must be <= end
+        if (startsAt != null && endsAt != null && startsAt.isAfter(endsAt)) {
+            throw new IllegalArgumentException("startsAt must be before (or equal to) endsAt");
+        }
+
+        LocalDateTime minTime = LocalDateTime.of(1970, 1, 1, 0, 0);
+        LocalDateTime maxTime = LocalDateTime.of(2999, 12, 31, 23, 59, 59);
+
+        long conflicts = globalSaleRepo.countOverlappingEnabled(startsAt, endsAt, excludeId, minTime, maxTime);
+
+        if (conflicts > 0) {
+            throw new IllegalArgumentException(
+                    "This discount overlaps an existing enabled discount window. Disable the other discount or adjust the time range."
+            );
+        }
     }
 
 }

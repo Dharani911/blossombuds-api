@@ -3,6 +3,7 @@ package com.blossombuds.web;
 import com.blossombuds.domain.*;
 import com.blossombuds.dto.*;
 import com.blossombuds.service.CatalogService;
+import com.blossombuds.service.GlobalSaleConfigService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +35,8 @@ import java.util.List;
 public class CatalogController {
 
     private final CatalogService catalog;
+    private final GlobalSaleConfigService globalSale;
+
 
     // ────────────────────────────── Categories (admin ops) ───────────────────
 
@@ -312,10 +315,12 @@ public class CatalogController {
     }
 
     /** List options for a product (read: public). */
+    /** List options + values for a product (read: public, storefront payload, discount-aware). */
     @GetMapping("/products/{productId}/options")
-    public List<ProductOption> listOptions(@PathVariable Long productId) {
-        return catalog.listProductOptions(productId);
+    public List<ProductOptionWithValuesDto> listOptionsWithValues(@PathVariable Long productId) {
+        return catalog.listProductOptionsWithValuesDto(productId);
     }
+
 
     /** Get option by id (read: public). */
     @GetMapping("/options/{optionId}")
@@ -411,4 +416,54 @@ public class CatalogController {
     public void unmarkFeatured(@PathVariable Long id) {
         catalog.setProductFeatured(id, false);
     }
+
+// ───────────────────────── Global Sale Config ─────────────────────────
+//
+// Admin CRUD + public "effective now" endpoint.
+// This keeps discounts separate from product CRUD.
+//
+
+    /** Admin: list all discount configs (newest first). */
+    @GetMapping("/discounts")
+    @PreAuthorize("hasRole('ADMIN')")
+    public List<GlobalSaleConfigDto> listDiscounts() {
+        return globalSale.listAll();
+    }
+
+    /** Admin: get a discount config by id. */
+    @GetMapping("/discounts/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public GlobalSaleConfigDto getDiscount(@PathVariable Long id) {
+        return globalSale.getById(id);
+    }
+
+    /** Admin: create a new discount config (overlap validation runs in service). */
+    @PostMapping("/discounts")
+    @PreAuthorize("hasRole('ADMIN')")
+    @ResponseStatus(HttpStatus.CREATED)
+    public GlobalSaleConfigDto createDiscount(@Valid @RequestBody GlobalSaleConfigDto dto) {
+        return globalSale.create(dto);
+    }
+
+    /** Admin: update an existing discount config (overlap validation runs in service). */
+    @PutMapping("/discounts/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public GlobalSaleConfigDto updateDiscount(@PathVariable Long id, @Valid @RequestBody GlobalSaleConfigDto dto) {
+        return globalSale.update(id, dto);
+    }
+
+    /** Admin: delete a discount config (hard delete). */
+    @DeleteMapping("/discounts/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteDiscount(@PathVariable Long id) {
+        globalSale.delete(id);
+    }
+
+    /** Public: get currently effective discount config (or null if none). */
+    @GetMapping("/discounts/effective")
+    public GlobalSaleConfigDto effectiveDiscount() {
+        return globalSale.getEffectiveNowOrNull();
+    }
+
 }

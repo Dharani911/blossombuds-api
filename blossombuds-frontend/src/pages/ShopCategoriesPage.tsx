@@ -35,17 +35,49 @@ function SmallProductCard({ p, onOpen }: { p: Product; onOpen: (id: number) => v
   const inStock = (p as any)?.inStock ?? (p as any)?.isInStock ?? true;
   const outOfStock = inStock === false;
 
-  const priceText = (() => {
-    const v = (p as any)?.price;
-    if (v == null || v === "") return null;
-    const n = Number(v);
-    if (!Number.isFinite(n)) return String(v);
-    try {
-      return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(n);
-    } catch {
-      return String(v);
+    function formatINR(n: number) {
+      try {
+        return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(n);
+      } catch {
+        return `₹${n.toFixed(2)}`;
+      }
     }
-  })();
+
+    const isExcluded = Boolean((p as any)?.excludeFromGlobalDiscount);
+
+    // Prefer backend percent if present; otherwise try computing from original/final if backend provides those.
+    const discountPercent = (() => {
+      const pct = Number((p as any)?.discountPercentOff ?? 0);
+      if (Number.isFinite(pct) && pct > 0) return Math.min(95, Math.max(0, pct));
+
+      const orig = Number((p as any)?.originalPrice);
+      const fin = Number((p as any)?.finalPrice);
+      if (Number.isFinite(orig) && orig > 0 && Number.isFinite(fin) && fin >= 0 && fin < orig) {
+        const computed = Math.round(((orig - fin) / orig) * 100);
+        return Math.min(95, Math.max(0, computed));
+      }
+      return 0;
+    })();
+
+    const originalPrice = (() => {
+      const v = (p as any)?.price;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    })();
+
+    const displayPrices = (() => {
+      if (originalPrice == null) return null;
+
+      // excluded or no valid discount -> single price
+      if (isExcluded || discountPercent <= 0) {
+        return { showDiscount: false, original: originalPrice, final: originalPrice };
+      }
+
+      const final = Math.round(originalPrice * (1 - discountPercent / 100));
+      const showDiscount = final < originalPrice;
+      return { showDiscount, original: originalPrice, final };
+    })();
+
 
   return (
     <article
@@ -55,7 +87,8 @@ function SmallProductCard({ p, onOpen }: { p: Product; onOpen: (id: number) => v
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") onOpen(p.id);
       }}
-      aria-label={`${p.name}${priceText ? `, ${priceText}` : ""}`}
+            aria-label={`${p.name}${displayPrices ? `, ${formatINR(displayPrices.final)}` : ""}`}
+
     >
       <div className="media">
         {img ? <img src={img} alt={p.name} loading="lazy" /> : <div className="ph" aria-hidden />}
@@ -65,7 +98,18 @@ function SmallProductCard({ p, onOpen }: { p: Product; onOpen: (id: number) => v
         <div className="name" title={p.name}>
           {p.name}
         </div>
-        {priceText && <div className="price">{priceText}</div>}
+                {displayPrices && (
+                  displayPrices.showDiscount ? (
+                    <div className="price price-discount">
+                      <span className="old">{formatINR(displayPrices.original)}</span>
+                      <span className="new">{formatINR(displayPrices.final)}</span>
+                      <span className="off">{discountPercent}% OFF</span>
+                    </div>
+                  ) : (
+                    <div className="price">{formatINR(displayPrices.final)}</div>
+                  )
+                )}
+
       </div>
 
       <button
@@ -1399,6 +1443,31 @@ const css = `
     height:34px;
     border-radius:12px;
   }
+}
+.price-discount{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  align-items:baseline;
+}
+.price-discount .old{
+  font-weight:800;
+  opacity:.6;
+  text-decoration: line-through;
+  color:#444;
+}
+.price-discount .new{
+  font-weight:900;
+  color: var(--bb-accent);
+}
+.price-discount .off{
+  font-size:11px;
+  font-weight:900;
+  padding:2px 6px;
+  border-radius:999px;
+  background: rgba(240,93,139,.12);
+  border: 1px solid rgba(240,93,139,.22);
+  color: var(--bb-accent);
 }
 
 

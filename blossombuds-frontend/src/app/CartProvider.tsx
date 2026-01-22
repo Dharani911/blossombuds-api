@@ -15,6 +15,13 @@ export type CartItem = {
   productId: number;
   name: string;
   price: number;
+  // ✅ original unit price for strike-through UI
+    originalPrice?: number;
+
+    // optional UI helpers (from backend)
+    discounted?: boolean;
+    discountPercentOff?: number;
+    discountLabel?: string;
   qty: number;
   image?: string;
   variant?: string;
@@ -53,6 +60,18 @@ function inStockForCustomer(p: any) {
   const s = p?.inStock ?? p?.isInStock ?? p?.instock ?? null;
   return s !== false; // default in stock
 }
+function readValueFinalPrice(v: any): number | undefined {
+  const cand = [v?.finalPrice, v?.price, v?.absolutePrice, v?.amount];
+  for (const c of cand) if (typeof c === "number") return Number(c);
+  if (typeof v?.priceDelta === "number") return Number(v.priceDelta); // fallback
+  return undefined;
+}
+
+function readValueOriginalPrice(v: any): number | undefined {
+  const cand = [v?.originalPrice, v?.priceDelta, v?.price];
+  for (const c of cand) if (typeof c === "number") return Number(c);
+  return undefined;
+}
 
 // Treat option value's price as ABSOLUTE (not delta), but allow fallback fields
 function readValuePrice(v: any): number | undefined {
@@ -79,25 +98,24 @@ function normalizeSelectedValueIds(it: any): number[] {
   return [];
 }
 
-function computeVariantStatusAndPrice(
-  basePrice: number,
+function computeVariantStatusAndPrices(
+  baseOriginal: number,
+  baseFinal: number,
   options: any[] | null | undefined,
   selectedValueIds: number[]
-): { unitPrice: number; variantUnavailable: boolean } {
-  // No variant => just use base
+): { unitOriginal: number; unitFinal: number; variantUnavailable: boolean } {
   if (!selectedValueIds.length) {
-    return { unitPrice: basePrice, variantUnavailable: false };
+    return { unitOriginal: baseOriginal, unitFinal: baseFinal, variantUnavailable: false };
   }
 
-  // Variant exists but options couldn't be loaded => safest block checkout
   if (!Array.isArray(options) || options.length === 0) {
-    return { unitPrice: basePrice, variantUnavailable: true };
+    return { unitOriginal: baseOriginal, unitFinal: baseFinal, variantUnavailable: true };
   }
 
-  let unitPrice = basePrice;
+  let unitOriginal = baseOriginal;
+  let unitFinal = baseFinal;
   let variantUnavailable = false;
 
-  // Walk options in order and apply selected values (absolute pricing)
   for (const o of options) {
     const values = (o?.values || []) as any[];
     const selected = values.find((v) => selectedValueIds.includes(v.id));
@@ -107,14 +125,16 @@ function computeVariantStatusAndPrice(
     const active = (selected as any)?.active !== false;
     if (!visible || !active) variantUnavailable = true;
 
-    const vp = readValuePrice(selected);
-    if (typeof vp === "number") unitPrice = vp;
+    // ✅ if a value has its own absolute price, it overrides unit prices
+    const vOrig = readValueOriginalPrice(selected);
+    const vFinal = readValueFinalPrice(selected);
+
+    if (typeof vOrig === "number") unitOriginal = vOrig;
+    if (typeof vFinal === "number") unitFinal = vFinal;
   }
 
   // If user selected IDs that don't exist anymore => unavailable
-  const allValueIds = new Set(
-    options.flatMap((o) => (o?.values || []).map((v: any) => v.id))
-  );
+  const allValueIds = new Set(options.flatMap((o) => (o?.values || []).map((v: any) => v.id)));
   for (const id of selectedValueIds) {
     if (!allValueIds.has(id)) {
       variantUnavailable = true;
@@ -122,8 +142,9 @@ function computeVariantStatusAndPrice(
     }
   }
 
-  return { unitPrice, variantUnavailable };
+  return { unitOriginal, unitFinal, variantUnavailable };
 }
+
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>(() => {
@@ -295,7 +316,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         const visible = visibleForCustomer(p);
         const inStock = inStockForCustomer(p);
         const baseUnavailable = !(active && visible && inStock);
-        const basePrice = Number(p?.price ?? 0);
+        const baseOriginal = Number(p?.originalPrice ?? p?.price ?? 0);
+        const baseFinal = Number(p?.finalPrice ?? p?.price ?? 0);
+
 
         const optRes = fetchedOptions[idx];
         const options = optRes.status === "fulfilled" ? ((optRes.value as any[]) ?? []) : null;
@@ -304,9 +327,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           inStock,
           unavailable: baseUnavailable,
           checkedAt,
-          basePrice,
+          baseOriginal,
+          baseFinal,
           options,
+          product: p,
         });
+
       });
 
       const base = itemsRef.current;
@@ -327,7 +353,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         return {
           ...it,
           selectedValueIds,
-          price: unitPrice, // ✅ update price always
+          originalPrice: unitOriginal,
+            price: unitFinal,
+
+            // optional UI helpers from backend product (base-level info)
+            discounted: Boolean(st.product?.discounted),
+            discountPercentOff: Number(st.product?.discountPercentOff ?? 0),
+            discountLabel: st.product?.discountLabel ?? null,
           inStock: st.inStock,
           unavailable,
           lastCheckedAt: st.checkedAt,

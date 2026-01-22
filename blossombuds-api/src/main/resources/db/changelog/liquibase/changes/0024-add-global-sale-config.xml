@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+          http://www.liquibase.org/xml/ns/dbchangelog
+          http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.23.xsd">
+
+    <!-- =========================================================
+         1) Global sale config (single-row table pattern)
+         ========================================================= -->
+    <changeSet id="0024-01-add-global-sale-config" author="dharani">
+        <createTable tableName="global_sale_config">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false" primaryKeyName="pk_global_sale_config"/>
+            </column>
+
+            <column name="enabled" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+
+            <!-- percent like 10.00 (supports decimals if you ever want 7.5%) -->
+            <column name="percent_off" type="DECIMAL(5,2)" defaultValueNumeric="0.00">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="label" type="VARCHAR(120)"/>
+
+            <!-- Optional time window -->
+            <column name="starts_at" type="TIMESTAMP"/>
+            <column name="ends_at" type="TIMESTAMP"/>
+
+            <!-- Audit-ish timestamps (keep consistent with your entities) -->
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="modified_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <!-- Guardrails -->
+
+
+        <createIndex tableName="global_sale_config" indexName="idx_global_sale_enabled">
+            <column name="enabled"/>
+        </createIndex>
+
+        <rollback>
+            <dropTable tableName="global_sale_config"/>
+        </rollback>
+    </changeSet>
+
+
+    <!-- =========================================================
+         2) Product-level exemption flag
+         ========================================================= -->
+    <changeSet id="0024-02-add-global-sale-config" author="dharani">
+        <addColumn tableName="products">
+            <column name="exclude_from_global_discount" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+
+        <createIndex tableName="products" indexName="idx_products_exclude_global_discount">
+            <column name="exclude_from_global_discount"/>
+        </createIndex>
+
+        <rollback>
+            <dropIndex indexName="idx_products_exclude_global_discount" tableName="products"/>
+            <dropColumn tableName="products" columnName="exclude_from_global_discount"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

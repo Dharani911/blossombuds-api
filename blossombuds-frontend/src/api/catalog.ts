@@ -27,6 +27,13 @@ export type Product = {
   visible?: boolean | null;     // ✅ add if backend sends it
   isVisible?: boolean | null;   // ✅ add if backend sends it
   inStock?: boolean | null;
+  excludeFromGlobalDiscount?: boolean | null;
+
+    originalPrice?: number | null;
+    finalPrice?: number | null;
+    discountPercentOff?: number | null;
+    discountLabel?: string | null;
+    discounted?: boolean | null;
 };
 
 export type ProductImage = {
@@ -39,18 +46,40 @@ export type ProductImage = {
 
 export type ProductOptionValue = {
   id: number;
+  optionId?: number;
+  valueCode?: string | null;
   valueLabel: string;
-  priceDelta?: number | null;
+
+  priceDelta?: number | null;     // kept (absolute variant price in your backend)
+  sortOrder?: number | null;
+  visible?: boolean | null;
   active?: boolean | null;
+
+  // ✅ discount helpers
+  originalPrice?: number | null;
+  finalPrice?: number | null;
+  discounted?: boolean | null;
 };
 
 export type ProductOptionWithValues = {
   id: number;
+  productId?: number;
   name: string;
+  inputType?: string | null;
   required?: boolean | null;
+  maxSelect?: number | null;
+  sortOrder?: number | null;
+  visible?: boolean | null;
   active?: boolean | null;
+
+  // ✅ discount context for UI (same for all values)
+  discounted?: boolean | null;
+  discountPercentOff?: number | null;
+  discountLabel?: string | null;
+
   values: ProductOptionValue[];
 };
+
 
 /** Generic Page shape (Spring-style). */
 export type PageResp<T> = {
@@ -65,7 +94,6 @@ export type PageResp<T> = {
  * Normalizers
  * ========================= */
 
-/** Normalize a product coming from backend (supports multiple key styles). */
 function normalizeProduct(p: any): Product {
   if (!p) return p as Product;
 
@@ -75,17 +103,52 @@ function normalizeProduct(p: any): Product {
     typeof p.in_stock === "boolean" ? p.in_stock :
     null;
 
-  // Keep visible fields as-is; UI should treat null/undefined as "visible"
   const visible =
-    typeof p.visible === "boolean" ? p.visible : (typeof p.isVisible === "boolean" ? p.isVisible : null);
+    typeof p.visible === "boolean" ? p.visible :
+    typeof p.isVisible === "boolean" ? p.isVisible :
+    null;
+
+  const originalPrice =
+    typeof p.originalPrice === "number" ? p.originalPrice :
+    typeof p.original_price === "number" ? p.original_price :
+    (typeof p.price === "number" ? p.price : null);
+
+  const finalPrice =
+    typeof p.finalPrice === "number" ? p.finalPrice :
+    typeof p.final_price === "number" ? p.final_price :
+    (typeof p.price === "number" ? p.price : null);
+
+  const discounted =
+    typeof p.discounted === "boolean" ? p.discounted :
+    (originalPrice != null && finalPrice != null ? finalPrice < originalPrice : null);
 
   return {
     ...p,
     inStock,
-    visible: typeof p.visible === "boolean" ? p.visible : (typeof p.isVisible === "boolean" ? p.isVisible : p.visible),
-    isVisible: typeof p.isVisible === "boolean" ? p.isVisible : (typeof p.visible === "boolean" ? p.visible : p.isVisible),
+    visible,
+    isVisible:
+      typeof p.isVisible === "boolean" ? p.isVisible :
+      typeof p.visible === "boolean" ? p.visible :
+      p.isVisible,
+
+    originalPrice,
+    finalPrice,
+    discounted,
+    discountPercentOff:
+      typeof p.discountPercentOff === "number" ? p.discountPercentOff :
+      typeof p.discount_percent_off === "number" ? p.discount_percent_off :
+      null,
+    discountLabel:
+      typeof p.discountLabel === "string" ? p.discountLabel :
+      typeof p.discount_label === "string" ? p.discount_label :
+      null,
+    excludeFromGlobalDiscount:
+      typeof p.excludeFromGlobalDiscount === "boolean" ? p.excludeFromGlobalDiscount :
+      typeof p.exclude_from_global_discount === "boolean" ? p.exclude_from_global_discount :
+      null,
   } as Product;
 }
+
 
 /** Normalizes common page shapes (Spring Page / CachedPage / legacy array). */
 function normalizePage<T>(data: any): PageResp<T> {
@@ -248,8 +311,13 @@ export async function listOptionValues(optionId: number): Promise<ProductOptionV
   const { data } = await http.get(`/api/catalog/options/${optionId}/values`);
   return Array.isArray(data) ? (data as ProductOptionValue[]) : [];
 }
+export async function getProductOptionsWithValues(productId: number): Promise<ProductOptionWithValues[]> {
+  const { data } = await http.get(`/api/catalog/products/${productId}/options`);
+  return Array.isArray(data) ? (data as ProductOptionWithValues[]) : [];
+}
 
-export async function getProductOptionsWithValues(
+
+/* export async function getProductOptionsWithValues(
   productId: number
 ): Promise<ProductOptionWithValues[]> {
   const options = await listProductOptions(productId);
@@ -266,7 +334,7 @@ export async function getProductOptionsWithValues(
     })
   );
   return withValues;
-}
+} */
 
 /* =========================
  * Categories for a product (public)

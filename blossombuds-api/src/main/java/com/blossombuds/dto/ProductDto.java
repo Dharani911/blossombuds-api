@@ -21,7 +21,17 @@ public class ProductDto {
     /** Indicates whether the product is currently in stock. */
     private Boolean inStock;
 
+    /** If true, this product does not receive global discount. */
+    private Boolean excludeFromGlobalDiscount;
 
+    /** UI helpers: strike + final price (computed). */
+    private BigDecimal originalPrice;
+    private BigDecimal finalPrice;
+    private BigDecimal discountPercentOff;
+    private String discountLabel;
+
+    /** True if a discount is actually applied to finalPrice. */
+    private Boolean discounted;
     /** Read-only: when created (useful for "new arrivals"). */
     private LocalDateTime createdAt;
 }

@@ -9,6 +9,7 @@ import AdminFeatureImagesSetting from "../../components/admin/AdminFeatureImages
 import AdminCoupons from "../../components/admin/AdminCoupons";
 import AdminDeliveryPartners from "../../components/admin/AdminDeliveryPartners";
 import AdminDeliveryFeeRules from "../../components/admin/AdminDeliveryFeeRules";
+import AdminGlobalSale from "../../components/admin/AdminGlobalSale";
 
 /* ---- theme tokens ---- */
 const PRIMARY = "#4A4F41";
@@ -332,6 +333,9 @@ export default function SettingsPage() {
 
       {/* Coupons */}
       <AdminCoupons />
+
+      {/* Global sale / discount manager */}
+      <AdminGlobalSale />
 
       {/* Delivery Partners */}
       <AdminDeliveryPartners />
