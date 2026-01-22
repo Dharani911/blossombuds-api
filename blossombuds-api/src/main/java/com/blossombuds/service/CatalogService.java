@@ -1504,7 +1504,7 @@ public class CatalogService {
 
         return d;
     }
-    private void assertNoOverlappingEnabledDiscount(GlobalSaleConfigDto dto, Long excludeId) {
+    /*private void assertNoOverlappingEnabledDiscount(GlobalSaleConfigDto dto, Long excludeId) {
         if (dto == null) throw new IllegalArgumentException("GlobalSaleConfigDto is required");
 
         // Only block overlaps if admin is trying to enable this discount
@@ -1528,6 +1528,6 @@ public class CatalogService {
                     "This discount overlaps an existing enabled discount window. Disable the other discount or adjust the time range."
             );
         }
-    }
+    }*/
 
 }
