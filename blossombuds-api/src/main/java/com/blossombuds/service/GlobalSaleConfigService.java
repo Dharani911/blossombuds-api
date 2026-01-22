@@ -12,7 +12,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -45,10 +47,12 @@ public class GlobalSaleConfigService {
 
     /** Public: current effective config (or null if none). */
     public GlobalSaleConfigDto getEffectiveNowOrNull() {
-        return globalSaleRepo.findEffectiveConfig(LocalDateTime.now())
+        LocalDateTime nowUtc = LocalDateTime.ofInstant(Instant.now(), ZoneOffset.UTC);
+        return globalSaleRepo.findEffectiveConfig(nowUtc)
                 .map(GlobalSaleConfigMapper::toDto)
                 .orElse(null);
     }
+
 
     /** Creates a new config (admin) with overlap validation for enabled=true. */
     @Transactional
@@ -63,8 +67,9 @@ public class GlobalSaleConfigService {
         g.setEnabled(Boolean.TRUE.equals(dto.getEnabled()));
         g.setPercentOff(dto.getPercentOff() != null ? dto.getPercentOff() : BigDecimal.ZERO);
         g.setLabel(dto.getLabel());
-        g.setStartsAt(dto.getStartsAt());
-        g.setEndsAt(dto.getEndsAt());
+        g.setStartsAt(toUtcLdt(dto.getStartsAt()));
+        g.setEndsAt(toUtcLdt(dto.getEndsAt()));
+
 
         GlobalSaleConfig saved = globalSaleRepo.save(g);
         log.info("[DISCOUNT][CREATE][OK] id={} enabled={} pct={} window={}..{}",
@@ -82,6 +87,8 @@ public class GlobalSaleConfigService {
 
         GlobalSaleConfig g = globalSaleRepo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("GlobalSaleConfig not found: " + id));
+        Instant candidateStarts = (dto.getStartsAt() != null) ? dto.getStartsAt() : toInstantUtc(g.getStartsAt());
+        Instant candidateEnds   = (dto.getEndsAt() != null)   ? dto.getEndsAt()   : toInstantUtc(g.getEndsAt());
 
         // build a "candidate" view of what will be saved (for overlap check)
         GlobalSaleConfigDto candidate = GlobalSaleConfigDto.builder()
@@ -89,8 +96,8 @@ public class GlobalSaleConfigService {
                 .enabled(dto.getEnabled() != null ? dto.getEnabled() : g.getEnabled())
                 .percentOff(dto.getPercentOff() != null ? dto.getPercentOff() : g.getPercentOff())
                 .label(dto.getLabel() != null ? dto.getLabel() : g.getLabel())
-                .startsAt(dto.getStartsAt() != null ? dto.getStartsAt() : g.getStartsAt())
-                .endsAt(dto.getEndsAt() != null ? dto.getEndsAt() : g.getEndsAt())
+                .startsAt(candidateStarts)
+                .endsAt(candidateEnds)
                 .build();
 
         assertValidPercent(candidate.getPercentOff());
@@ -100,8 +107,8 @@ public class GlobalSaleConfigService {
         if (dto.getEnabled() != null) g.setEnabled(dto.getEnabled());
         if (dto.getPercentOff() != null) g.setPercentOff(dto.getPercentOff());
         if (dto.getLabel() != null) g.setLabel(dto.getLabel());
-        if (dto.getStartsAt() != null) g.setStartsAt(dto.getStartsAt());
-        if (dto.getEndsAt() != null) g.setEndsAt(dto.getEndsAt());
+        if (dto.getStartsAt() != null) g.setStartsAt(toUtcLdt(dto.getStartsAt()));
+        if (dto.getEndsAt() != null) g.setEndsAt(toUtcLdt(dto.getEndsAt()));
 
         GlobalSaleConfig saved = globalSaleRepo.save(g);
         log.info("[DISCOUNT][UPDATE][OK] id={} enabled={} pct={} window={}..{}",
@@ -127,9 +134,8 @@ public class GlobalSaleConfigService {
         // Only block overlaps if admin is trying to enable this discount
         if (!Boolean.TRUE.equals(dto.getEnabled())) return;
 
-        LocalDateTime startsAt = dto.getStartsAt();
-        LocalDateTime endsAt = dto.getEndsAt();
-
+        LocalDateTime startsAt = toUtcLdt(dto.getStartsAt());
+        LocalDateTime endsAt   = toUtcLdt(dto.getEndsAt());
         if (startsAt != null && endsAt != null && startsAt.isAfter(endsAt)) {
             throw new IllegalArgumentException("startsAt must be before (or equal to) endsAt");
         }
@@ -155,5 +161,12 @@ public class GlobalSaleConfigService {
         if (pct.compareTo(new BigDecimal("100.00")) >= 0) {
             throw new IllegalArgumentException("percentOff must be < 100.00");
         }
+    }
+    LocalDateTime toUtcLdt(Instant i) {
+        return i == null ? null : LocalDateTime.ofInstant(i, ZoneOffset.UTC);
+    }
+
+    Instant toInstantUtc(LocalDateTime ldt) {
+        return ldt == null ? null : ldt.toInstant(ZoneOffset.UTC);
     }
 }

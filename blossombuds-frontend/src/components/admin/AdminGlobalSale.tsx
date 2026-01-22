@@ -20,34 +20,62 @@ function asNumber(n: any): number {
 }
 
 /** ISO -> datetime-local (YYYY-MM-DDTHH:mm) in user's local tz */
-function isoToLocalInput(iso?: string | null): string {
+const IST_TZ = "Asia/Kolkata";
+
+/** ISO -> datetime-local string as IST clock time (YYYY-MM-DDTHH:mm) */
+function isoToIstInput(iso?: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  const pad = (x: number) => String(x).padStart(2, "0");
-  const yyyy = d.getFullYear();
-  const mm = pad(d.getMonth() + 1);
-  const dd = pad(d.getDate());
-  const hh = pad(d.getHours());
-  const mi = pad(d.getMinutes());
-  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: IST_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
 }
+
 
 /** datetime-local -> ISO (UTC). empty => null */
-function localInputToIso(v?: string | null): string | null {
+/** datetime-local typed as IST -> ISO (UTC). empty => null */
+function istInputToIso(v?: string | null): string | null {
   const s = (v ?? "").trim();
   if (!s) return null;
-  const d = new Date(s); // interpreted as local time
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toISOString();
+
+  // s = "YYYY-MM-DDTHH:mm"
+  const [datePart, timePart] = s.split("T");
+  if (!datePart || !timePart) return null;
+
+  const [y, m, d] = datePart.split("-").map(Number);
+  const [hh, mm] = timePart.split(":").map(Number);
+  if (![y, m, d, hh, mm].every((n) => Number.isFinite(n))) return null;
+
+  // Interpret as IST and convert to UTC by subtracting 5h30m
+  const utcMs = Date.UTC(y, m - 1, d, hh, mm) - (5.5 * 60 * 60 * 1000);
+  return new Date(utcMs).toISOString();
 }
 
+
 function windowLabel(r: GlobalSaleConfigDto) {
-  const s = r.startsAt ? new Date(r.startsAt).toLocaleString() : "—";
-  const e = r.endsAt ? new Date(r.endsAt).toLocaleString() : "—";
+  const fmt = (iso?: string | null) =>
+    iso
+      ? new Date(iso).toLocaleString("en-IN", { timeZone: IST_TZ })
+      : "—";
+
+  const s = fmt(r.startsAt);
+  const e = fmt(r.endsAt);
+
   if (!r.startsAt && !r.endsAt) return "Always on (no window)";
   return `${s} → ${e}`;
 }
+
 
 export default function AdminGlobalSale() {
   const [loading, setLoading] = useState(true);
@@ -115,8 +143,9 @@ export default function AdminGlobalSale() {
     if (percentOff <= 0) return "Percent off must be > 0.";
     if (percentOff > 95) return "Percent off looks too high (max 95%).";
     // Optional: enforce window consistency if both provided
-    const sIso = localInputToIso(draftStartsAt);
-    const eIso = localInputToIso(draftEndsAt);
+    const sIso = istInputToIso(draftStartsAt);
+    const eIso = istInputToIso(draftEndsAt);
+
     if (sIso && eIso) {
       if (new Date(eIso).getTime() <= new Date(sIso).getTime()) {
         return "Ends at must be after Starts at.";
@@ -139,8 +168,9 @@ export default function AdminGlobalSale() {
         enabled: !!draftEnabled,
         percentOff: pct,
         label: (draftLabel ?? "").trim() || null,
-        startsAt: localInputToIso(draftStartsAt),
-        endsAt: localInputToIso(draftEndsAt),
+        startsAt: istInputToIso(draftStartsAt),
+        endsAt: istInputToIso(draftEndsAt),
+
       });
 
       setRows((rs) => [created, ...rs]);
@@ -171,8 +201,9 @@ export default function AdminGlobalSale() {
               _enabled: !!r.enabled,
               _percentOff: String(r.percentOff ?? ""),
               _label: r.label ?? "",
-              _startsAtLocal: isoToLocalInput(r.startsAt),
-              _endsAtLocal: isoToLocalInput(r.endsAt),
+              _startsAtLocal: isoToIstInput(r.startsAt),
+              _endsAtLocal: isoToIstInput(r.endsAt),
+
             }
           : r
       )
@@ -197,8 +228,9 @@ export default function AdminGlobalSale() {
       return;
     }
 
-    const sIso = localInputToIso(row._startsAtLocal);
-    const eIso = localInputToIso(row._endsAtLocal);
+    const sIso = istInputToIso(row._startsAtLocal);
+    const eIso = istInputToIso(row._endsAtLocal);
+
     if (sIso && eIso && new Date(eIso).getTime() <= new Date(sIso).getTime()) {
       setToast({ kind: "bad", msg: "Ends at must be after Starts at." });
       return;
