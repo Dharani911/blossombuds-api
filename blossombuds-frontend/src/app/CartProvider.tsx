@@ -291,8 +291,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           inStock: boolean;
           unavailable: boolean;
           checkedAt: number;
-          basePrice: number;
+          baseOriginal: number;
+          baseFinal: number;
           options: any[] | null;
+          product: any;
         }
       >();
 
@@ -305,9 +307,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             inStock: false,
             unavailable: true,
             checkedAt,
-            basePrice: 0,
+            baseOriginal: 0,
+            baseFinal: 0,
             options: null,
+            product: null,
           });
+
           return;
         }
 
@@ -342,8 +347,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         if (!st) return it;
 
         const selectedValueIds = normalizeSelectedValueIds(it);
-        const { unitPrice, variantUnavailable } = computeVariantStatusAndPrice(
-          st.basePrice,
+
+        const { unitOriginal, unitFinal, variantUnavailable } = computeVariantStatusAndPrices(
+          st.baseOriginal,
+          st.baseFinal,
           st.options,
           selectedValueIds
         );
@@ -354,17 +361,19 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           ...it,
           selectedValueIds,
           originalPrice: unitOriginal,
-            price: unitFinal,
+          price: unitFinal,
 
-            // optional UI helpers from backend product (base-level info)
-            discounted: Boolean(st.product?.discounted),
-            discountPercentOff: Number(st.product?.discountPercentOff ?? 0),
-            discountLabel: st.product?.discountLabel ?? null,
+          // optional UI helpers from backend product (base-level info)
+          discounted: Boolean(st.product?.discounted),
+          discountPercentOff: Number(st.product?.discountPercentOff ?? 0),
+          discountLabel: st.product?.discountLabel ?? null,
+
           inStock: st.inStock,
           unavailable,
           lastCheckedAt: st.checkedAt,
         };
       });
+
 
       itemsRef.current = nextItems;
       setItems(nextItems);

@@ -744,4 +744,55 @@ const css = `
   .row-actions{ justify-self:stretch; }
   .row-actions .btn{ width:100%; }
 }
+.btn{
+  height:40px;
+  padding:0 14px;
+  border-radius:10px;
+  border:1px solid rgba(74,79,65,.28);
+  background:#f7f7f4;              /* ✅ not pure white */
+  color:#1f241b;                    /* ✅ strong text */
+  cursor:pointer;
+  font-weight:900;
+  font-size:13px;
+  transition: all .12s ease;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  box-shadow:0 2px 10px rgba(0,0,0,.06); /* ✅ visible on light bg */
+}
+
+
+.btn:active{
+  transform: translateY(0);
+  box-shadow:0 3px 10px rgba(0,0,0,.08);
+}
+
+.btn:disabled{
+  opacity:.55;
+  cursor:not-allowed;
+  transform:none;
+  box-shadow:none;
+}
+.btn.bad{
+  color:#b00020;
+  background:#fff4f6;                 /* ✅ visible */
+  border-color:rgba(176,0,32,.22);
+}
+.btn.bad:hover{
+  background:#ffe9ee;
+  border-color:rgba(176,0,32,.35);
+}
+.row-actions{
+  justify-self:end;
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;        /* ✅ wrap instead of disappearing */
+  align-items:center;
+}
+.row-actions .btn{
+  white-space:nowrap;
+}
+.gs-row{ overflow: visible; }   /* add this if any parent clips */
+
 `;
