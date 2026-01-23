@@ -284,7 +284,7 @@ export default function ProductShowcase({
                     )}
                   </div>
 
-                  <div className="ps-body" onClick={(e) => e.stopPropagation()}>
+                  <div className="ps-body" >
                     <div className="ps-title">{p.name}</div>
 
                     <div className="ps-row2">

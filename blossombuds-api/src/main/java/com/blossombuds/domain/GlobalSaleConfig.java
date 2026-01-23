@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 @Entity
-@EntityListeners(AuditingEntityListener.class)
+//@EntityListeners(AuditingEntityListener.class)
 @Table(
         name = "global_sale_config",
         indexes = {
@@ -50,12 +50,12 @@ public class GlobalSaleConfig {
     private LocalDateTime endsAt;
 
     /** Created timestamp (DB default CURRENT_TIMESTAMP). */
-    @CreatedDate
+    //@CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     /** Modified timestamp (DB default CURRENT_TIMESTAMP; update in service or DB trigger). */
     @Column(name = "modified_at", nullable = false)
-    @LastModifiedDate
+    //@LastModifiedDate
     private LocalDateTime modifiedAt;
 }
