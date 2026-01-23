@@ -131,11 +131,11 @@ public class GlobalSaleConfigService {
     // ─────────────────────────── Validation helpers ───────────────────────────
 
     private void assertNoOverlappingEnabledDiscount(GlobalSaleConfigDto dto, Long excludeId) {
-        // Only block overlaps if admin is trying to enable this discount
         if (!Boolean.TRUE.equals(dto.getEnabled())) return;
 
         LocalDateTime startsAt = toUtcLdt(dto.getStartsAt());
         LocalDateTime endsAt   = toUtcLdt(dto.getEndsAt());
+
         if (startsAt != null && endsAt != null && startsAt.isAfter(endsAt)) {
             throw new IllegalArgumentException("startsAt must be before (or equal to) endsAt");
         }
@@ -143,13 +143,17 @@ public class GlobalSaleConfigService {
         LocalDateTime minTime = LocalDateTime.of(1970, 1, 1, 0, 0);
         LocalDateTime maxTime = LocalDateTime.of(2999, 12, 31, 23, 59, 59);
 
-        long conflicts = globalSaleRepo.countOverlappingEnabled(startsAt, endsAt, excludeId, minTime, maxTime);
+        LocalDateTime startTime = (startsAt != null) ? startsAt : minTime;
+        LocalDateTime endTime   = (endsAt != null)   ? endsAt   : maxTime;
+
+        long conflicts = globalSaleRepo.countOverlappingEnabled(startTime, endTime, excludeId);
         if (conflicts > 0) {
             throw new IllegalArgumentException(
                     "This discount overlaps an existing enabled discount window. Disable the other discount or adjust the time range."
             );
         }
     }
+
 
     private void assertValidPercent(BigDecimal pct) {
         // Allow null/0 when disabled (or draft rows). But if enabled=true, we will enforce through overlap method + UI.

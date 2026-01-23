@@ -31,22 +31,19 @@ public interface GlobalSaleConfigRepository extends JpaRepository<GlobalSaleConf
     List<GlobalSaleConfig> findEffectiveConfigs(@Param("now") LocalDateTime now);
 
     @Query("""
-    select count(g)
-    from GlobalSaleConfig g
-    where g.enabled = true
-      and (:excludeId is null or g.id <> :excludeId)
-      and (
-            coalesce(g.startsAt, :minTime) <= coalesce(:endsAt, :maxTime)
-        and coalesce(:startsAt, :minTime) <= coalesce(g.endsAt, :maxTime)
-      )
+  select count(g)
+  from GlobalSaleConfig g
+  where g.enabled = true
+    and (:excludeId is null or g.id <> :excludeId)
+    and ( (g.startsAt is null or g.startsAt <= :endTime)
+          and (g.endsAt   is null or g.endsAt   >= :startTime) )
 """)
     long countOverlappingEnabled(
-            @Param("startsAt") LocalDateTime startsAt,
-            @Param("endsAt") LocalDateTime endsAt,
-            @Param("excludeId") Long excludeId,
-            @Param("minTime") LocalDateTime minTime,
-            @Param("maxTime") LocalDateTime maxTime
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime,
+            @Param("excludeId") Long excludeId
     );
+
 
 
     /** Convenience method: returns only the single best effective config, if any. */
