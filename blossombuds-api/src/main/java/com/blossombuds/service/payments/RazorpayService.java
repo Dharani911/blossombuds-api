@@ -44,7 +44,7 @@ public class RazorpayService {
                 .orElseThrow(() -> {log.error("❌ Order not found | orderId={}", orderId); return new IllegalArgumentException("Order not found: " + orderId);});
 
         BigDecimal grand = o.getGrandTotal() == null ? BigDecimal.ZERO : o.getGrandTotal();
-        long amountPaise = grand.movePointRight(2).longValueExact(); // INR paise
+        long amountPaise = grand.setScale(2, java.math.RoundingMode.HALF_UP).movePointRight(2).longValueExact(); // INR paise
 
         String currency = (o.getCurrency() == null || o.getCurrency().isBlank())
                 ? "INR" : o.getCurrency().trim().toUpperCase();

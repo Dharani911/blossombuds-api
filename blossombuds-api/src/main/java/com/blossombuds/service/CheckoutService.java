@@ -207,7 +207,7 @@ public class CheckoutService {
         try { var m = c.getClass().getMethod("getIsoCode"); Object v = m.invoke(c); if (v instanceof String s && s.equalsIgnoreCase("IN")) return true; } catch (Exception ignore) {}
         return false;
     }
-    private BigDecimal nvl(BigDecimal v) { return v == null ? BigDecimal.ZERO : v; }
+    private BigDecimal nvl(BigDecimal v) { return v == null ? BigDecimal.ZERO : v.setScale(2, java.math.RoundingMode.HALF_UP); }
     private String normCurrency(String cur) { return (cur == null || cur.isBlank()) ? "INR" : cur.trim().toUpperCase(); }
 
     // API response wrapper

@@ -61,7 +61,7 @@ public class FeatureImageSettingsService {
     private static final int MAX_H = 900;
 
     /** Upload from multipart (no presign; same flow as product images). */
-    @CacheEvict(cacheNames = "featureImages", key = "'public'")
+    @CacheEvict(cacheNames = "featureImages", allEntries = true)
     public FeatureImageDto addFromUpload(MultipartFile file, String altText, Integer sortOrder)
             throws IOException {
         log.info("[FEATURE][UPLOAD] Incoming feature image upload: fileName={}, size={}",
@@ -142,8 +142,8 @@ public class FeatureImageSettingsService {
         return dto;
     }
 
-    /** List public feature images (cached). */
-    @Cacheable(cacheNames = "featureImages", key = "'public'")
+    /** List public feature images (cached with 30-min auto-rotation to prevent signed URL expiry). */
+    @Cacheable(cacheNames = "featureImages", key = "T(java.time.Instant).now().getEpochSecond() / 1800")
     public List<FeatureImageDto> listPublic() {
         List<Map<String, Object>> raw = readListJson();
         List<FeatureImageDto> out = new ArrayList<>();
@@ -185,7 +185,7 @@ public class FeatureImageSettingsService {
      * 2) Take a temp key, convert/resize/compress (no watermark), store to UI_PREFIX,
      * append to Settings list, and return a signed preview.
      */
-    @CacheEvict(cacheNames = "featureImages", key = "'public'")
+    @CacheEvict(cacheNames = "featureImages", allEntries = true)
     public FeatureImageDto addFromTempKey(String tempKey, String altText, Integer sortOrder) {
         log.info("[FEATURE][TEMP] Processing tempKey={}", tempKey);
 
@@ -250,8 +250,7 @@ public class FeatureImageSettingsService {
     }
 
     /** Replace entire list (expects entries with keys already in UI_PREFIX). */
-
-    @CacheEvict(cacheNames = "featureImages", key = "'public'")
+    @CacheEvict(cacheNames = "featureImages", allEntries = true)
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void replaceAll(List<Map<String, Object>> items) {
@@ -262,7 +261,7 @@ public class FeatureImageSettingsService {
     }
 
     /** Remove an entry; optionally delete object from R2. */
-    @CacheEvict(cacheNames = "featureImages", key = "'public'")
+    @CacheEvict(cacheNames = "featureImages", allEntries = true)
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void remove(String key, boolean deleteObject) {
@@ -280,7 +279,7 @@ public class FeatureImageSettingsService {
             safeDelete(key);
         }
     }
-    @CacheEvict(cacheNames = "featureImages", key = "'public'")
+    @CacheEvict(cacheNames = "featureImages", allEntries = true)
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void reorder(List<String> orderedKeys) {
@@ -327,7 +326,7 @@ public class FeatureImageSettingsService {
     }
 
     /** Update a single item’s metadata (altText and/or sortOrder). */
-    @CacheEvict(cacheNames = "featureImages", key = "'public'")
+    @CacheEvict(cacheNames = "featureImages", allEntries = true)
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void updateMeta(String key, String altText, Integer sortOrder) {
@@ -402,7 +401,6 @@ public class FeatureImageSettingsService {
     }
 
     /** Read JSON array from Settings (empty list if missing/invalid). */
-    @SuppressWarnings("unchecked")
     private List<Map<String, Object>> readListJson() {
         try {
             Setting s = settings.get(SETTINGS_KEY);
@@ -448,8 +446,9 @@ public class FeatureImageSettingsService {
 
     /* Lightweight DTO for presign response */
     public record PresignResponse(String key, String url, String contentType) {}
+
     @org.springframework.cache.annotation.CacheEvict(value = "featureImages", allEntries = true)
     public void evictCache() {
-        log.info("[CACHE] Evicting featureImages");
+        log.info("[CACHE] Evicting featureImages manually");
     }
 }

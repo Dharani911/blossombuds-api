@@ -12,27 +12,26 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
-import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 
 /**
  * HTTP endpoints for Razorpay: order creation, checkout verification, and webhooks.
  */
+@Slf4j
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/payments/razorpay")
 public class RazorpayController {
 
     private final RazorpayService rzp;
-    private final CheckoutIntentRepository checkoutIntentRepository;
-    private final OrderService orderService;
     private final RazorPayProperties props;
     private final ObjectMapper om;
     private final CheckoutFinalizeService finalizeService;
@@ -166,17 +165,8 @@ public class RazorpayController {
 
     /* ----------------------------- Helpers ----------------------------- */
 
-    private OrderDto readOrderDto(String json) {
-        try { return om.readValue(json, OrderDto.class); }
-        catch (Exception e) { throw new IllegalStateException("Failed to parse OrderDto from intent", e); }
-    }
 
-    private List<OrderItemDto> readItems(String json) {
-        try {
-            var type = om.getTypeFactory().constructCollectionType(List.class, OrderItemDto.class);
-            return om.readValue(json, type);
-        } catch (Exception e) { throw new IllegalStateException("Failed to parse OrderItemDto[] from intent", e); }
-    }
+    //}
 
     /**
      * Minimal webhook processor. Extend this to upsert payments/order status if you prefer webhook-driven flow.
@@ -221,7 +211,7 @@ public class RazorpayController {
                 // You can also transition order status, send emails, etc.
                 return;
             }*/
-            if ("payment.captured".equalsIgnoreCase(event)) {
+            if ("payment.captured".equalsIgnoreCase(event) || "order.paid".equalsIgnoreCase(event)) {
                 JsonNode entity = root.path("payload").path("payment").path("entity");
 
                 String rzpPaymentId = entity.path("id").asText("");
@@ -257,10 +247,14 @@ public class RazorpayController {
                             );
                             return;
                         } catch (NumberFormatException ignore) {
-                            // fall through and rethrow original
+                            // fall through and log instead of throwing
                         }
                     }
-                    throw ex;
+                    
+                    // Crucial: Razorpay disables webhooks if repeated 500 errors occur on arbitrary events. 
+                    // This logs a warning and returns 200/204 to Razorpay for manual/foreign payments.
+                    log.warn("[PAYMENT][WEBHOOK] Ignored unknown order or missing intent. rzpOrderId: {}", rzpOrderId);
+                    return;
                 }
 
                 return;

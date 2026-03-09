@@ -60,7 +60,7 @@ public class CheckoutTxService {
     }
 
     /** Returns non-null BigDecimal. */
-    private BigDecimal nvl(BigDecimal v) { return v == null ? BigDecimal.ZERO : v; }
+    private BigDecimal nvl(BigDecimal v) { return v == null ? BigDecimal.ZERO : v.setScale(2, java.math.RoundingMode.HALF_UP); }
 
     /** Normalizes currency to uppercase with INR default. */
     private String normCurrency(String cur) { return (cur == null || cur.isBlank()) ? "INR" : cur.trim().toUpperCase(); }
