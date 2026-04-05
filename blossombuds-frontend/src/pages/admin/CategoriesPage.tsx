@@ -10,6 +10,7 @@ import {
   uploadCategoryImage,
   updateCategoryImage,
   deleteCategoryImage,
+  reorderCategories,
   linkProductToCategoryApi,
   unlinkProductFromCategoryApi,
   type Category,
@@ -33,6 +34,7 @@ type CategoryModalState =
       mode: "create" | "edit";
       data?: Category;
       parentId?: number;
+
     };
 export default function CategoriesPage() {
   // categories
@@ -74,7 +76,8 @@ export default function CategoriesPage() {
   const [assignFilter, setAssignFilter] = useState<AssignFilter>("all");
 const [draggingCatId, setDraggingCatId] = useState<number | null>(null);
 const [dragOverCatId, setDragOverCatId] = useState<number | null>(null);
-
+const catListRef = useRef<HTMLDivElement | null>(null);
+const [dropPosition, setDropPosition] = useState<"before" | "after" | null>(null);
   // ---------- Load categories once ----------
   useEffect(() => {
     let live = true;
@@ -301,6 +304,7 @@ const assignCounts = useMemo(() => {
           description: (form.description ?? "").trim(),
           active: form.active ?? true,
           parentId: form.parentId ?? null,
+          sortOrder: form.sortOrder ?? 0,
         });
 
         let finalCat = created;
@@ -327,6 +331,7 @@ const assignCounts = useMemo(() => {
           description: form.description?.trim(),
           active: form.active,
           parentId: form.parentId ?? null,
+          sortOrder: form.sortOrder ?? 0,
         });
 
         if (form.removeImage) {
@@ -400,11 +405,10 @@ const assignCounts = useMemo(() => {
   }
 
   function onDragStartProduct(e: React.DragEvent, product: Product) {
-    e.dataTransfer.setData("text/plain", String(product.id));
+    e.dataTransfer.setData("application/x-product-id", String(product.id));
     e.dataTransfer.effectAllowed = "move";
     setDraggingPid(product.id);
 
-    // Custom drag image: neat pill with product name
     const ghost = createGhost(product.name);
     const rect = ghost.getBoundingClientRect();
     e.dataTransfer.setDragImage(ghost, rect.width / 2, rect.height / 2);
@@ -433,17 +437,42 @@ const assignCounts = useMemo(() => {
     }
   }
 function onDragStartCategory(e: React.DragEvent, catId: number) {
-  e.dataTransfer.setData("text/plain", String(catId));
+  e.dataTransfer.setData("application/x-category-id", String(catId));
   e.dataTransfer.effectAllowed = "move";
   setDraggingCatId(catId);
 }
-
 function onDragOverCategoryRow(e: React.DragEvent, catId: number) {
   e.preventDefault();
   e.dataTransfer.dropEffect = "move";
-  if (dragOverCatId !== catId) setDragOverCatId(catId);
-}
 
+  const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+  const midY = rect.top + rect.height / 2;
+  const pos: "before" | "after" = e.clientY < midY ? "before" : "after";
+
+  if (isCategoryDrag(e)) {
+    if (dragOverCatId !== catId) setDragOverCatId(catId);
+    if (dropPosition !== pos) setDropPosition(pos);
+    autoScrollCategoryList(e.clientY);
+  }
+
+  if (isProductDrag(e)) {
+    if (dragOverCat !== catId) setDragOverCat(catId);
+  }
+}
+function autoScrollCategoryList(clientY: number) {
+  const el = catListRef.current;
+  if (!el) return;
+
+  const rect = el.getBoundingClientRect();
+  const edgeThreshold = 60;
+  const scrollStep = 18;
+
+  if (clientY < rect.top + edgeThreshold) {
+    el.scrollTop -= scrollStep;
+  } else if (clientY > rect.bottom - edgeThreshold) {
+    el.scrollTop += scrollStep;
+  }
+}
 function onDragEndCategory() {
   setDraggingCatId(null);
   setDragOverCatId(null);
@@ -452,40 +481,80 @@ function onDragEndCategory() {
 async function onDropCategory(e: React.DragEvent, targetCatId: number) {
   e.preventDefault();
 
-  const sourceCatId = Number(e.dataTransfer.getData("text/plain"));
+  const sourceRaw = e.dataTransfer.getData("application/x-category-id");
+  if (!sourceRaw) {
+    setDraggingCatId(null);
+    setDragOverCatId(null);
+    setDropPosition(null);
+    return;
+  }
+
+  const sourceCatId = Number(sourceRaw);
   if (!sourceCatId || sourceCatId === targetCatId) {
     setDraggingCatId(null);
     setDragOverCatId(null);
+    setDropPosition(null);
     return;
   }
 
   const fromIndex = cats.findIndex(c => c.id === sourceCatId);
-  const toIndex = cats.findIndex(c => c.id === targetCatId);
+  let toIndex = cats.findIndex(c => c.id === targetCatId);
 
   if (fromIndex < 0 || toIndex < 0) {
     setDraggingCatId(null);
     setDragOverCatId(null);
+    setDropPosition(null);
+    return;
+  }
+
+  // If dropping after target, shift insertion point
+  if (dropPosition === "after") {
+    toIndex += 1;
+  }
+
+  // Adjust because removing source changes indexes
+  if (fromIndex < toIndex) {
+    toIndex -= 1;
+  }
+
+  if (fromIndex === toIndex) {
+    setDraggingCatId(null);
+    setDragOverCatId(null);
+    setDropPosition(null);
     return;
   }
 
   const oldCats = cats;
-  const nextCats = moveItem(cats, fromIndex, toIndex);
+  const nextCats = [...cats];
+  const [moved] = nextCats.splice(fromIndex, 1);
+  nextCats.splice(toIndex, 0, moved);
 
   setCats(nextCats);
   setDraggingCatId(null);
   setDragOverCatId(null);
+  setDropPosition(null);
 
   try {
     await persistCategoryOrder(nextCats);
+    await refreshCategories();
     setToast({ kind: "ok", msg: "Category order updated" });
   } catch (e: any) {
+    console.error("[CATEGORY][REORDER][FAIL]", e?.response?.status, e?.response?.data || e);
     setCats(oldCats);
     setToast({ kind: "bad", msg: e?.response?.data?.message || "Reorder failed" });
   }
 }
+function onDragLeaveCategoryRow(e: React.DragEvent, catId: number) {
+  const related = e.relatedTarget as HTMLElement | null;
+  if (!related || !e.currentTarget.contains(related)) {
+    if (dragOverCatId === catId) setDragOverCatId(null);
+    if (dragOverCat === catId) setDragOverCat(null);
+    setDropPosition(null);
+  }
+}
   async function onDropToCategory(e: React.DragEvent, catId: number) {
     e.preventDefault();
-    const pidRaw = e.dataTransfer.getData("text/plain");
+    const pidRaw = e.dataTransfer.getData("application/x-product-id");
     const productId = Number(pidRaw);
     setDragOverCat(null);
     cleanupGhost();
@@ -528,7 +597,30 @@ async function onDropCategory(e: React.DragEvent, targetCatId: number) {
       setDraggingPid(null);
     }
   }
+function isProductDrag(e: React.DragEvent) {
+  return Array.from(e.dataTransfer.types).includes("application/x-product-id");
+}
 
+function isCategoryDrag(e: React.DragEvent) {
+  return Array.from(e.dataTransfer.types).includes("application/x-category-id");
+}
+
+async function onDropCategoryRow(e: React.DragEvent, targetCatId: number) {
+  e.preventDefault();
+
+  if (isProductDrag(e)) {
+    await onDropToCategory(e, targetCatId);
+    return;
+  }
+
+  if (isCategoryDrag(e)) {
+    await onDropCategory(e, targetCatId);
+    return;
+  }
+
+  setDragOverCat(null);
+  setDragOverCatId(null);
+}
   async function unlink(productId: number) {
     if (!selectedCatId) return;
     const old = catProducts;
@@ -622,7 +714,7 @@ async function onDropCategory(e: React.DragEvent, targetCatId: number) {
           ) : cats.length === 0 ? (
             <div className="pad muted">No categories yet.</div>
           ) : (
-            <div className="clist">
+            <div className="clist" ref={catListRef}>
               {cats.map((c) => {
                 const sel = selectedCatId === c.id;
                 const hov = dragOverCat === c.id;
@@ -632,13 +724,16 @@ async function onDropCategory(e: React.DragEvent, targetCatId: number) {
                     className={
                       "crow" +
                       (sel ? " sel" : "") +
-                      (dragOverCatId === c.id ? " dragover" : "") +
-                      (draggingCatId === c.id ? " dragging" : "")
+                      ((dragOverCatId === c.id || dragOverCat === c.id) ? " dragover" : "") +
+                      (draggingCatId === c.id ? " dragging" : "") +
+                      (dragOverCatId === c.id && dropPosition === "before" ? " drop-before" : "") +
+                      (dragOverCatId === c.id && dropPosition === "after" ? " drop-after" : "")
                     }
                     draggable
                     onDragStart={(e) => onDragStartCategory(e, c.id!)}
                     onDragOver={(e) => onDragOverCategoryRow(e, c.id!)}
-                    onDrop={(e) => onDropCategory(e, c.id!)}
+                    onDragLeave={(e) => onDragLeaveCategoryRow(e, c.id!)}
+                    onDrop={(e) => onDropCategoryRow(e, c.id!)}
                     onDragEnd={onDragEndCategory}
                     onClick={() => setSelectedCatId(c.id!)}
                   >
@@ -2001,7 +2096,35 @@ select:focus {
   border-radius: 2px;
 }
 
+.crow {
+  position: relative;
+}
 
+.crow.drop-before::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 0;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #F05D8B, #F6C320);
+}
+
+.crow.drop-after::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 0;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #F05D8B, #F6C320);
+}
+
+.clist {
+  scroll-behavior: smooth;
+}
 @keyframes toastSlide {
   0% { transform: translateY(24px); opacity: 0; }
   10% { transform: translateY(0); opacity: 1; }

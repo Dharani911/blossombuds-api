@@ -14,7 +14,7 @@ import {
   type Product,
   type PageResp,
 } from "../api/catalog";
-
+import categoryDefaultImg from "../assets/category_default.jpg";
 /* ----------------------------- Keywords (search-only) ----------------------------- */
 const KEYWORDS: { label: string; value: string }[] = [
   { label: "Malli", value: "malli" },
@@ -144,17 +144,47 @@ export default function ShopCategoriesPage() {
 
   // ✅ NEW: allow /categories/all (or no id) to mean “All Products”
   const allMode = !id || id === "all";
-
+ const [cats, setCats] = useState<Category[]>([]);
+  const [loadingCats, setLoadingCats] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
   const selectedParentId = useMemo(() => {
     if (allMode) return undefined;
     const n = Number(id);
     return Number.isFinite(n) && n > 0 ? n : undefined;
   }, [id, allMode]);
+const activeCats = useMemo(
+  () => (cats || []).filter((c) => c.active !== false),
+  [cats]
+);
 
+const childrenByParent = useMemo(() => {
+  const map: Record<string, Category[]> = {};
+
+  for (const c of activeCats) {
+    const key = c.parentId == null ? "root" : String(c.parentId);
+    if (!map[key]) map[key] = [];
+    map[key].push(c);
+  }
+
+  Object.keys(map).forEach((k) => {
+    map[k].sort(
+      (a, b) =>
+        (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
+        String(a.name || "").localeCompare(String(b.name || ""))
+    );
+  });
+
+  return map;
+}, [activeCats]);
+
+const rootCategories = useMemo(() => childrenByParent["root"] || [], [childrenByParent]);
+
+const selectedChildren = useMemo(() => {
+  if (!selectedParentId) return [];
+  return childrenByParent[String(selectedParentId)] || [];
+}, [childrenByParent, selectedParentId]);
   // data
-  const [cats, setCats] = useState<Category[]>([]);
-  const [loadingCats, setLoadingCats] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
+
 
   // selected parent full record (optional description)
   const [selParent, setSelParent] = useState<Category | null>(null);
@@ -591,7 +621,7 @@ useEffect(() => {
     const sectionFiltered = prods.filter((p: any) => filteredProducts.some((fp) => fp.id === p.id));
 
     return (
-      <section className={"sec card depth-" + depth}>
+      <section id={`section-cat-${catId}`} className={"sec card depth-" + depth}>
         {showHeader && (
           <header className="sec-hd" onClick={() => toggleNode(catId)} role="button" aria-expanded={isOpen}>
             <div className="sec-title">
@@ -650,20 +680,26 @@ useEffect(() => {
         {/* LEFT menu (desktop only) */}
         <aside className="menu card">
           <div className="m-head">Categories</div>
+
           <div className="m-list">
             {loadingCats && <div className="muted pad">Loading…</div>}
 
             {!loadingCats && (
               <>
-                {/* ✅ NEW: “All” option */}
                 <button
-                  className={"m-item" + (allMode ? " active" : "")}
+                  className={"m-item m-item-visual" + (allMode ? " active" : "")}
                   onClick={goAll}
                   title="All products"
                   type="button"
                 >
-                  <span className="dot" />
-                  <span className="lbl">All</span>
+                  <div className="m-thumb">
+                    <img src={categoryDefaultImg} alt="All Products" loading="lazy" />
+                  </div>
+
+                  <div className="m-copy">
+                    <span className="lbl">All Products</span>
+                    <span className="m-sub">Browse everything</span>
+                  </div>
                 </button>
 
                 {parents.length === 0 && <div className="muted pad">No categories.</div>}
@@ -671,15 +707,51 @@ useEffect(() => {
                 {parents.map((c) => (
                   <button
                     key={c.id}
-                    className={"m-item" + (c.id === selectedParentId ? " active" : "")}
+                    className={"m-item m-item-visual" + (c.id === selectedParentId ? " active" : "")}
                     onClick={() => setSelectedParent(c.id)}
                     title={c.name}
                     type="button"
                   >
-                    <span className="dot" />
-                    <span className="lbl">{c.name}</span>
+                    <div className="m-thumb">
+                      {c.imageUrl ? (
+                        <img src={c.imageUrl} alt={c.imageAltText || c.name} loading="lazy" />
+                      ) : (
+                        <div className="m-thumb-ph" />
+                      )}
+                    </div>
+
+                    <div className="m-copy">
+                      <span className="lbl">{c.name}</span>
+                      {!!c.description && <span className="m-sub">{c.description}</span>}
+                    </div>
                   </button>
                 ))}
+
+                {!allMode && selectedParentId && selectedChildren.length > 0 && (
+                  <div className="m-subtree">
+                    <div className="m-subtree-title">Subcategories</div>
+
+                    {selectedChildren.map((child) => (
+                      <button
+                        key={child.id}
+                        className={"m-subitem" + (catPick === child.id ? " active" : "")}
+                        type="button"
+                        onClick={() => {
+                          setCatPick(child.id);
+                          const el = document.getElementById(`section-cat-${child.id}`);
+                          if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }}
+                      >
+                        {child.imageUrl ? (
+                          <img src={child.imageUrl} alt={child.imageAltText || child.name} loading="lazy" />
+                        ) : (
+                          <span className="m-subdot" />
+                        )}
+                        <span>{child.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -687,14 +759,12 @@ useEffect(() => {
 
         {/* RIGHT content */}
         <main className="content">
-          {/* Topbar */}
           <div className="topbar">
             {isMobile && (
               <button className="drawer-btn" onClick={() => setDrawerOpen(true)} type="button">
                 ☰ Categories
               </button>
             )}
-
 
             <div className="searchbar" role="search">
               <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -712,12 +782,14 @@ useEffect(() => {
                   strokeLinecap="round"
                 />
               </svg>
+
               <input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Search flowers… (e.g., malli, jasmine)"
                 aria-label="Search products"
               />
+
               {q && (
                 <button className="iconbtn" type="button" onClick={() => setQ("")} aria-label="Clear search">
                   ×
@@ -726,7 +798,7 @@ useEffect(() => {
             </div>
 
             <button
-              className={"filter-btn" + ((catPick !== "all" || minPrice !== "" || maxPrice !== "") ? " on" : "")}
+              className={"filter-btn" + (catPick !== "all" || minPrice !== "" || maxPrice !== "" ? " on" : "")}
               type="button"
               onClick={() => setFiltersOpen((v) => !v)}
               aria-expanded={filtersOpen}
@@ -735,7 +807,6 @@ useEffect(() => {
               <span className="count">{catPick !== "all" || minPrice !== "" || maxPrice !== "" ? "•" : ""}</span>
             </button>
 
-            {/* filter popover */}
             {filtersOpen && (
               <div className="pop" ref={popRef} role="dialog" aria-label="Filters">
                 <div className="pop-hd">
@@ -746,21 +817,21 @@ useEffect(() => {
                 </div>
 
                 <div className="pop-bd">
-                  {/* ✅ Category dropdown behavior:
-                      - In ALL mode: selecting a category navigates to that category view.
-                      - In category mode: it filters locally. */}
                   <label className="fld">
                     <span>Category</span>
                     <select
                       value={catPick === "all" ? "all" : String(catPick)}
                       onChange={(e) => {
                         const v = e.target.value;
+
                         if (v === "all") {
                           setCatPick("all");
                           if (allMode) goAll();
                           return;
                         }
+
                         const cid = Number(v);
+
                         if (allMode) {
                           setFiltersOpen(false);
                           setCatPick("all");
@@ -772,7 +843,6 @@ useEffect(() => {
                     >
                       <option value="all">All products</option>
 
-                      {/* In ALL mode, show top-level parents only (clean UX) */}
                       {allMode &&
                         parents.map((c) => (
                           <option key={c.id} value={c.id}>
@@ -780,7 +850,6 @@ useEffect(() => {
                           </option>
                         ))}
 
-                      {/* In category mode, show full nested options (as before) */}
                       {!allMode &&
                         categoryOptions.map((c) => (
                           <option key={c.id} value={c.id}>
@@ -800,6 +869,7 @@ useEffect(() => {
                         placeholder={priceMinPh}
                       />
                     </label>
+
                     <label className="fld">
                       <span>Max</span>
                       <input
@@ -824,7 +894,6 @@ useEffect(() => {
             )}
           </div>
 
-          {/* Keywords row */}
           <div className="kwrow" aria-label="Quick keywords">
             {KEYWORDS.map((k) => (
               <button
@@ -841,7 +910,6 @@ useEffect(() => {
 
           {err && <div className="alert">{err}</div>}
 
-          {/* ✅ ALL MODE: show all products grid */}
           {allMode && (
             <>
               <section className="parent-desc card">
@@ -849,8 +917,9 @@ useEffect(() => {
                   <div className="pd-top">
                     <div>
                       <h2>All Products</h2>
-                      <p className="muted">Browse everything. Use search/keywords or filters to narrow down.</p>
+                      <p className="muted">Browse everything. Use search, keywords, or filters to narrow down.</p>
                     </div>
+
                     <div className="pd-right">
                       <span className="badge">{shownCount} items</span>
                     </div>
@@ -859,18 +928,17 @@ useEffect(() => {
               </section>
 
               {loadingAll && filteredProducts.length > 0 && (
-                <div className="muted" style={{ padding: "8px 2px" }}>Loading more…</div>
+                <div className="muted" style={{ padding: "8px 2px" }}>
+                  Loading more…
+                </div>
               )}
-
 
               <section className="card">
                 <div className="grid">
-                  {/* show loaded items immediately */}
                   {filteredProducts.map((p) => (
                     <SmallProductCard key={p.id} p={p} onOpen={(pid) => setQvId(pid)} />
                   ))}
 
-                  {/* ✅ skeletons while loading (no empty page) */}
                   {(loadingAll || loadingCats) &&
                     Array.from({ length: Math.max(6, 12 - filteredProducts.length) }).map((_, i) => (
                       <div className="sk-card" key={`sk-${i}`} />
@@ -878,18 +946,14 @@ useEffect(() => {
                 </div>
               </section>
 
-              {/* empty state only when NOT loading */}
               {!loadingAll && !loadingCats && filteredProducts.length === 0 && (
                 <section className="card pad muted">
-                  No products match your search/filters. Try clearing filters or searching a different keyword.
+                  No products match your search or filters. Try clearing filters or searching a different keyword.
                 </section>
               )}
-
-
             </>
           )}
 
-          {/* CATEGORY MODE: show tree view */}
           {!allMode && selectedParentId && selParent && (
             <>
               <section className="parent-desc card">
@@ -899,6 +963,7 @@ useEffect(() => {
                       <h2>{selParent.name}</h2>
                       {!!selParent.description && <p className="muted">{selParent.description}</p>}
                     </div>
+
                     <div className="pd-right">
                       <span className="badge">{shownCount} items</span>
                     </div>
@@ -908,11 +973,17 @@ useEffect(() => {
 
               {loadingTree && <section className="card pad muted">Loading products…</section>}
 
-              <Section catId={selParent.id} title={selParent.name} desc={selParent.description ?? null} depth={0} showHeader={false} />
+              <Section
+                catId={selParent.id}
+                title={selParent.name}
+                desc={selParent.description ?? null}
+                depth={0}
+                showHeader={false}
+              />
 
               {!loadingTree && shownCount === 0 && (
                 <section className="card pad muted">
-                  No products match your search/filters. Try clearing filters or searching a different keyword.
+                  No products match your search or filters. Try clearing filters or searching a different keyword.
                 </section>
               )}
             </>
@@ -940,11 +1011,11 @@ useEffect(() => {
 
             <div className="aside-body">
               {loadingCats && <div className="muted pad">Loading…</div>}
+
               {!loadingCats && (
                 <>
-                  {/* ✅ NEW: All option */}
                   <button
-                    className={"aside-item" + (allMode ? " on" : "")}
+                    className={"aside-item aside-item-visual" + (allMode ? " on" : "")}
                     onClick={() => {
                       goAll();
                       setDrawerOpen(false);
@@ -952,15 +1023,20 @@ useEffect(() => {
                     title="All products"
                     type="button"
                   >
-                    <span className="dot" />
-                    <span className="lbl">All</span>
-                    {allMode && <span className="pillmini">Current</span>}
+                    <div className="aside-thumb">
+                      <img src={categoryDefaultImg} alt="All Products" loading="lazy" />
+                    </div>
+
+                    <div className="aside-copy">
+                      <span className="lbl">All Products</span>
+                      {allMode && <span className="pillmini">Current</span>}
+                    </div>
                   </button>
 
                   {parents.map((c) => (
                     <button
                       key={c.id}
-                      className={"aside-item" + (c.id === selectedParentId ? " on" : "")}
+                      className={"aside-item aside-item-visual" + (c.id === selectedParentId ? " on" : "")}
                       onClick={() => {
                         setSelectedParent(c.id);
                         setDrawerOpen(false);
@@ -968,11 +1044,49 @@ useEffect(() => {
                       title={c.name}
                       type="button"
                     >
-                      <span className="dot" />
-                      <span className="lbl">{c.name}</span>
-                      {c.id === selectedParentId && <span className="pillmini">Current</span>}
+                      <div className="aside-thumb">
+                        {c.imageUrl ? (
+                          <img src={c.imageUrl} alt={c.imageAltText || c.name} loading="lazy" />
+                        ) : (
+                          <div className="aside-thumb-ph" />
+                        )}
+                      </div>
+
+                      <div className="aside-copy">
+                        <span className="lbl">{c.name}</span>
+                        {c.id === selectedParentId && <span className="pillmini">Current</span>}
+                      </div>
                     </button>
                   ))}
+
+                  {!allMode && selectedParentId && selectedChildren.length > 0 && (
+                    <div className="m-subtree">
+                      <div className="m-subtree-title">Subcategories</div>
+
+                      {selectedChildren.map((child) => (
+                        <button
+                          key={child.id}
+                          className={"m-subitem" + (catPick === child.id ? " active" : "")}
+                          type="button"
+                          onClick={() => {
+                            setCatPick(child.id);
+                            setDrawerOpen(false);
+                            setTimeout(() => {
+                              const el = document.getElementById(`section-cat-${child.id}`);
+                              if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+                            }, 50);
+                          }}
+                        >
+                          {child.imageUrl ? (
+                            <img src={child.imageUrl} alt={child.imageAltText || child.name} loading="lazy" />
+                          ) : (
+                            <span className="m-subdot" />
+                          )}
+                          <span>{child.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -980,12 +1094,74 @@ useEffect(() => {
         </div>
       )}
 
-      {/* Quick View Modal */}
       {qvId != null && <ProductQuickView productId={qvId} onClose={() => setQvId(null)} />}
     </div>
   );
-}
+  }
+function CategoryImageCard({
+  cat,
+  onClick,
+  active = false,
+  compact = false,
+}: {
+  cat: Category;
+  onClick: (id: number) => void;
+  active?: boolean;
+  compact?: boolean;
+}) {
+  const img = cat.imageUrl || "";
 
+  return (
+    <button
+      type="button"
+      className={"cat-card" + (active ? " active" : "") + (compact ? " compact" : "")}
+      onClick={() => onClick(cat.id)}
+      title={cat.name}
+      aria-label={`Open ${cat.name}`}
+    >
+      <div className="cat-card-media">
+        {img ? (
+          <img src={img} alt={cat.imageAltText || cat.name} loading="lazy" />
+        ) : (
+          <div className="cat-card-ph" />
+        )}
+        <div className="cat-card-overlay" />
+      </div>
+
+      <div className="cat-card-meta">
+        <div className="cat-card-name">{cat.name}</div>
+        {!!cat.description && !compact && (
+          <div className="cat-card-desc">{cat.description}</div>
+        )}
+      </div>
+    </button>
+  );
+}
+function CategoryMiniCard({
+  cat,
+  onClick,
+  active = false,
+}: {
+  cat: Category;
+  onClick: (id: number) => void;
+  active?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      className={"cat-mini" + (active ? " active" : "")}
+      onClick={() => onClick(cat.id)}
+      title={cat.name}
+    >
+      {cat.imageUrl ? (
+        <img src={cat.imageUrl} alt={cat.imageAltText || cat.name} loading="lazy" />
+      ) : (
+        <span className="cat-mini-dot" />
+      )}
+      <span>{cat.name}</span>
+    </button>
+  );
+}
 /* ----------------------------- Styles ----------------------------- */
 const css = `
 .wrap{ background: var(--bb-bg); color: var(--bb-primary); min-height: 70vh; }
@@ -1469,7 +1645,363 @@ const css = `
   border: 1px solid rgba(240,93,139,.22);
   color: var(--bb-accent);
 }
+.cat-browser{
+  padding:12px;
+  margin-bottom:12px;
+}
 
+.cat-browser-hd{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:12px;
+}
 
+.cat-browser-hd h2,
+.cat-browser-hd h3{
+  margin:0 0 4px;
+  font-size:18px;
+  font-weight:900;
+}
 
+.cat-grid{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap:12px;
+}
+
+.compact-grid{
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 900px){
+  .cat-grid{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px){
+  .cat-grid,
+  .compact-grid{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap:10px;
+  }
+}
+
+.cat-card{
+  border:none;
+  background:#fff;
+  border-radius:14px;
+  overflow:hidden;
+  cursor:pointer;
+  text-align:left;
+  padding:0;
+  border:1px solid rgba(0,0,0,.08);
+  box-shadow:0 10px 28px rgba(0,0,0,.08);
+  transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+
+.cat-card:hover{
+  transform:translateY(-2px);
+  box-shadow:0 16px 36px rgba(0,0,0,.12);
+  border-color:rgba(246,195,32,.38);
+}
+
+.cat-card.active{
+  border-color:rgba(240,93,139,.45);
+  box-shadow:0 14px 32px rgba(240,93,139,.14);
+}
+
+.cat-card.compact .cat-card-meta{
+  padding:10px;
+}
+
+.cat-card-media{
+  position:relative;
+}
+
+.cat-card-media::before{
+  content:"";
+  display:block;
+  padding-top:68%;
+}
+
+.cat-card-media img,
+.cat-card-ph,
+.cat-card-overlay{
+  position:absolute;
+  inset:0;
+}
+
+.cat-card-media img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+
+.cat-card-ph{
+  background: radial-gradient(1000px 240px at -200px 50%, #ffe9a8, #ffd3e1 60%, #fff);
+}
+
+.cat-card-overlay{
+  background: linear-gradient(180deg, rgba(0,0,0,0) 35%, rgba(0,0,0,.34));
+}
+
+.cat-card-meta{
+  padding:12px;
+  display:grid;
+  gap:4px;
+}
+
+.cat-card-name{
+  font-size:14px;
+  font-weight:900;
+  color:var(--bb-primary);
+}
+
+.cat-card-desc{
+  font-size:12px;
+  opacity:.78;
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+}
+
+.cat-branch{
+  display:grid;
+  gap:8px;
+}
+
+.cat-mini-row{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+}
+
+.cat-mini{
+  height:34px;
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:0 10px 0 6px;
+  border-radius:999px;
+  border:1px solid rgba(0,0,0,.10);
+  background:#fff;
+  cursor:pointer;
+  font-size:12px;
+  font-weight:800;
+  box-shadow:0 6px 16px rgba(0,0,0,.05);
+}
+
+.cat-mini.active{
+  border-color:rgba(240,93,139,.45);
+  background:rgba(240,93,139,.06);
+}
+
+.cat-mini img{
+  width:22px;
+  height:22px;
+  border-radius:999px;
+  object-fit:cover;
+}
+
+.cat-mini-dot{
+  width:10px;
+  height:10px;
+  border-radius:999px;
+  background:var(--bb-accent-2);
+}
+
+.m-item-visual{
+  display:grid;
+  grid-template-columns: 52px 1fr;
+  gap:10px;
+  align-items:center;
+  padding:8px;
+  text-align:left;
+}
+
+.m-thumb{
+  width:52px;
+  height:52px;
+  border-radius:12px;
+  overflow:hidden;
+  border:1px solid rgba(0,0,0,.08);
+  background:#f6f6f6;
+  flex:0 0 auto;
+}
+
+.m-thumb img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+
+.m-thumb-ph{
+  width:100%;
+  height:100%;
+  background: radial-gradient(1000px 240px at -200px 50%, #ffe9a8, #ffd3e1 60%, #fff);
+}
+
+.m-copy{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+
+.m-copy .lbl{
+  font-size:13px;
+  font-weight:900;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.m-sub{
+  font-size:11px;
+  opacity:.7;
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+}
+
+.m-subtree{
+  margin-top:8px;
+  padding-top:8px;
+  border-top:1px solid rgba(0,0,0,.06);
+  display:grid;
+  gap:6px;
+}
+
+.m-subtree-title{
+  font-size:11px;
+  font-weight:900;
+  opacity:.7;
+  padding:2px 4px 6px;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
+
+.m-subitem{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 10px;
+  border-radius:10px;
+  border:1px solid rgba(0,0,0,.06);
+  background:#fff;
+  cursor:pointer;
+  text-align:left;
+  font-size:12px;
+  font-weight:800;
+}
+
+.m-subitem.active{
+  border-color: rgba(240,93,139,.35);
+  background: rgba(240,93,139,.06);
+}
+
+.m-subitem img{
+  width:24px;
+  height:24px;
+  border-radius:999px;
+  object-fit:cover;
+  flex:0 0 auto;
+}
+
+.m-subdot{
+  width:10px;
+  height:10px;
+  border-radius:999px;
+  background: var(--bb-accent-2);
+  flex:0 0 auto;
+}
+
+.aside-item-visual{
+  display:grid;
+  grid-template-columns: 52px 1fr;
+  gap:10px;
+  align-items:center;
+  text-align:left;
+}
+
+.aside-thumb{
+  width:52px;
+  height:52px;
+  border-radius:12px;
+  overflow:hidden;
+  border:1px solid rgba(0,0,0,.08);
+  background:#f6f6f6;
+}
+
+.aside-thumb img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+
+.aside-thumb-ph{
+  width:100%;
+  height:100%;
+  background: radial-gradient(1000px 240px at -200px 50%, #ffe9a8, #ffd3e1 60%, #fff);
+}
+
+.aside-copy{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+}
+
+.aside-copy .lbl{
+  font-weight:900;
+  font-size:13px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.m-copy .lbl{
+  font-size:13px;
+  font-weight:900;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.aside-copy .lbl{
+  font-weight:900;
+  font-size:13px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.m-copy .lbl{
+  font-size:13px;
+  font-weight:900;
+  line-height:1.2;
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+  white-space:normal;
+  word-break:break-word;
+}
+
+.aside-copy .lbl{
+  font-weight:900;
+  font-size:13px;
+  line-height:1.2;
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+  white-space:normal;
+  word-break:break-word;
+}
 `;
