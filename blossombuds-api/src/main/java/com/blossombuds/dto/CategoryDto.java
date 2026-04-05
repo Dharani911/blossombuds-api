@@ -12,4 +12,16 @@ public class CategoryDto {
     private Boolean active;
     private String description;
     private Integer sortOrder;
+
+    /** Signed or fallback URL returned to frontend. */
+    private String imageUrl;
+
+    /** Stored object key in R2. */
+    private String imageKey;
+
+    /** Alt text for category image. */
+    private String imageAltText;
+
+    /** True if this category uses its own uploaded image. */
+    private Boolean hasCustomImage;
 }

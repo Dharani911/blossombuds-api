@@ -177,40 +177,6 @@ public class RazorpayController {
             JsonNode root = om.readTree(body);
             String event = root.path("event").asText("");
 
-            // Example: payment.captured
-            /*if ("payment.captured".equalsIgnoreCase(event)) {
-                JsonNode entity = root.path("payload").path("payment").path("entity");
-                String rzpPaymentId = entity.path("id").asText("");
-                long amountPaise = entity.path("amount").asLong(0);
-                String currency = entity.path("currency").asText("INR");
-                String rzpOrderId = entity.path("order_id").asText("");
-
-                // Try to infer our internal orderId from notes or receipt if you stored it
-                Long ourOrderId = null;
-                String notesOrderId = entity.path("notes").path("orderId").asText("");
-                if (!notesOrderId.isBlank()) {
-                    try { ourOrderId = Long.parseLong(notesOrderId); } catch (NumberFormatException ignored) {}
-                }
-
-                // If you saved rzpOrderId on Order (as in your service), you can look it up here instead.
-                // Example:
-                // Optional<Order> maybeOrder = orderRepo.findByRzpOrderId(rzpOrderId);
-                // if (maybeOrder.isPresent()) { ourOrderId = maybeOrder.get().getId(); }
-
-                if (ourOrderId != null) {
-                    rzp.recordCapturedPayment(
-                            ourOrderId,
-                            rzpOrderId,
-                            rzpPaymentId,
-                            currency,
-                            BigDecimal.valueOf(amountPaise, 2),
-                            "webhook:" + env.toLowerCase()
-                    );
-                }
-
-                // You can also transition order status, send emails, etc.
-                return;
-            }*/
             if ("payment.captured".equalsIgnoreCase(event) || "order.paid".equalsIgnoreCase(event)) {
                 JsonNode entity = root.path("payload").path("payment").path("entity");
 
@@ -246,27 +212,38 @@ public class RazorpayController {
                                     "webhook:" + env.toLowerCase()
                             );
                             return;
-                        } catch (NumberFormatException ignore) {
-                            // fall through and log instead of throwing
+                        } catch (IllegalArgumentException ex2) {
+                            log.warn("[PAYMENT][WEBHOOK] Fallback intent not found. id={}. {}", notesCiId, ex2.getMessage());
+                            return; // Do not fail webhook!
+                        } catch (Exception ex2) {
+                            handleUnexpectedWebhookException(ex2, env);
+                            return;
                         }
                     }
                     
-                    // Crucial: Razorpay disables webhooks if repeated 500 errors occur on arbitrary events. 
-                    // This logs a warning and returns 200/204 to Razorpay for manual/foreign payments.
-                    log.warn("[PAYMENT][WEBHOOK] Ignored unknown order or missing intent. rzpOrderId: {}", rzpOrderId);
+                    log.warn("[PAYMENT][WEBHOOK] Ignored unknown order or missing intent. rzpOrderId: {}. {}", rzpOrderId, ex.getMessage());
                     return;
                 }
 
                 return;
             }
 
-
-            // Handle other events if needed (order.paid, payment.failed, refund.processed, ...)
-            // No-op by default.
-
         } catch (Exception e) {
-            // For webhooks, prefer throwing to surface 4xx/5xx to the sender
-            throw new IllegalStateException("Failed to process Razorpay webhook (" + env + "): " + e.getMessage(), e);
+            handleUnexpectedWebhookException(e, env);
+        }
+    }
+
+    private void handleUnexpectedWebhookException(Exception e, String env) {
+        String msg = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
+        boolean transientError = e instanceof org.springframework.dao.TransientDataAccessException ||
+                                 e instanceof org.springframework.transaction.TransactionException ||
+                                 msg.contains("deadlock") || msg.contains("lock wait") ||
+                                 msg.contains("timeout") || msg.contains("connection");
+        
+        if (transientError) {
+             throw new IllegalStateException("Transient failure in webhook (" + env + "), triggering retry.", e);
+        } else {
+             log.error("[PAYMENT][WEBHOOK] Non-transient failure processing webhook (" + env + "). Acknowledging to prevent disablement.", e);
         }
     }
 

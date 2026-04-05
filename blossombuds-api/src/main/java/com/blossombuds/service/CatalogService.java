@@ -37,6 +37,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.CacheEvict;
@@ -80,7 +81,8 @@ public class CatalogService {
 
     @Value("${cloudflare.r2.endpoint}")
     private String r2Endpoint;
-
+    @Value("${app.category.default-image-url}")
+    private String defaultCategoryImageUrl;
 
     private static final long MAX_BYTES = 10L * 1024 * 1024;
     static { javax.imageio.ImageIO.setUseCache(false); }
@@ -153,11 +155,15 @@ public class CatalogService {
         if (dto.getDescription()!=null){
             c.setDescription(dto.getDescription());
         }
-
+        if (c.getImageAltText() == null || c.getImageAltText().isBlank()) {
+            c.setImageAltText(c.getName());
+        }
+        c.setSortOrder(dto.getSortOrder() != null ? dto.getSortOrder() : 0);
         Category saved = categoryRepo.save(c);
         log.info("[CATEGORY][CREATE][OK] id={} slug='{}'", saved.getId(), saved.getSlug());
         return toDto(saved);
     }
+
 
     /** Naive slugify mirroring your frontend logic. */
     private static String slugify(String s) {
@@ -211,7 +217,9 @@ public class CatalogService {
                 throw new IllegalArgumentException("Category name cannot be blank");
             } c.setName(name);
         }
-
+        if ((c.getImageAltText() == null || c.getImageAltText().isBlank()) && c.getName() != null) {
+            c.setImageAltText(c.getName());
+        }
         if (dto.getSlug() != null) {
             String normalized = slugify(dto.getSlug());
             if (!normalized.equalsIgnoreCase(c.getSlug())) {
@@ -248,7 +256,9 @@ public class CatalogService {
         if (dto.getDescription()!=null){
             c.setDescription(dto.getDescription());
         }
-
+        if (dto.getSortOrder() != null) {
+            c.setSortOrder(dto.getSortOrder());
+        }
         log.info("[CATEGORY][UPDATE][OK] id={}", id);
         return toDto(c); // dirty checking
     }
@@ -1018,7 +1028,145 @@ public class CatalogService {
         }
         log.info("[IMAGE][SET_PRIMARY][OK] productId={} imageId={}", productId, imageId);
     }
+    private byte[] processCategoryImage(MultipartFile file) throws IOException {
+        validateFile(file);
 
+        BufferedImage original;
+        try (InputStream in = file.getInputStream()) {
+            original = ImageIO.read(in);
+        }
+
+        if (original == null) {
+            throw new IllegalArgumentException("Uploaded category file is not a supported image.");
+        }
+
+        // Category cards do not need watermark by default.
+        BufferedImage resized = ImageUtil.fitWithin(original, 1200);
+        return ImageUtil.toJpegUnderCap(resized);
+    }
+
+    private String uploadCategoryJpegBytes(byte[] bytes) throws IOException {
+        String key = "categories/" + UUID.randomUUID() + ".jpg";
+
+        ObjectMetadata meta = new ObjectMetadata();
+        meta.setContentType("image/jpeg");
+        meta.setContentLength(bytes.length);
+
+        try (InputStream in = new ByteArrayInputStream(bytes)) {
+            r2Client.putObject(new PutObjectRequest(bucketName, key, in, meta));
+        }
+
+        return key;
+    }
+
+    private void deleteR2ObjectQuietly(String key) {
+        if (key == null || key.isBlank()) return;
+        try {
+            r2Client.deleteObject(new DeleteObjectRequest(bucketName, key));
+            log.info("[R2][DELETE][OK] key={}", key);
+        } catch (Exception e) {
+            log.warn("[R2][DELETE][WARN] key={} err={}", key, e.toString());
+        }
+    }
+
+    private String resolveCategoryImageUrl(Category category) {
+        if (category == null) return defaultCategoryImageUrl;
+
+        String key = category.getImageKey();
+        if (key == null || key.isBlank()) {
+            return defaultCategoryImageUrl;
+        }
+
+        try {
+            return signGetUrl(key, Duration.ofMinutes(30));
+        } catch (Exception e) {
+            log.warn("[CATEGORY][IMAGE][SIGN][WARN] categoryId={} key={} err={}",
+                    category.getId(), key, e.toString());
+            return defaultCategoryImageUrl;
+        }
+    }
+    @Caching(evict = {
+            @CacheEvict(cacheNames = CATEGORIES, allEntries = true),
+            @CacheEvict(cacheNames = {PRODUCTS_BY_CATEGORY, PRODUCTS_PAGE}, allEntries = true)
+    })
+    @Transactional
+    @PreAuthorize("hasRole('ADMIN')")
+    public CategoryDto uploadCategoryImage(Long categoryId, MultipartFile file, String altText) throws IOException {
+        log.info("[CATEGORY][IMAGE][UPLOAD] categoryId={} file={}",
+                categoryId, file != null ? file.getOriginalFilename() : null);
+
+        if (categoryId == null) throw new IllegalArgumentException("Category id is required");
+        if (file == null || file.isEmpty()) throw new IllegalArgumentException("Category image file is required");
+
+        Category category = getCategory(categoryId);
+
+        byte[] finalBytes = processCategoryImage(file);
+        String newKey = uploadCategoryJpegBytes(finalBytes);
+
+        String oldKey = category.getImageKey();
+        category.setImageKey(newKey);
+        category.setImageAltText(altText != null && !altText.isBlank() ? altText.trim() : category.getName());
+
+        deleteR2ObjectQuietly(oldKey);
+
+        log.info("[CATEGORY][IMAGE][UPLOAD][OK] categoryId={} key={}", categoryId, newKey);
+        return toDto(category);
+    }
+
+    @Caching(evict = {
+            @CacheEvict(cacheNames = CATEGORIES, allEntries = true),
+            @CacheEvict(cacheNames = {PRODUCTS_BY_CATEGORY, PRODUCTS_PAGE}, allEntries = true)
+    })
+    @Transactional
+    @PreAuthorize("hasRole('ADMIN')")
+    public CategoryDto updateCategoryImage(Long categoryId, MultipartFile file, String altText) throws IOException {
+        log.info("[CATEGORY][IMAGE][UPDATE] categoryId={} replaceFile={}",
+                categoryId, file != null && !file.isEmpty());
+
+        if (categoryId == null) throw new IllegalArgumentException("Category id is required");
+
+        Category category = getCategory(categoryId);
+
+        if (file != null && !file.isEmpty()) {
+            byte[] finalBytes = processCategoryImage(file);
+            String newKey = uploadCategoryJpegBytes(finalBytes);
+
+            String oldKey = category.getImageKey();
+            category.setImageKey(newKey);
+
+            deleteR2ObjectQuietly(oldKey);
+        }
+
+        if (altText != null) {
+            category.setImageAltText(altText.isBlank() ? null : altText.trim());
+        }
+
+        log.info("[CATEGORY][IMAGE][UPDATE][OK] categoryId={}", categoryId);
+        return toDto(category);
+    }
+
+    @Caching(evict = {
+            @CacheEvict(cacheNames = CATEGORIES, allEntries = true),
+            @CacheEvict(cacheNames = {PRODUCTS_BY_CATEGORY, PRODUCTS_PAGE}, allEntries = true)
+    })
+    @Transactional
+    @PreAuthorize("hasRole('ADMIN')")
+    public CategoryDto removeCategoryImage(Long categoryId) {
+        log.info("[CATEGORY][IMAGE][DELETE] categoryId={}", categoryId);
+
+        if (categoryId == null) throw new IllegalArgumentException("Category id is required");
+
+        Category category = getCategory(categoryId);
+        String oldKey = category.getImageKey();
+
+        category.setImageKey(null);
+        category.setImageAltText(null);
+
+        deleteR2ObjectQuietly(oldKey);
+
+        log.info("[CATEGORY][IMAGE][DELETE][OK] categoryId={}", categoryId);
+        return toDto(category);
+    }
     // ─────────────────────────────── Options ────────────────────────────────
 
     /** Creates an option for a product. */
@@ -1305,11 +1453,17 @@ public class CatalogService {
         d.setActive(c.getActive());
         d.setDescription(c.getDescription());
         d.setParentId(c.getParent() != null ? c.getParent().getId() : null);
+
+        d.setImageKey(c.getImageKey());
+        d.setImageAltText(c.getImageAltText());
+        d.setHasCustomImage(c.getImageKey() != null && !c.getImageKey().isBlank());
+        d.setImageUrl(resolveCategoryImageUrl(c));
+        d.setSortOrder(c.getSortOrder());
         return d;
     }
     @Cacheable(cacheNames = CATEGORIES, key = "'all'")
     public List<CategoryDto> listCategoriesDto() {
-        return categoryRepo.findAll()
+        return categoryRepo.findAllByOrderBySortOrderAscNameAscIdAsc()
                 .stream()
                 .map(this::toDto)
                 .toList();
@@ -1529,5 +1683,28 @@ public class CatalogService {
             );
         }
     }*/
+    @Transactional
+    @PreAuthorize("hasRole('ADMIN')")
+    @Caching(evict = {
+            @CacheEvict(cacheNames = CATEGORIES, allEntries = true),
+            @CacheEvict(cacheNames = {PRODUCTS_BY_CATEGORY, PRODUCTS_PAGE}, allEntries = true)
+    })
+    public void reorderCategories(List<CategoryReorderItemDto> items) {
+        if (items == null || items.isEmpty()) {
+            throw new IllegalArgumentException("Reorder payload is required");
+        }
+
+        Map<Long, Integer> orderMap = items.stream()
+                .filter(x -> x.getId() != null && x.getSortOrder() != null)
+                .collect(Collectors.toMap(CategoryReorderItemDto::getId, CategoryReorderItemDto::getSortOrder));
+
+        List<Category> categories = categoryRepo.findAllById(orderMap.keySet());
+        for (Category c : categories) {
+            Integer sortOrder = orderMap.get(c.getId());
+            if (sortOrder != null) {
+                c.setSortOrder(sortOrder);
+            }
+        }
+    }
 
 }

@@ -99,6 +99,11 @@ export type Category = {
   active?: boolean;
   parentId?: number | null;
   sortOrder?: number | null;
+
+  imageUrl?: string | null;
+  imageKey?: string | null;
+  imageAltText?: string | null;
+  hasCustomImage?: boolean | null;
 };
 
 /** ---------- Products ---------- */
@@ -407,7 +412,78 @@ export async function updateCategory(id: number, dto: Partial<Category>) {
   const { data } = await adminHttp.put(`/api/catalog/categories/${id}`, payload);
   return data as Category;
 }
+export async function uploadCategoryImage(
+  categoryId: number,
+  file: File,
+  altText?: string,
+  onProgress?: (pct: number) => void
+): Promise<Category> {
+  const err = validateImageFile(file);
+  if (err) {
+    return Promise.reject(new Error(err));
+  }
 
+  const fd = new FormData();
+  fd.append("file", file, file.name);
+  if (altText != null) fd.append("altText", altText);
+
+  const { data } = await adminHttp.post(
+    `/api/catalog/categories/${categoryId}/image`,
+    fd,
+    {
+      headers: { "Content-Type": "multipart/form-data" },
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) {
+          onProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      },
+      timeout: 120000,
+    }
+  );
+
+  return data as Category;
+}
+
+export async function updateCategoryImage(
+  categoryId: number,
+  patch: { file?: File | null; altText?: string },
+  onProgress?: (pct: number) => void
+): Promise<Category> {
+  const fd = new FormData();
+
+  if (patch.file) {
+    const err = validateImageFile(patch.file);
+    if (err) {
+      return Promise.reject(new Error(err));
+    }
+    fd.append("file", patch.file, patch.file.name);
+  }
+
+  if (patch.altText !== undefined) {
+    fd.append("altText", patch.altText ?? "");
+  }
+
+  const { data } = await adminHttp.put(
+    `/api/catalog/categories/${categoryId}/image`,
+    fd,
+    {
+      headers: { "Content-Type": "multipart/form-data" },
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) {
+          onProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      },
+      timeout: 120000,
+    }
+  );
+
+  return data as Category;
+}
+
+export async function deleteCategoryImage(categoryId: number): Promise<Category> {
+  const { data } = await adminHttp.delete(`/api/catalog/categories/${categoryId}/image`);
+  return data as Category;
+}
 
 export async function deleteCategory(id: number) {
   await adminHttp.delete(`/api/catalog/categories/${id}`);
@@ -433,7 +509,9 @@ export async function linkProductToCategoryApi(productId: number, categoryId: nu
 export async function unlinkProductFromCategoryApi(productId: number, categoryId: number) {
   await adminHttp.delete(`/api/catalog/products/${productId}/categories/${categoryId}`);
 }
-
+export async function reorderCategories(items: Array<{ id: number; sortOrder: number }>) {
+  await adminHttp.put(`/api/catalog/categories/reorder`, items);
+}
 /** ---------- Utilities ---------- */
 
 export function slugifyName(name: string) {

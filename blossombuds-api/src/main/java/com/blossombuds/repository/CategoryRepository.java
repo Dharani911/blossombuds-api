@@ -30,6 +30,8 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
 
     Page<Category> findByActiveTrueAndNameContainingIgnoreCase(String q, Pageable pageable);
     boolean existsBySlug(String slug);
+    List<Category> findAllByOrderBySortOrderAscNameAscIdAsc();
 
+    List<Category> findByParent_IdOrderBySortOrderAscNameAscIdAsc(Long parentId);
 
 }

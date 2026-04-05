@@ -7,11 +7,13 @@ import {
   createCategory,
   updateCategory,
   deleteCategory,
+  uploadCategoryImage,
+  updateCategoryImage,
+  deleteCategoryImage,
   linkProductToCategoryApi,
   unlinkProductFromCategoryApi,
   type Category,
   type Product,
-  type Page,
 } from "../../api/adminCatalog";
 
 /* Theme */
@@ -20,6 +22,18 @@ const ACCENT = "#F05D8B";
 const GOLD = "#F6C320";
 const INK = "rgba(0,0,0,.08)";
 
+type CategoryFormData = Partial<Category> & {
+  imageFile?: File | null;
+  removeImage?: boolean;
+};
+
+type CategoryModalState =
+  | null
+  | {
+      mode: "create" | "edit";
+      data?: Category;
+      parentId?: number;
+    };
 export default function CategoriesPage() {
   // categories
   const [cats, setCats] = useState<Category[]>([]);
@@ -48,7 +62,7 @@ export default function CategoriesPage() {
 
   // ui
   const [q, setQ] = useState("");
-  const [modal, setModal] = useState<null | { mode: "create" | "edit"; data?: Category; parentId?: number }>(null);
+  const [modal, setModal] = useState<CategoryModalState>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{ kind: "ok" | "bad"; msg: string } | null>(null);
 
@@ -58,7 +72,8 @@ export default function CategoriesPage() {
   const dragGhostRef = useRef<HTMLDivElement | null>(null);
   type AssignFilter = "all" | "assigned" | "unassigned";
   const [assignFilter, setAssignFilter] = useState<AssignFilter>("all");
-
+const [draggingCatId, setDraggingCatId] = useState<number | null>(null);
+const [dragOverCatId, setDragOverCatId] = useState<number | null>(null);
 
   // ---------- Load categories once ----------
   useEffect(() => {
@@ -276,33 +291,64 @@ const assignCounts = useMemo(() => {
     }
 
 
-  async function save(form: Partial<Category>) {
+  async function save(form: CategoryFormData) {
     setBusy(true);
     try {
       if (modal?.mode === "create") {
-        await createCategory({
+        const created = await createCategory({
           name: form.name?.trim() || "",
           slug: (form.slug ?? "").trim(),
           description: (form.description ?? "").trim(),
           active: form.active ?? true,
-          ...(form as any).parentId !== undefined ? { parentId: (form as any).parentId } : {},
-        } as any);
+          parentId: form.parentId ?? null,
+        });
+
+        let finalCat = created;
+
+        if (created?.id && form.imageFile) {
+          finalCat = await uploadCategoryImage(
+            created.id,
+            form.imageFile,
+            form.imageAltText?.trim() || form.name?.trim() || created.name
+          );
+        }
+
         await refreshCategories();
+
+        if (finalCat?.id) {
+          setSelectedCatId(finalCat.id);
+        }
+
         setToast({ kind: "ok", msg: "Category created" });
       } else if (modal?.mode === "edit" && modal.data?.id) {
-        const updated = await updateCategory(modal.data.id, {
-          name: form.name,
-          slug: form.slug,
-          description: form.description,
+        let updated = await updateCategory(modal.data.id, {
+          name: form.name?.trim(),
+          slug: form.slug?.trim(),
+          description: form.description?.trim(),
           active: form.active,
-          ...(form as any).parentId !== undefined ? { parentId: (form as any).parentId } : {},
-        } as any);
+          parentId: form.parentId ?? null,
+        });
+
+        if (form.removeImage) {
+          updated = await deleteCategoryImage(modal.data.id);
+        } else if (form.imageFile) {
+          updated = await updateCategoryImage(modal.data.id, {
+            file: form.imageFile,
+            altText: form.imageAltText?.trim() || form.name?.trim() || updated.name,
+          });
+        } else if (form.imageAltText !== undefined && form.imageAltText !== modal.data.imageAltText) {
+          updated = await updateCategoryImage(modal.data.id, {
+            altText: form.imageAltText?.trim() || "",
+          });
+        }
+
         setCats(prev => prev.map(c => (c.id === updated.id ? updated : c)));
         setToast({ kind: "ok", msg: "Category updated" });
       }
+
       setModal(null);
     } catch (e: any) {
-      setToast({ kind: "bad", msg: e?.response?.data?.message || "Save failed" });
+      setToast({ kind: "bad", msg: e?.response?.data?.message || e?.message || "Save failed" });
     } finally {
       setBusy(false);
     }
@@ -319,6 +365,16 @@ const assignCounts = useMemo(() => {
       setToast({ kind: "bad", msg: e?.response?.data?.message || "Delete failed" });
     }
   }
+  async function persistCategoryOrder(nextCats: Category[]) {
+    const payload = nextCats
+      .filter(c => c.id != null)
+      .map((c, idx) => ({
+        id: c.id as number,
+        sortOrder: (idx + 1) * 10,
+      }));
+
+    await reorderCategories(payload);
+  }
 
   // ---------- Drag & Drop (product -> category) ----------
   function createGhost(name: string) {
@@ -328,6 +384,12 @@ const assignCounts = useMemo(() => {
     document.body.appendChild(el);
     dragGhostRef.current = el;
     return el;
+  }
+  function moveItem<T>(arr: T[], fromIndex: number, toIndex: number): T[] {
+    const copy = [...arr];
+    const [moved] = copy.splice(fromIndex, 1);
+    copy.splice(toIndex, 0, moved);
+    return copy;
   }
 
   function cleanupGhost() {
@@ -370,7 +432,57 @@ const assignCounts = useMemo(() => {
       if (dragOverCat === catId) setDragOverCat(null);
     }
   }
+function onDragStartCategory(e: React.DragEvent, catId: number) {
+  e.dataTransfer.setData("text/plain", String(catId));
+  e.dataTransfer.effectAllowed = "move";
+  setDraggingCatId(catId);
+}
 
+function onDragOverCategoryRow(e: React.DragEvent, catId: number) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+  if (dragOverCatId !== catId) setDragOverCatId(catId);
+}
+
+function onDragEndCategory() {
+  setDraggingCatId(null);
+  setDragOverCatId(null);
+}
+
+async function onDropCategory(e: React.DragEvent, targetCatId: number) {
+  e.preventDefault();
+
+  const sourceCatId = Number(e.dataTransfer.getData("text/plain"));
+  if (!sourceCatId || sourceCatId === targetCatId) {
+    setDraggingCatId(null);
+    setDragOverCatId(null);
+    return;
+  }
+
+  const fromIndex = cats.findIndex(c => c.id === sourceCatId);
+  const toIndex = cats.findIndex(c => c.id === targetCatId);
+
+  if (fromIndex < 0 || toIndex < 0) {
+    setDraggingCatId(null);
+    setDragOverCatId(null);
+    return;
+  }
+
+  const oldCats = cats;
+  const nextCats = moveItem(cats, fromIndex, toIndex);
+
+  setCats(nextCats);
+  setDraggingCatId(null);
+  setDragOverCatId(null);
+
+  try {
+    await persistCategoryOrder(nextCats);
+    setToast({ kind: "ok", msg: "Category order updated" });
+  } catch (e: any) {
+    setCats(oldCats);
+    setToast({ kind: "bad", msg: e?.response?.data?.message || "Reorder failed" });
+  }
+}
   async function onDropToCategory(e: React.DragEvent, catId: number) {
     e.preventDefault();
     const pidRaw = e.dataTransfer.getData("text/plain");
@@ -517,17 +629,36 @@ const assignCounts = useMemo(() => {
                 return (
                   <div
                     key={c.id}
-                    className={"crow" + (sel ? " sel" : "") + (hov ? " dragover" : "")}
+                    className={
+                      "crow" +
+                      (sel ? " sel" : "") +
+                      (dragOverCatId === c.id ? " dragover" : "") +
+                      (draggingCatId === c.id ? " dragging" : "")
+                    }
+                    draggable
+                    onDragStart={(e) => onDragStartCategory(e, c.id!)}
+                    onDragOver={(e) => onDragOverCategoryRow(e, c.id!)}
+                    onDrop={(e) => onDropCategory(e, c.id!)}
+                    onDragEnd={onDragEndCategory}
                     onClick={() => setSelectedCatId(c.id!)}
-                    onDragOver={(e) => onDragOverCategory(e, c.id!)}
-                    onDragEnter={(e) => onDragEnterCategory(e, c.id!)}
-                    onDragLeave={(e) => onDragLeaveCategory(e, c.id!)}
-                    onDrop={(e) => onDropToCategory(e, c.id!)}
-                    title="Drop a product here to assign"
                   >
-                    <div className="cmeta">
-                      <div className="cname">{c.name}</div>
-                      <div className="muted tiny">{c.slug || "—"} · {c.active ? "Active" : "Disabled"}</div>
+                  <div className="cat-grip" aria-hidden="true">⋮⋮</div>
+                    <div className="cmeta-row">
+                      <div className="cthumb">
+                        {c.imageUrl ? (
+                          <img src={c.imageUrl} alt={c.imageAltText || c.name} />
+                        ) : (
+                          <div className="cthumb-ph" />
+                        )}
+                      </div>
+
+                      <div className="cmeta">
+                        <div className="cname">{c.name}</div>
+                        <div className="muted tiny">
+                          {c.slug || "—"} · {c.active ? "Active" : "Disabled"}
+                          {c.hasCustomImage ? " · Custom image" : " · Default image"}
+                        </div>
+                      </div>
                     </div>
                     <div className="row-actions">
                       <button
@@ -723,7 +854,7 @@ function CategoryModal({
   initial?: Category;
   busy: boolean;
   onClose: () => void;
-  onSave: (form: Partial<Category>) => void;
+  onSave: (form: CategoryFormData) => void;
   parents: Category[];
   defaultParentId?: number;
 }) {
@@ -732,11 +863,36 @@ function CategoryModal({
   const [description, setDescription] = useState(initial?.description || "");
   const [active, setActive] = useState(initial?.active ?? true);
   const [parentId, setParentId] = useState<number | "">((initial as any)?.parentId ?? (defaultParentId ?? ""));
+  const [imageAltText, setImageAltText] = useState(initial?.imageAltText || initial?.name || "");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [removeImage, setRemoveImage] = useState(false);
 
+  const [previewUrl, setPreviewUrl] = useState<string | null>(initial?.imageUrl || null);
+const [sortOrder, setSortOrder] = useState<number | "">(
+  initial?.sortOrder ?? ""
+);
   useEffect(() => {
     if (!initial && mode === "create") setSlug(slugify(name));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, mode]);
+
+  useEffect(() => {
+    if (!imageFile) return;
+
+    const url = URL.createObjectURL(imageFile);
+    setPreviewUrl(url);
+
+    return () => URL.revokeObjectURL(url);
+  }, [imageFile]);
+
+  useEffect(() => {
+    if (removeImage) {
+      setPreviewUrl(null);
+      setImageFile(null);
+    } else if (!imageFile) {
+      setPreviewUrl(initial?.imageUrl || null);
+    }
+  }, [removeImage, initial?.imageUrl, imageFile]);
 
   const parentOptions = parents.filter(p => p.id !== initial?.id);
 
@@ -747,17 +903,20 @@ function CategoryModal({
           <strong>{mode === "create" ? "Add Category" : "Edit Category"}</strong>
           <button className="x" onClick={onClose} aria-label="Close">×</button>
         </div>
+
         <div className="modal-bd">
           <div className="grid2">
             <label>
               <span>Name</span>
               <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Garlands" />
             </label>
+
             <label>
               <span>Slug</span>
               <input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="garlands" />
             </label>
           </div>
+
           <label>
             <span>Description</span>
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
@@ -776,12 +935,76 @@ function CategoryModal({
                 ))}
               </select>
             </label>
+<label>
+  <span>Sort order</span>
+  <input
+    type="number"
+    value={sortOrder === "" ? "" : String(sortOrder)}
+    onChange={(e) => setSortOrder(e.target.value === "" ? "" : Number(e.target.value))}
+    placeholder="0"
+  />
+</label>
             <label className="check" style={{ alignItems: "end" }}>
               <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
               <span>Active</span>
             </label>
           </div>
+
+          <div className="img-block">
+            <div className="img-head">
+              <strong>Category image</strong>
+              <span className="muted tiny">
+                JPG, PNG, WebP preferred
+              </span>
+            </div>
+
+            <div className="img-grid">
+              <div className="img-preview">
+                {previewUrl ? (
+                  <img src={previewUrl} alt={imageAltText || name || "Preview"} />
+                ) : (
+                  <div className="img-preview-ph">No custom image</div>
+                )}
+              </div>
+
+              <div className="img-fields">
+                <label>
+                  <span>Image file</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] || null;
+                      setImageFile(f);
+                      if (f) setRemoveImage(false);
+                    }}
+                  />
+                </label>
+
+                <label>
+                  <span>Alt text</span>
+                  <input
+                    value={imageAltText}
+                    onChange={(e) => setImageAltText(e.target.value)}
+                    placeholder="Category image alt text"
+                  />
+                </label>
+
+                {mode === "edit" && initial?.hasCustomImage && (
+                  <label className="check">
+                    <input
+                      type="checkbox"
+                      checked={removeImage}
+                      onChange={(e) => setRemoveImage(e.target.checked)}
+                    />
+                    <span>Remove custom image and use default fallback</span>
+                  </label>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
+
         <div className="modal-ft">
           <button className="ghost" onClick={onClose}>Cancel</button>
           <button
@@ -794,8 +1017,11 @@ function CategoryModal({
                 slug: slug.trim(),
                 description: description.trim(),
                 active,
-                // backend may accept it; if not, it’s ignored
                 parentId: parentId === "" ? null : parentId,
+                imageAltText: imageAltText.trim(),
+                imageFile,
+                removeImage,
+                sortOrder: sortOrder === "" ? 0 : Number(sortOrder),
               })
             }
           >
@@ -1838,6 +2064,129 @@ select:focus {
   .crow {
     animation: none !important;
     transition: none !important;
+  }
+}
+.cmeta-row{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  min-width:0;
+}
+
+.cthumb{
+  width:44px;
+  height:44px;
+  border-radius:12px;
+  overflow:hidden;
+  border:1px solid rgba(0,0,0,.08);
+  background:#f7f7f7;
+  flex:0 0 44px;
+}
+
+.cthumb img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+
+.cthumb-ph{
+  width:100%;
+  height:100%;
+  background: radial-gradient(1000px 180px at -200px 50%, #ffe9a8, #ffd3e1 60%, #fff);
+}
+.crow.dragging {
+  opacity: 0.45;
+}
+
+.cat-grip {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(0,0,0,.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #999;
+  background: #fff;
+  flex: 0 0 auto;
+}
+
+.crow {
+  cursor: grab;
+}
+
+.crow:active {
+  cursor: grabbing;
+}
+.img-block{
+  display:grid;
+  gap:12px;
+  padding:14px;
+  border:1px solid rgba(0,0,0,.08);
+  border-radius:16px;
+  background:#fafafa;
+}
+
+.img-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+
+.img-grid{
+  display:grid;
+  grid-template-columns: 180px 1fr;
+  gap:16px;
+  align-items:start;
+}
+
+.img-preview{
+  width:180px;
+  height:180px;
+  border-radius:16px;
+  overflow:hidden;
+  border:1px solid rgba(0,0,0,.08);
+  background:#fff;
+  box-shadow: 0 8px 24px rgba(0,0,0,.06);
+}
+
+.img-preview img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+
+.img-preview-ph{
+  width:100%;
+  height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  padding:12px;
+  font-size:12px;
+  font-weight:700;
+  color:#777;
+  background: radial-gradient(1000px 180px at -200px 50%, #ffe9a8, #ffd3e1 60%, #fff);
+}
+
+.img-fields{
+  display:grid;
+  gap:12px;
+}
+
+@media (max-width: 700px){
+  .img-grid{
+    grid-template-columns: 1fr;
+  }
+
+  .img-preview{
+    width:100%;
+    max-width:220px;
+    height:220px;
   }
 }
 `;

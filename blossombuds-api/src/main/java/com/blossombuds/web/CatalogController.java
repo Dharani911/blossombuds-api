@@ -68,7 +68,76 @@ public class CatalogController {
     public void deleteCategory(@PathVariable Long id) {
         catalog.deleteCategory(id);
     }
+    /** Upload category image. */
+    @PostMapping(value = "/categories/{id}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('ADMIN')")
+    public CategoryDto uploadCategoryImage(@PathVariable Long id,
+                                           @RequestParam(required = false) String altText,
+                                           MultipartHttpServletRequest request) throws IOException {
 
+        MultipartFile file =
+                firstNonEmpty(
+                        request.getFile("file"),
+                        request.getFile("image"),
+                        request.getFile("upload"),
+                        request.getFile("photo")
+                );
+
+        if (file == null) {
+            for (MultipartFile mf : request.getFileMap().values()) {
+                if (mf != null && !mf.isEmpty()) {
+                    file = mf;
+                    break;
+                }
+            }
+        }
+
+        if (file == null) {
+            throw new IllegalArgumentException("No file part found in multipart request");
+        }
+
+        return catalog.uploadCategoryImage(id, file, altText);
+    }
+
+    /** Update category image and/or alt text. */
+    @PutMapping(value = "/categories/{id}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('ADMIN')")
+    public CategoryDto updateCategoryImage(@PathVariable Long id,
+                                           @RequestParam(required = false) String altText,
+                                           MultipartHttpServletRequest request) throws IOException {
+
+        MultipartFile file =
+                firstNonEmpty(
+                        request.getFile("file"),
+                        request.getFile("image"),
+                        request.getFile("upload"),
+                        request.getFile("photo")
+                );
+
+        if (file == null) {
+            for (MultipartFile mf : request.getFileMap().values()) {
+                if (mf != null && !mf.isEmpty()) {
+                    file = mf;
+                    break;
+                }
+            }
+        }
+
+        return catalog.updateCategoryImage(id, file, altText);
+    }
+
+    /** Remove custom category image and fall back to default image. */
+    @DeleteMapping("/categories/{id}/image")
+    @PreAuthorize("hasRole('ADMIN')")
+    public CategoryDto deleteCategoryImage(@PathVariable Long id) {
+        return catalog.removeCategoryImage(id);
+    }
+    @PutMapping("/categories/reorder")
+    @PreAuthorize("hasRole('ADMIN')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void reorderCategories(@RequestBody List<CategoryReorderItemDto> items) {
+        catalog.reorderCategories(items);
+    }
     // ─────────────────────────────── Products ────────────────────────────────
 
     /** Create product. */

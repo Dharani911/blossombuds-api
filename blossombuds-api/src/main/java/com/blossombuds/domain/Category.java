@@ -12,7 +12,6 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -20,22 +19,22 @@ import java.util.Set;
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor
 @Entity
 @Table(name = "categories")
-@EntityListeners(AuditingEntityListener.class) // <-- enable Spring Data auditing
+@EntityListeners(AuditingEntityListener.class)
 @SQLDelete(sql = "UPDATE {h-schema}categories SET active = false, modified_at = now() WHERE id = ?")
 @Where(clause = "active = true")
-@JsonIgnoreProperties({"hibernateLazyInitializer","handler"}) // safety
+@JsonIgnoreProperties({"hibernateLazyInitializer","handler"})
 public class Category {
 
     /** Surrogate primary key for categories. */
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** Optional parent category for hierarchy.
-     *  Serialize as just the ID to avoid deep graphs & lazy hits. */
+    /** Optional parent category for hierarchy. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "parent_id")
     @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id")
-    @JsonIdentityReference(alwaysAsId = true) // <-- parent -> 5 (id only) in JSON
+    @JsonIdentityReference(alwaysAsId = true)
     @ToString.Exclude @EqualsAndHashCode.Exclude
     private Category parent;
 
@@ -49,6 +48,17 @@ public class Category {
 
     @Column(columnDefinition = "text")
     private String description;
+
+    /** Stored object key for the category image in Cloudflare R2. */
+    @Column(name = "image_key", length = 500)
+    private String imageKey;
+
+    /** Optional alt text for the category image. */
+    @Column(name = "image_alt_text", length = 255)
+    private String imageAltText;
+
+    @Column(name = "sort_order")
+    private Integer sortOrder = 0;
 
     /** Soft-visibility flag to hide/show the category. */
     @Column(nullable = false)
@@ -74,22 +84,30 @@ public class Category {
     @Column(name = "modified_at")
     private LocalDateTime modifiedAt;
 
-    /** Product links under this category (join rows).
-     *  Make sure Jackson NEVER touches this lazy collection. */
-    @Getter(AccessLevel.NONE) // don't expose Lombok getter
+    /** Product links under this category (join rows). */
+    @Getter(AccessLevel.NONE)
     @OneToMany(mappedBy = "category", fetch = FetchType.LAZY)
     @ToString.Exclude @EqualsAndHashCode.Exclude
     private Set<ProductCategory> productLinks = new LinkedHashSet<>();
 
-    @JsonIgnore // explicit ignore at getter level prevents size()/isEmpty() calls
-    public Set<ProductCategory> getProductLinks() { return productLinks; }
+    @JsonIgnore
+    public Set<ProductCategory> getProductLinks() {
+        return productLinks;
+    }
 
-    public void setProductLinks(Set<ProductCategory> links) { this.productLinks = links; }
+    public void setProductLinks(Set<ProductCategory> links) {
+        this.productLinks = links;
+    }
 
-    // Optional: convenience read-only scalars for the frontend
-    @Transient @JsonProperty("parentId")
-    public Long getParentId() { return parent != null ? parent.getId() : null; }
+    @Transient
+    @JsonProperty("parentId")
+    public Long getParentId() {
+        return parent != null ? parent.getId() : null;
+    }
 
-    @Transient @JsonProperty("parentName")
-    public String getParentName() { return parent != null ? parent.getName() : null; }
+    @Transient
+    @JsonProperty("parentName")
+    public String getParentName() {
+        return parent != null ? parent.getName() : null;
+    }
 }

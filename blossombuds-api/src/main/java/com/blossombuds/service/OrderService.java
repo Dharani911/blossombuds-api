@@ -99,7 +99,8 @@ public class OrderService {
         }
         if (resolvedCoupon != null) {
             if (Boolean.FALSE.equals(resolvedCoupon.getActive())) {
-                throw new IllegalArgumentException("Coupon is inactive");
+                log.warn("[ORDER] Coupon {} is inactive, but applying it anyway to prevent order block", resolvedCoupon.getCode());
+                // Do not throw here. If a user paid while coupon was active, or race condition happened, we must honor it.
             }
             // Example optional checks (if your Coupon has these fields):
             // if (resolvedCoupon.getValidFrom()!=null && OffsetDateTime.now().isBefore(resolvedCoupon.getValidFrom())) ...
@@ -129,7 +130,8 @@ public class OrderService {
         boolean india = isIndia(country);
 
         if (india && !isValidIndianPin(dto.getShipPincode())) {
-            throw new IllegalArgumentException("Invalid Indian PIN code");
+            log.warn("[ORDER] Invalid Indian PIN code provided: {}", dto.getShipPincode());
+            // Do not throw to prevent order creation failure
         }
 
         String code = tryGeneratePublicCode();

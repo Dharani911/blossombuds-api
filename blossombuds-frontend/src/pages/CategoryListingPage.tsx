@@ -154,11 +154,7 @@ export default function CategoryListingPage() {
               className="chip"
               onClick={() => navigate(`/categories/${sc.id}`)}
             >
-              {(sc as any).imageUrl ? (
-                <img src={(sc as any).imageUrl} alt={sc.name} />
-              ) : (
-                <span className="dot" />
-              )}
+              <img src={sc.imageUrl || ""} alt={sc.imageAltText || sc.name} />
               <span>{sc.name}</span>
             </button>
           ))}

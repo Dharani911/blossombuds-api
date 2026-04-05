@@ -10,6 +10,9 @@ export type Category = {
   slug?: string;
   description?: string | null;
   imageUrl?: string | null;
+  imageKey?: string | null;
+  imageAltText?: string | null;
+  hasCustomImage?: boolean | null;
   parentId?: number | null;
   active?: boolean | null;
   sortOrder?: number | null;

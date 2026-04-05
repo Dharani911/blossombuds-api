@@ -1,20 +1,15 @@
 package com.blossombuds.web;
 
-import com.blossombuds.domain.Category;
-import com.blossombuds.domain.Product;
 import com.blossombuds.dto.CachedPage;
 import com.blossombuds.dto.CategoryDto;
 import com.blossombuds.dto.ProductDto;
-import com.blossombuds.dto.ProductListItemDto;
 import com.blossombuds.service.CatalogService;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 /** Public HTTP endpoints for category listing and category → products. */
 @RestController
@@ -28,7 +23,13 @@ public class CategoryController {
     /** List all active categories (public). */
     @GetMapping
     public List<CategoryDto> listCategories() {
-        return catalog.listCategoriesDto(); // ✅ uses @Cacheable
+        return catalog.listCategoriesDto();
+    }
+
+    /** Get category by id (public). */
+    @GetMapping("/{id}")
+    public CategoryDto getCategory(@PathVariable Long id) {
+        return catalog.getCategoryDto(id);
     }
 
     /** List products under a category with pagination (public). */
@@ -38,5 +39,4 @@ public class CategoryController {
                                                @RequestParam(defaultValue = "12") @Min(1) int size) {
         return catalog.listProductsByCategoryDto(id, page, size);
     }
-
 }
