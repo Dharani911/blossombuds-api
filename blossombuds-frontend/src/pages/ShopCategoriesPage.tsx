@@ -704,54 +704,62 @@ useEffect(() => {
 
                 {parents.length === 0 && <div className="muted pad">No categories.</div>}
 
-                {parents.map((c) => (
-                  <button
-                    key={c.id}
-                    className={"m-item m-item-visual" + (c.id === selectedParentId ? " active" : "")}
-                    onClick={() => setSelectedParent(c.id)}
-                    title={c.name}
-                    type="button"
-                  >
-                    <div className="m-thumb">
-                      {c.imageUrl ? (
-                        <img src={c.imageUrl} alt={c.imageAltText || c.name} loading="lazy" />
-                      ) : (
-                        <div className="m-thumb-ph" />
-                      )}
-                    </div>
+                {parents.map((c) => {
+                  const isSelected = c.id === selectedParentId;
+                  const childRows = isSelected ? selectedChildren : [];
 
-                    <div className="m-copy">
-                      <span className="lbl">{c.name}</span>
-                      {!!c.description && <span className="m-sub">{c.description}</span>}
-                    </div>
-                  </button>
-                ))}
-
-                {!allMode && selectedParentId && selectedChildren.length > 0 && (
-                  <div className="m-subtree">
-                    <div className="m-subtree-title">Subcategories</div>
-
-                    {selectedChildren.map((child) => (
+                  return (
+                    <React.Fragment key={c.id}>
                       <button
-                        key={child.id}
-                        className={"m-subitem" + (catPick === child.id ? " active" : "")}
+                        className={"m-item m-item-visual" + (isSelected ? " active" : "")}
+                        onClick={() => setSelectedParent(c.id)}
+                        title={c.name}
                         type="button"
-                        onClick={() => {
-                          setCatPick(child.id);
-                          const el = document.getElementById(`section-cat-${child.id}`);
-                          if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-                        }}
                       >
-                        {child.imageUrl ? (
-                          <img src={child.imageUrl} alt={child.imageAltText || child.name} loading="lazy" />
-                        ) : (
-                          <span className="m-subdot" />
-                        )}
-                        <span>{child.name}</span>
+                        <div className="m-thumb">
+                          {c.imageUrl ? (
+                            <img src={c.imageUrl} alt={c.imageAltText || c.name} loading="lazy" />
+                          ) : (
+                            <div className="m-thumb-ph" />
+                          )}
+                        </div>
+
+                        <div className="m-copy">
+                          <span className="lbl">{c.name}</span>
+                          {!!c.description && <span className="m-sub">{c.description}</span>}
+                        </div>
                       </button>
-                    ))}
-                  </div>
-                )}
+
+                      {isSelected && !allMode && childRows.length > 0 && (
+                        <div className="m-subtree">
+                          <div className="m-subtree-title">Subcategories</div>
+
+                          {childRows.map((child) => (
+                            <button
+                              key={child.id}
+                              className={"m-subitem" + (catPick === child.id ? " active" : "")}
+                              type="button"
+                              onClick={() => {
+                                setCatPick(child.id);
+                                const el = document.getElementById(`section-cat-${child.id}`);
+                                if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+                              }}
+                            >
+                              {child.imageUrl ? (
+                                <img src={child.imageUrl} alt={child.imageAltText || child.name} loading="lazy" />
+                              ) : (
+                                <span className="m-subdot" />
+                              )}
+                              <span>{child.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+
+
               </>
             )}
           </div>
@@ -1033,60 +1041,68 @@ useEffect(() => {
                     </div>
                   </button>
 
-                  {parents.map((c) => (
-                    <button
-                      key={c.id}
-                      className={"aside-item aside-item-visual" + (c.id === selectedParentId ? " on" : "")}
-                      onClick={() => {
-                        setSelectedParent(c.id);
-                        setDrawerOpen(false);
-                      }}
-                      title={c.name}
-                      type="button"
-                    >
-                      <div className="aside-thumb">
-                        {c.imageUrl ? (
-                          <img src={c.imageUrl} alt={c.imageAltText || c.name} loading="lazy" />
-                        ) : (
-                          <div className="aside-thumb-ph" />
-                        )}
-                      </div>
+                 {parents.map((c) => {
+                   const isSelected = c.id === selectedParentId;
+                   const childRows = isSelected ? selectedChildren : [];
 
-                      <div className="aside-copy">
-                        <span className="lbl">{c.name}</span>
-                        {c.id === selectedParentId && <span className="pillmini">Current</span>}
-                      </div>
-                    </button>
-                  ))}
+                   return (
+                     <React.Fragment key={c.id}>
+                       <button
+                         className={"aside-item aside-item-visual" + (isSelected ? " on" : "")}
+                         onClick={() => {
+                           setSelectedParent(c.id);
+                           setDrawerOpen(false);
+                         }}
+                         title={c.name}
+                         type="button"
+                       >
+                         <div className="aside-thumb">
+                           {c.imageUrl ? (
+                             <img src={c.imageUrl} alt={c.imageAltText || c.name} loading="lazy" />
+                           ) : (
+                             <div className="aside-thumb-ph" />
+                           )}
+                         </div>
 
-                  {!allMode && selectedParentId && selectedChildren.length > 0 && (
-                    <div className="m-subtree">
-                      <div className="m-subtree-title">Subcategories</div>
+                         <div className="aside-copy">
+                           <span className="lbl">{c.name}</span>
+                           {isSelected && <span className="pillmini">Current</span>}
+                         </div>
+                       </button>
 
-                      {selectedChildren.map((child) => (
-                        <button
-                          key={child.id}
-                          className={"m-subitem" + (catPick === child.id ? " active" : "")}
-                          type="button"
-                          onClick={() => {
-                            setCatPick(child.id);
-                            setDrawerOpen(false);
-                            setTimeout(() => {
-                              const el = document.getElementById(`section-cat-${child.id}`);
-                              if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-                            }, 50);
-                          }}
-                        >
-                          {child.imageUrl ? (
-                            <img src={child.imageUrl} alt={child.imageAltText || child.name} loading="lazy" />
-                          ) : (
-                            <span className="m-subdot" />
-                          )}
-                          <span>{child.name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                       {isSelected && !allMode && childRows.length > 0 && (
+                         <div className="m-subtree">
+                           <div className="m-subtree-title">Subcategories</div>
+
+                           {childRows.map((child) => (
+                             <button
+                               key={child.id}
+                               className={"m-subitem" + (catPick === child.id ? " active" : "")}
+                               type="button"
+                               onClick={() => {
+                                 setCatPick(child.id);
+                                 setDrawerOpen(false);
+                                 setTimeout(() => {
+                                   const el = document.getElementById(`section-cat-${child.id}`);
+                                   if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+                                 }, 50);
+                               }}
+                             >
+                               {child.imageUrl ? (
+                                 <img src={child.imageUrl} alt={child.imageAltText || child.name} loading="lazy" />
+                               ) : (
+                                 <span className="m-subdot" />
+                               )}
+                               <span>{child.name}</span>
+                             </button>
+                           ))}
+                         </div>
+                       )}
+                     </React.Fragment>
+                   );
+                 })}
+
+
                 </>
               )}
             </div>
@@ -2004,4 +2020,5 @@ const css = `
   white-space:normal;
   word-break:break-word;
 }
+
 `;
