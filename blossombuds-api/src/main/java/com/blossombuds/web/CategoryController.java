@@ -26,11 +26,11 @@ public class CategoryController {
         return catalog.listCategoriesDto();
     }
 
-    /** Get category by id (public). */
+    /** Get category by id (public). *//*
     @GetMapping("/{id}")
     public CategoryDto getCategory(@PathVariable Long id) {
         return catalog.getCategoryDto(id);
-    }
+    }*/
 
     /** List products under a category with pagination (public). */
     @GetMapping("/{id}/products")
