@@ -1,5 +1,6 @@
 // src/components/ProductQuickView.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { useCart } from "../app/CartProvider";
 import {
@@ -107,7 +108,9 @@ export default function ProductQuickView({ productId, onClose }: Props) {
   const unitPrice = useMemo(() => {
     for (const o of opts) {
       const vId = sel[o.id];
-      const v: any = o.values.find(x => x.id === vId && (x as any)?.visible !== false);
+      const v: any = (o.values || []).find(
+        (x) => x.id === vId && (x as any)?.visible !== false
+      );
       const vp = readValuePrice(v);
       if (typeof vp === "number") return vp;
     }
@@ -200,8 +203,8 @@ export default function ProductQuickView({ productId, onClose }: Props) {
       qty: Math.max(1, qty | 0),
       image: images[0]?.url || p.primaryImageUrl || "",
       variant: opts
-        .map(o => {
-          const v = o.values.find(x => x.id === sel[o.id]);
+        .map((o) => {
+          const v = (o.values || []).find((x) => x.id === sel[o.id]);
           return v ? `${o.name}: ${v.valueLabel}` : "";
         })
         .filter(Boolean)
@@ -239,20 +242,31 @@ useEffect(() => {
 
   const onHover = (v: boolean) => { pauseRef.current = v; };
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div
       className="pqv-modal"
       role="dialog"
       aria-modal="true"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       <div className="pqv-panel" role="document">
-        <button className="pqv-close" aria-label="Close" onClick={onClose}>✕</button>
+        <button type="button" className="pqv-close" aria-label="Close" onClick={onClose}>
+          ✕
+        </button>
 
-        {/* floating cart pill */}
         <div className={"pqv-cartpill" + (cartPop ? " pop" : "")} title="Cart">
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden>
-            <path d="M6 6h14l-1.6 8H8.4L7 4H3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <path
+              d="M6 6h14l-1.6 8H8.4L7 4H3"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
             <circle cx="9" cy="20" r="1.6" />
             <circle cx="18" cy="20" r="1.6" />
           </svg>
@@ -264,24 +278,31 @@ useEffect(() => {
 
         {!loading && p && (
           <div className="pqv-grid">
-            {/* GALLERY */}
-            <div className="pqv-gallery" onMouseEnter={() => onHover(true)} onMouseLeave={() => onHover(false)}>
+            <div
+              className="pqv-gallery"
+              onMouseEnter={() => onHover(true)}
+              onMouseLeave={() => onHover(false)}
+            >
               <div className="pqv-hero">
                 {hero ? <img src={hero} alt={p.name} /> : <div className="pqv-blank" />}
                 {hasNav && (
                   <>
-                    <button className="nav prev" onClick={prev} aria-label="Previous image">‹</button>
-                    <button className="nav next" onClick={next} aria-label="Next image">›</button>
+                    <button type="button" className="nav prev" onClick={prev} aria-label="Previous image">
+                      ‹
+                    </button>
+                    <button type="button" className="nav next" onClick={next} aria-label="Next image">
+                      ›
+                    </button>
                   </>
                 )}
               </div>
 
-              {/* Thumbs wrap — horizontal scroller on mobile */}
               {images.length > 0 && (
                 <ul className="pqv-thumbs" role="list">
                   {images.map((im, i) => (
                     <li key={im.id ?? i}>
                       <button
+                        type="button"
                         className={`pqv-thumb ${i === cur ? "on" : ""}`}
                         onClick={() => goto(i)}
                         aria-label={`Image ${i + 1}`}
@@ -294,7 +315,6 @@ useEffect(() => {
               )}
             </div>
 
-            {/* INFO + OPTIONS */}
             <div className="pqv-info">
               <h1 className="pqv-title">{p.name}</h1>
               <div className="pqv-price">
@@ -313,18 +333,24 @@ useEffect(() => {
                 )}
               </div>
 
-
               {opts.map((o, idx) => {
-                const act = o.values.filter(v => v.active !== false && (v as any)?.visible !== false);
+                const act = (o.values || []).filter(
+                  (v) => v.active !== false && (v as any)?.visible !== false
+                );
                 if (act.length === 0) return null;
                 const currentVal = sel[o.id] ?? act[0]?.id ?? undefined;
+
                 return (
                   <div key={o.id} className={"pqv-opt" + (idx > 0 ? " subtle" : "")}>
-                    <div className="pqv-optlabel">{o.name}{o.required ? " *" : ""}</div>
+                    <div className="pqv-optlabel">
+                      {o.name}
+                      {o.required ? " *" : ""}
+                    </div>
                     <div className="pqv-pills" role="radiogroup" aria-label={o.name}>
-                      {act.map(v => (
+                      {act.map((v) => (
                         <button
                           key={v.id}
+                          type="button"
                           className={"pill" + (currentVal === v.id ? " on" : "")}
                           onClick={() => pick(o.id, v.id)}
                           role="radio"
@@ -339,8 +365,6 @@ useEffect(() => {
                 );
               })}
 
-              {/* ---------- Qty with steppers ---------- */}
-              {/* ---------- Qty with steppers ---------- */}
               {!isUnavailable && (
                 <div className="pqv-qty" role="group" aria-label="Quantity">
                   <label htmlFor="pqv-qty" className="qty-label">Qty</label>
@@ -349,7 +373,7 @@ useEffect(() => {
                       type="button"
                       className="qty-btn"
                       aria-label="Decrease quantity"
-                      onClick={() => setQty(q => Math.max(1, q - 1))}
+                      onClick={() => setQty((q) => Math.max(1, q - 1))}
                       disabled={qty <= 1}
                     >
                       −
@@ -373,28 +397,28 @@ useEffect(() => {
                       type="button"
                       className="qty-btn"
                       aria-label="Increase quantity"
-                      onClick={() => setQty(q => q + 1)}
+                      onClick={() => setQty((q) => q + 1)}
                     >
                       +
                     </button>
                   </div>
                 </div>
               )}
-              {/* -------------------------------------- */}
-
-              {/* -------------------------------------- */}
 
               <div className="pqv-actions">
-                                <button
-                                  className={"pqv-btn" + (adding ? " pulse" : "")}
-                                  onClick={onAdd}
-                                  disabled={adding || isUnavailable}
-                                  title={isOutOfStock ? "Out of stock" : undefined}
-                                >
-                                  {isOutOfStock ? "Out of stock" : adding ? "Added!" : "Add to cart"}
-                                </button>
+                <button
+                  type="button"
+                  className={"pqv-btn" + (adding ? " pulse" : "")}
+                  onClick={onAdd}
+                  disabled={adding || isUnavailable}
+                  title={isOutOfStock ? "Out of stock" : undefined}
+                >
+                  {isOutOfStock ? "Out of stock" : adding ? "Added!" : "Add to cart"}
+                </button>
 
-                <Link to="/cart" className="pqv-btn secondary">Go to cart</Link>
+                <Link to="/cart" className="pqv-btn secondary">
+                  Go to cart
+                </Link>
               </div>
 
               {p.description && (
@@ -406,7 +430,8 @@ useEffect(() => {
       </div>
 
       <style>{styles}</style>
-    </div>
+    </div>,
+    document.body
   );
 }
 

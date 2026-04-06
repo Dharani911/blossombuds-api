@@ -1,0 +1,85 @@
+:root {
+  --bb-page-max: 1160px;
+  --bb-page-pad: clamp(14px, 4vw, 32px);
+  --bb-section-space: clamp(30px, 5vw, 60px);
+  --bb-card-radius: 24px;
+  --bb-card-radius-lg: 30px;
+  --bb-control-h: 46px;
+  --bb-control-h-sm: 38px;
+}
+
+.bb-page-shell {
+  width: min(var(--bb-page-max), calc(100% - (var(--bb-page-pad) * 2)));
+  margin: 0 auto;
+}
+
+.bb-section {
+  padding: var(--bb-section-space) 0;
+}
+
+.bb-section-head {
+  max-width: 620px;
+  margin: 0 auto 24px;
+  text-align: center;
+}
+
+.bb-section-head-left {
+  max-width: 620px;
+  margin: 0 0 24px;
+  text-align: left;
+}
+
+.bb-eyebrow {
+  display: inline-flex;
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--bb-accent);
+}
+
+.bb-title {
+  margin: 0 0 10px;
+  font-family: "Cinzel", "DM Serif Display", Georgia, serif;
+  font-size: clamp(24px, 3.8vw, 40px);
+  line-height: 1.12;
+  font-weight: 700;
+  color: var(--bb-primary);
+}
+
+.bb-subtitle {
+  margin: 0;
+  color: #8a9087;
+  font-size: 15px;
+  line-height: 1.72;
+}
+
+.bb-card {
+  background: rgba(255,255,255,.82);
+  border: 1px solid rgba(74,79,65,.08);
+  border-radius: var(--bb-card-radius);
+  box-shadow: 0 16px 36px rgba(0,0,0,.08);
+  backdrop-filter: blur(10px);
+}
+
+.bb-action-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 720px) {
+  .bb-section-head,
+  .bb-section-head-left {
+    margin-bottom: 18px;
+  }
+
+  .bb-subtitle {
+    font-size: 14px;
+  }
+
+  .bb-action-row {
+    flex-wrap: wrap;
+  }
+}

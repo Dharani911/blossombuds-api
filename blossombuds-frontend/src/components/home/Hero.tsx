@@ -1,9 +1,7 @@
-// src/components/home/Hero.tsx
 import React, { useEffect, useRef, useState } from "react";
 import { apiUrl } from "../../api/base";
 import { Link } from "react-router-dom";
 
-/** Fallbacks if API returns nothing */
 const FALLBACK_IMAGES: string[] = [];
 
 type FeatureImageDto = {
@@ -18,21 +16,18 @@ const ENDPOINT = "/api/settings/ui/feature-images";
 export default function Hero() {
   const [slides, setSlides] = useState<{ url: string; alt: string }[] | null>(null);
   const [idx, setIdx] = useState(0);
+  const [prevIdx, setPrevIdx] = useState<number | null>(null);
   const timer = useRef<number | null>(null);
 
-  // Load from settings (public)
   useEffect(() => {
     let alive = true;
+
     (async () => {
       try {
-        const res = await fetch(
-          apiUrl(ENDPOINT),
-          {
-            method: "GET",
-            //credentials: "include",
-            headers: { Accept: "application/json" },
-          }
-        );
+        const res = await fetch(apiUrl(ENDPOINT), {
+          method: "GET",
+          headers: { Accept: "application/json" },
+        });
 
         if (!res.ok) {
           if (alive) setSlides([]);
@@ -40,10 +35,9 @@ export default function Hero() {
         }
 
         const json = (await res.json()) as FeatureImageDto[];
-        console.log("feature images JSON", json); // ← TEMP: see what backend returns
 
         const usable = (Array.isArray(json) ? json : [])
-          .filter((x) => !!x?.url) // make sure backend is actually sending 'url'
+          .filter((x) => !!x?.url)
           .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
           .map((x) => ({
             url: normalizeUrlForPhone(x.url),
@@ -51,55 +45,56 @@ export default function Hero() {
           }))
           .filter((x) => !!x.url);
 
-        console.log("usable slides", usable);      // ← TEMP
-
         if (alive) setSlides(usable);
-      } catch (e) {
-        console.error("feature images load failed", e);
+      } catch {
         if (alive) setSlides([]);
       }
     })();
+
     return () => {
       alive = false;
     };
   }, []);
 
+  const frames =
+    slides && slides.length
+      ? slides
+      : FALLBACK_IMAGES.map((u) => ({ url: u, alt: "" }));
 
-  // Crossfade every 6s
-    useEffect(() => {
-      const imgs =
-        slides && slides.length
-          ? slides
-          : FALLBACK_IMAGES.map((u) => ({ url: u, alt: "" }));
+  useEffect(() => {
+    if (!frames.length) return;
 
-      if (!imgs.length) return; // no images → no timer / no modulo 0
+    timer.current = window.setInterval(() => {
+      setIdx((current) => {
+        setPrevIdx(current);
+        return (current + 1) % frames.length;
+      });
+    }, 6500);
 
-      timer.current = window.setInterval(() => {
-        setIdx((i) => (i + 1) % imgs.length);
-      }, 6000);
-      return () => { if (timer.current) window.clearInterval(timer.current); };
-    }, [slides]);
+    return () => {
+      if (timer.current) window.clearInterval(timer.current);
+    };
+  }, [frames.length]);
 
-
-    const frames =
-      slides && slides.length
-        ? slides
-        : FALLBACK_IMAGES.map((u) => ({ url: u, alt: "" }));
-
-
-  const goto = (n: number) => setIdx(n % frames.length);
+  const goto = (n: number) => {
+    if (!frames.length) return;
+    setPrevIdx(idx);
+    setIdx(n % frames.length);
+  };
 
   return (
-    <section className="hp-hero" aria-label="Showcase">
-      <style>{styles}</style>
+    <section className="hero" aria-label="Hero showcase">
+      <style>{heroStyles}</style>
 
-      {/* 16:9 stage */}
-      <div className="stage" role="region" aria-roledescription="carousel">
+      <div className="hero-stage" role="region" aria-roledescription="carousel">
         {frames.map((f, i) => (
-          <div key={`${i}-${f.url}`} className={`slide ${i === idx ? "on" : ""}`}>
+          <div
+            key={`${i}-${f.url}`}
+            className={`hero-slide ${i === idx ? "active" : i === prevIdx ? "exiting" : ""}`}
+          >
             <img
               src={f.url}
-              alt={f.alt || ""}
+              alt={f.alt || "Blossom Buds floral collection"}
               loading={i === idx ? "eager" : "lazy"}
               decoding="async"
               referrerPolicy="no-referrer"
@@ -108,208 +103,230 @@ export default function Hero() {
           </div>
         ))}
 
-        {/* Dots */}
+        <div className="hero-overlay-base" />
+        <div className="hero-overlay-glow" />
+        <div className="hero-overlay-side" />
+
+        {/* Desktop / tablet content inside stage */}
+
+
         {frames.length > 1 && (
-          <div className="dots" role="tablist" aria-label="Hero slides">
+          <div className="hero-dots" role="tablist" aria-label="Slides">
             {frames.map((_, i) => (
               <button
                 key={i}
                 role="tab"
                 aria-selected={i === idx}
                 aria-label={`Slide ${i + 1}`}
-                className={`dot ${i === idx ? "on" : ""}`}
+                className={`hero-dot${i === idx ? " on" : ""}`}
                 onClick={() => goto(i)}
+                type="button"
               />
             ))}
           </div>
         )}
-
-        {/* DESKTOP/TABLET ONLY: overlay glass panel */}
-        <div className="content overlay-only">
-          <div className="panel">
-            <h1>Blossom Buds Floral Artistry</h1>
-            <p className="tag">Handcrafted floral accessories — lightweight, durable, made to order.</p>
-            <div className="actions">
-              <Link to="/featured" className="btn">Shop Featured</Link>
-              <Link to="/categories" className="btn secondary">Browse Categories</Link>
-            </div>
-          </div>
-        </div>
       </div>
 
-      {/* MOBILE ONLY: glass panel BELOW carousel */}
-      <div className="panel-below mobile-only">
-        <div className="panel">
-          <h1>Blossom Buds Floral Artistry</h1>
-          <p className="tag">Handcrafted floral accessories — lightweight, durable, made to order.</p>
-          <div className="actions">
-            <Link to="/featured" className="btn">Shop Featured</Link>
-            <Link to="/categories" className="btn secondary">Browse Categories</Link>
-          </div>
-        </div>
-      </div>
+
     </section>
   );
 }
 
-/** Make localhost/127.* usable from phone via Vite proxy (strip origin). */
 function normalizeUrlForPhone(raw: string): string {
   if (!raw) return "";
   if (raw.startsWith("/")) return raw;
+
   try {
     const u = new URL(raw);
     const host = u.hostname.toLowerCase();
     const isLocal =
-      host === "localhost" || host === "127.0.0.1" || host.endsWith(".local") || host.endsWith(".lan");
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host.endsWith(".local") ||
+      host.endsWith(".lan");
+
     return isLocal ? u.pathname + (u.search || "") : raw;
   } catch {
     return /^https?:\/\//i.test(raw) ? raw : "/" + raw.replace(/^\/+/, "");
   }
 }
 
-const styles = `
-.hp-hero{
-  padding: 6px 0 14px;
-  background: var(--bb-bg);
-  padding-left: max(0px, env(safe-area-inset-left, 0px));
-  padding-right: max(0px, env(safe-area-inset-right, 0px));
+const heroStyles = `
+.hero{
+  width:100%;
+  background: var(--bb-bg, #FAF7E7);
+  overflow:hidden;
 }
 
-/* --- 16:9 COMPACT STAGE --- */
-.stage{
-  position: relative;
-  width: min(1200px, 100%);
-  margin: 8px auto 0;
-  aspect-ratio: 16/7;      /* exact 16:9 */
-  border-radius: 14px;
-  overflow: hidden;
-  box-shadow: 0 12px 34px rgba(0,0,0,.12);
-  background: var(--bb-bg); /* #FAF7E7 ivory yellow from your theme */
-
-}
-@media (min-width: 920px){
-  .stage{ border-radius: 16px; box-shadow: 0 16px 42px rgba(0,0,0,.12); }
-}
-
-/* Slides (crossfade) */
-.slide{ position:absolute; inset:0; opacity:0; transition: opacity .6s ease; }
-.slide.on{ opacity:1; }
-.slide img{
-  position:absolute; inset:0;
-  width:100%; height:100%;
-  object-fit: cover; object-position: center;
-  transform: translateZ(0);
-}
-
-/* Dots — tiny */
-.dots{
-  position:absolute; left:50%; transform: translateX(-50%);
-  bottom: 8px; display:flex; gap:8px; padding:4px 6px;
-  background: rgba(0,0,0,.22); border: 1px solid rgba(255,255,255,.14);
-  border-radius: 999px; backdrop-filter: blur(4px) saturate(120%);
-}
-.dot{ width:8px; height:8px; border-radius:999px; border:none; cursor:pointer; background: rgba(255,255,255,.55); }
-.dot.on{ background:#fff; width:16px; transition: width .15s ease; }
-
-/* --- GLASS PANEL SHARED STYLES --- */
-.panel{
+/* 16:9 visual banner */
+.hero-stage{
+  position:relative;
+  width:min(100%, 1280px);
   margin: 0 auto;
-  width: min(920px, 100%);
-  color:#fff; text-align:center;
-  background: radial-gradient(120% 120% at 50% 0%, rgba(0,0,0,.18), rgba(0,0,0,.42));
-  border: 1px solid rgba(255,255,255,.15);
-  backdrop-filter: blur(4px) saturate(120%);
-  box-shadow: 0 18px 48px rgba(0,0,0,.22);
-  border-radius: 16px; padding: 16px 18px;
-  text-shadow: 0 1px 0 rgba(0,0,0,.35);
+  aspect-ratio: 16 / 9;
+  min-height: 220px;
+  max-height: 720px;
+  overflow:hidden;
+  background:#170f0a;
+  border-radius: 0 0 28px 28px;
 }
 
-
-/* 🔹 Desktop overlay: make glass lighter + less blur */
-@media (min-width: 561px) {
-  .overlay-only .panel{
-    background: radial-gradient(
-      120% 120% at 50% 0%,
-      rgba(0,0,0,.08),
-      rgba(0,0,0,.22)
-    );                         /* much more transparent */
-    border-color: rgba(255,255,255,.10);
-    backdrop-filter: blur(2px) saturate(120%);  /* less blur */
-    box-shadow: 0 14px 40px rgba(0,0,0,.18);    /* slightly softer shadow */
-  }
-}
-.panel h1{
-  margin:0 0 6px; font-weight:900; letter-spacing:.2px;
-  font-size: clamp(20px, 5vw, 34px);
-  color:#fff !important;
-  text-shadow: 0 2px 8px rgba(0,0,0,.45);
-}
-.tag{
-  margin: 0;
-  opacity: .95;
-  font-size: clamp(13px, 3.4vw, 16px);
-  color:#fff !important;
-}
-.actions{
-  display:flex; gap:10px; margin-top: 12px; flex-wrap: wrap; justify-content:center;
-}
-.btn{
-  display:inline-flex; align-items:center; justify-content:center;
-  min-height: 44px; padding:.7rem 1.1rem;
-  border-radius:999px; border:none; cursor:pointer;
-  background: var(--bb-accent); color:#fff; font-weight:900; letter-spacing:.2px;
-  box-shadow: 0 12px 28px rgba(240,93,139,.28); text-decoration: none;
-}
-.btn.secondary{
-  background: var(--bb-accent-2);
-  color:#2b2b2b;
-  box-shadow: 0 12px 28px rgba(246,195,32,.24);
-}
-
-/* --- VISIBILITY RULES --- */
-/* By default (desktop/tablet): overlay is visible, below-panel hidden */
-.overlay-only{ position:absolute; inset:0; display:grid; place-items:center; padding: 0 12px; }
-.mobile-only{ display:none; }
-
-/* On small screens: hide overlay, show panel below */
-@media (max-width: 560px){
-  .overlay-only{ display:none; }
-  .mobile-only{ display:block; }
-
-  .stage{ margin: 6px 8px 0; box-shadow: 0 12px 32px rgba(0,0,0,.12); }
-  .panel-below{ width: min(1200px, 100%); margin: 10px auto 0; padding: 0 8px; }
-  .panel{ padding: 12px 12px; border-radius: 12px; }
-
-  /* bigger brand title on mobile, but safe */
-  .panel h1{
-    font-size: clamp(20px, 8.5vw, 25px);  /* ↑ was smaller; now more presence */
-    line-height: 1;                    /* tighter for fewer lines */
-    letter-spacing: .25px;
-    margin-bottom: 10px;                  /* a bit more breathing room above buttons */
-    text-wrap: balance;                   /* nicer breaks on supported browsers */
-  }
-
-  .actions{
-    display:flex;
-    gap:8px;
-    flex-wrap: nowrap;          /* do not wrap */
-    justify-content: center;
-    align-items: center;
-    overflow: hidden;
-  }
-  .actions .btn{
-    flex: 0 1 auto;             /* shrink if needed */
-    min-width: auto;
-    width: 250px;
-    white-space: nowrap;
-    padding: .6rem 1rem;
+/* Full width on very small screens */
+@media (max-width: 767px){
+  .hero-stage{
+    width:100%;
+    border-radius: 0 0 22px 22px;
   }
 }
 
+.hero-slide{
+  position:absolute;
+  inset:0;
+  opacity:0;
+  transition:none;
+}
 
-/* Motion safety */
+.hero-slide.active{
+  opacity:1;
+  transition: opacity .95s ease;
+  z-index:1;
+}
+
+.hero-slide.exiting{
+  opacity:0;
+  transition: opacity .95s ease;
+  z-index:0;
+}
+
+.hero-slide img{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  object-position:center center;
+  display:block;
+  transform: scale(1.002);
+}
+
+/* Elegant overlays so text is gone but image still looks rich */
+.hero-overlay-base{
+  position:absolute;
+  inset:0;
+  z-index:2;
+  background:
+    linear-gradient(
+      to top,
+      rgba(11,7,4,.20) 0%,
+      rgba(11,7,4,.08) 28%,
+      rgba(11,7,4,.03) 50%,
+      transparent 100%
+    );
+  pointer-events:none;
+}
+
+.hero-overlay-glow{
+  position:absolute;
+  inset:0;
+  z-index:2;
+  background:
+    radial-gradient(circle at 18% 20%, rgba(246,195,32,.08), transparent 24%),
+    radial-gradient(circle at 78% 22%, rgba(240,93,139,.08), transparent 22%);
+  mix-blend-mode: screen;
+  pointer-events:none;
+}
+
+.hero-overlay-side{
+  position:absolute;
+  inset:0;
+  z-index:2;
+  background:
+    linear-gradient(
+      to right,
+      rgba(11,7,4,.08) 0%,
+      transparent 24%,
+      transparent 76%,
+      rgba(11,7,4,.06) 100%
+    );
+  pointer-events:none;
+}
+
+/* Dots */
+.hero-dots{
+  position:absolute;
+  left:50%;
+  transform:translateX(-50%);
+  bottom:12px;
+  z-index:4;
+  display:flex;
+  align-items:center;
+  gap:7px;
+  padding:6px 8px;
+  border-radius:999px;
+  background: rgba(0,0,0,.16);
+  backdrop-filter: blur(8px);
+}
+
+.hero-dot{
+  width:8px;
+  height:8px;
+  border:none;
+  border-radius:999px;
+  padding:0;
+  background: rgba(255,255,255,.48);
+  cursor:pointer;
+  transition: width .22s ease, background .22s ease;
+}
+
+.hero-dot.on{
+  width:22px;
+  background:#fff;
+}
+
+/* remove old content containers */
+.hero-desktop-content,
+.hero-mobile-content{
+  display:none !important;
+}
+
+/* 360x800 tuning */
+@media (max-width: 420px){
+  .hero-stage{
+    aspect-ratio: 16 / 10;
+    min-height: 210px;
+    border-radius: 0 0 18px 18px;
+  }
+
+  .hero-dots{
+    bottom:10px;
+    padding:5px 7px;
+    gap:6px;
+  }
+
+  .hero-dot{
+    width:7px;
+    height:7px;
+  }
+
+  .hero-dot.on{
+    width:18px;
+  }
+}
+
+@media (min-width: 768px){
+  .hero-stage{
+    border-radius: 0 0 32px 32px;
+  }
+
+  .hero-dots{
+    bottom:18px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce){
-  .slide{ transition: none; }
+  .hero-slide,
+  .hero-dot{
+    transition:none;
+  }
 }
-
 `;

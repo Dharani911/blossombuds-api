@@ -1,6 +1,6 @@
 // src/pages/ShopCategoriesPage.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import Seo from "../components/Seo";
 import ProductQuickView from "../components/ProductQuickView";
 import {
@@ -85,7 +85,10 @@ function SmallProductCard({ p, onOpen }: { p: Product; onOpen: (id: number) => v
       tabIndex={0}
       onClick={() => onOpen(p.id)}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") onOpen(p.id);
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen(p.id);
+        }
       }}
             aria-label={`${p.name}${displayPrices ? `, ${formatINR(displayPrices.final)}` : ""}`}
 
@@ -113,10 +116,12 @@ function SmallProductCard({ p, onOpen }: { p: Product; onOpen: (id: number) => v
       </div>
 
       <button
-        className={"btn add" }
+        className="btn add"
         type="button"
-
-
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpen(p.id);
+        }}
         aria-label={outOfStock ? `${p.name} is out of stock` : `Open ${p.name}`}
       >
         {outOfStock ? "View" : "Add to cart"}
@@ -156,7 +161,28 @@ const activeCats = useMemo(
   () => (cats || []).filter((c) => c.active !== false),
   [cats]
 );
+const location = useLocation();
+const [qvId, setQvId] = useState<number | null>(null);
+const openProduct = (productId: number) => {
+  const params = new URLSearchParams(location.search);
 
+  params.set("product", String(productId));
+
+  if (allMode) {
+    params.set("fromCategory", "all");
+  } else if (selectedParentId) {
+    params.set("fromCategory", String(selectedParentId));
+  }
+
+  setQvId(productId);
+  nav(
+    {
+      pathname: location.pathname,
+      search: `?${params.toString()}`,
+    },
+    { replace: false }
+  );
+};
 const childrenByParent = useMemo(() => {
   const map: Record<string, Category[]> = {};
 
@@ -209,7 +235,22 @@ const selectedChildren = useMemo(() => {
   const [maxPrice, setMaxPrice] = useState<number | "">("");
 
   // quick view
-  const [qvId, setQvId] = useState<number | null>(null);
+const closeQuickView = () => {
+  const params = new URLSearchParams(location.search);
+  params.delete("product");
+  params.delete("fromCategory");
+
+  setQvId(null);
+
+  const nextSearch = params.toString();
+  nav(
+    {
+      pathname: location.pathname,
+      search: nextSearch ? `?${nextSearch}` : "",
+    },
+    { replace: true }
+  );
+};
 
   // categories: parents (top-level)
   const parents = useMemo(() => (cats || []).filter((c) => c.parentId == null && c.active !== false), [cats]);
@@ -244,7 +285,22 @@ useEffect(() => {
       live = false;
     };
   }, []);
+useEffect(() => {
+  const params = new URLSearchParams(location.search);
+  const productParam = params.get("product");
 
+  if (!productParam) {
+    setQvId(null);
+    return;
+  }
+
+  const idNum = Number(productParam);
+  if (Number.isFinite(idNum) && idNum > 0) {
+    setQvId(idNum);
+  } else {
+    setQvId(null);
+  }
+}, [location.search]);
   // ✅ NEW: default landing should show ALL products
   useEffect(() => {
     if (!loadingCats && allMode && id !== "all") {
@@ -639,7 +695,7 @@ useEffect(() => {
             {sectionFiltered.length > 0 && (
               <div className="grid">
                 {sectionFiltered.map((p) => (
-                  <SmallProductCard key={p.id} p={p} onOpen={(pid) => setQvId(pid)} />
+                  <SmallProductCard key={p.id} p={p} onOpen={openProduct} />
                 ))}
               </div>
             )}
@@ -944,7 +1000,7 @@ useEffect(() => {
               <section className="card">
                 <div className="grid">
                   {filteredProducts.map((p) => (
-                    <SmallProductCard key={p.id} p={p} onOpen={(pid) => setQvId(pid)} />
+                    <SmallProductCard key={p.id} p={p} onOpen={openProduct} />
                   ))}
 
                   {(loadingAll || loadingCats) &&
@@ -1110,7 +1166,12 @@ useEffect(() => {
         </div>
       )}
 
-      {qvId != null && <ProductQuickView productId={qvId} onClose={() => setQvId(null)} />}
+{qvId != null && (
+  <ProductQuickView
+    productId={qvId}
+    onClose={closeQuickView}
+  />
+)}
     </div>
   );
   }
