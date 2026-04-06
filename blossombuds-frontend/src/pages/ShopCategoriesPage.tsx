@@ -796,9 +796,11 @@ useEffect(() => {
                               className={"m-subitem" + (catPick === child.id ? " active" : "")}
                               type="button"
                               onClick={() => {
-                                setCatPick(child.id);
-                                const el = document.getElementById(`section-cat-${child.id}`);
-                                if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+                                setCatPick("all");
+                                setQ("");
+                                setMinPrice("");
+                                setMaxPrice("");
+                                nav(`/categories/${child.id}`);
                               }}
                             >
                               {child.imageUrl ? (
@@ -1136,12 +1138,12 @@ useEffect(() => {
                                className={"m-subitem" + (catPick === child.id ? " active" : "")}
                                type="button"
                                onClick={() => {
-                                 setCatPick(child.id);
+                                 setCatPick("all");
+                                 setQ("");
+                                 setMinPrice("");
+                                 setMaxPrice("");
                                  setDrawerOpen(false);
-                                 setTimeout(() => {
-                                   const el = document.getElementById(`section-cat-${child.id}`);
-                                   if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-                                 }, 50);
+                                 nav(`/categories/${child.id}`);
                                }}
                              >
                                {child.imageUrl ? (
