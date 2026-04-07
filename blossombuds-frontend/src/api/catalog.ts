@@ -330,7 +330,13 @@ export async function getProductOptionsWithValues(productId: number): Promise<Pr
   return Array.isArray(data) ? (data as ProductOptionWithValues[]) : [];
 }
 
-
+export async function getProductFresh(productId: number) {
+  return http
+    .get(`api/catalog/products/${productId}`, {
+      params: { _ts: Date.now() },
+    })
+    .then((r) => r.data as Product);
+}
 /* export async function getProductOptionsWithValues(
   productId: number
 ): Promise<ProductOptionWithValues[]> {

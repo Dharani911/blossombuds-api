@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { useCart } from "../app/CartProvider";
 import {
   getProduct,
+  getProductFresh,
   listProductImages,
   getProductOptionsWithValues,
   type Product,
@@ -113,7 +114,21 @@ useEffect(() => {
       return () => clearTimeout(t);
     }
   }, [count]);
-
+async function refreshProductOnly(pid: number) {
+  try {
+    const latest = await getProductFresh(pid);
+    console.log("[PQV][REFRESH_PRODUCT]", {
+      productId: pid,
+      inStock: (latest as any)?.inStock,
+      active: (latest as any)?.active,
+      visible: (latest as any)?.visible,
+      latest,
+    });
+    setP(latest || null);
+  } catch (e) {
+    console.warn("[PQV][REFRESH_PRODUCT][FAIL]", e);
+  }
+}
   // LOAD product + images + options
   useEffect(() => {
     let live = true;
@@ -121,7 +136,7 @@ useEffect(() => {
       try {
         setLoading(true); setErr(null);
         const [prod, imgs, options] = await Promise.all([
-          getProduct(productId),
+          getProductFresh(productId),
           listProductImages(productId),
           getProductOptionsWithValues(productId),
         ]);
@@ -151,7 +166,26 @@ useEffect(() => {
     })();
     return () => { live = false; };
   }, [productId]);
+useEffect(() => {
+  if (!productId) return;
 
+  const timer = window.setInterval(() => {
+    refreshProductOnly(productId);
+  }, 5000); // every 5 seconds
+
+  return () => window.clearInterval(timer);
+}, [productId]);
+useEffect(() => {
+  const nowOutOfStock = (p as any)?.inStock === false;
+
+  if (!nowOutOfStock) {
+    setShowNotifyForm(false);
+    setNotifyErr(null);
+    setNotifyMsg(null);
+    setNotifyLoading(false);
+    setNotifyDone(false);
+  }
+}, [p?.id, (p as any)?.inStock]);
   // Treat option value's price as ABSOLUTE (not delta)
   function readValuePrice(v: any): number | undefined {
     const cand = [v?.price, v?.finalPrice, v?.absolutePrice, v?.amount];

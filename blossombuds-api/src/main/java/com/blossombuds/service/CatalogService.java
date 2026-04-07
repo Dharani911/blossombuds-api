@@ -352,7 +352,7 @@ public class CatalogService {
 
     /** Updates a product’s mutable fields. */
     @Caching(evict = {
-            @CacheEvict(cacheNames = PRODUCT_BY_ID, key = "'id=' + #id"),
+            @CacheEvict(cacheNames = PRODUCT_BY_ID, allEntries = true),
             @CacheEvict(cacheNames = {PRODUCTS_PAGE, PRODUCTS_BY_CATEGORY, FEATURED_PAGE, FEATURED_TOP, NEW_ARRIVALS}, allEntries = true)
     })
     @Transactional
@@ -402,7 +402,7 @@ public class CatalogService {
 
     /** Soft-deletes a product (active=false via @SQLDelete). */
     @Caching(evict = {
-            @CacheEvict(cacheNames = PRODUCT_BY_ID, key = "'id=' + #id"),
+            @CacheEvict(cacheNames = PRODUCT_BY_ID, allEntries = true),
             @CacheEvict(cacheNames = {PRODUCTS_PAGE, PRODUCTS_BY_CATEGORY, FEATURED_PAGE, FEATURED_TOP, NEW_ARRIVALS}, allEntries = true)
     })
     @Transactional
@@ -520,7 +520,7 @@ public class CatalogService {
 
     // ───────────────── addProductImage (REPLACE) ─────────────────
 
-    @CacheEvict(cacheNames = PRODUCT_BY_ID, key = "'id=' + #productId")
+    @CacheEvict(cacheNames = PRODUCT_BY_ID, allEntries = true)
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public ProductImage addProductImage(Long productId, MultipartFile file, String altText, Integer sortOrder)
@@ -593,7 +593,7 @@ public class CatalogService {
 
 
     // ──────────────── updateProductImage (REPLACE) ────────────────
-    @CacheEvict(cacheNames = PRODUCT_BY_ID, key = "'id=' + #dto.productId")
+    @CacheEvict(cacheNames = PRODUCT_BY_ID, allEntries = true)
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public ProductImage updateProductImage(ProductImageDto dto, MultipartFile newFile)
@@ -989,7 +989,7 @@ public class CatalogService {
     }
 
     /** Soft-deletes a product image (active=false via @SQLDelete). */
-    @CacheEvict(cacheNames = PRODUCT_BY_ID, key = "'id=' + #productId")
+    @CacheEvict(cacheNames = PRODUCT_BY_ID, allEntries = true)
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void deleteProductImage(Long productId, Long imageId) {
@@ -1398,7 +1398,7 @@ public class CatalogService {
         return out;
     }
     @Caching(evict = {
-            @CacheEvict(cacheNames = PRODUCT_BY_ID, key = "'id=' + #id"),
+            @CacheEvict(cacheNames = PRODUCT_BY_ID, allEntries = true),
             @CacheEvict(cacheNames = {FEATURED_PAGE, FEATURED_TOP, PRODUCTS_PAGE, NEW_ARRIVALS, PRODUCTS_BY_CATEGORY}, allEntries = true)
     })
     @Transactional
