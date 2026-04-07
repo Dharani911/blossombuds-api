@@ -76,7 +76,8 @@ public class SecurityConfig {
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/**").permitAll()
 
-                        // ----- AUTH (PUBLIC) -----
+                        // ----- AUTH (PUBLIC) -----//
+                        .requestMatchers(HttpMethod.POST, "/api/catalog/products/**/notify-me").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/customers/auth/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/payments/razorpay/webhook").permitAll()
@@ -102,7 +103,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/payments/razorpay/orders/**").hasAnyRole("CUSTOMER","ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/payments/razorpay/verify").hasAnyRole("CUSTOMER","ADMIN")
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                                .requestMatchers(HttpMethod.POST, "/api/catalog/products/**/notify-me").permitAll()
+
                                 // inside authorizeHttpRequests(auth -> auth ... )
                                 .requestMatchers(HttpMethod.GET, "/api/feature-images/public/**").permitAll()
 // (optional, if your images are served via these paths)

@@ -43,7 +43,7 @@ const [notifyDone, setNotifyDone] = useState(false);
  * A customer should be treated as logged in if we have a user object,
  * not only when user.id is present.
  */
-const isLoggedIn = !!user;
+const hasUserSession = !!user;
 
 /**
  * Safely read session email if available.
@@ -51,6 +51,10 @@ const isLoggedIn = !!user;
 const sessionEmail =
   typeof user?.email === "string" ? user.email.trim() : "";
 
+/**
+ * For notify-me, we only auto-submit when we already know the email.
+ */
+const canAutoSubmitNotify = sessionEmail.length > 0;
 useEffect(() => {
   if (sessionEmail && !notifyEmail) {
     setNotifyEmail(sessionEmail);
@@ -270,10 +274,12 @@ async function onNotifyMe() {
   try {
     setNotifyLoading(true);
 
-    const res = await notifyMeWhenBackInStock({
-      productId: p.id,
-      email: isLoggedIn ? undefined : guestEmail,
-    });
+   const emailToSend = sessionEmail || guestEmail;
+
+   const res = await notifyMeWhenBackInStock({
+     productId: p.id,
+     email: emailToSend || undefined,
+   });
 
     const msg =
       typeof res === "string"
@@ -515,7 +521,7 @@ useEffect(() => {
                         setNotifyErr(null);
                         setNotifyMsg(null);
 
-                        if (isLoggedIn) {
+                        if (canAutoSubmitNotify) {
                           onNotifyMe();
                         } else {
                           setShowNotifyForm((v) => !v);
@@ -548,7 +554,7 @@ useEffect(() => {
                   </>
                 )}
               </div>
-{isOutOfStock && showNotifyForm && !isLoggedIn && (
+{isOutOfStock && showNotifyForm && !canAutoSubmitNotify && (
   <div className="pqv-notify-box">
     <div className="pqv-notify-title">Get notified when this product is back in stock</div>
     <div className="pqv-notify-row">
