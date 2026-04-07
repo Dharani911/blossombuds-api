@@ -9,6 +9,7 @@ import com.blossombuds.repository.CustomerRepository;
 import com.blossombuds.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
@@ -27,6 +28,8 @@ public class BackInStockService {
     private final ProductRepository productRepo;
     private final CustomerRepository customerRepo;
     private final EmailService emailService;
+    @Value("${app.frontend.baseUrl}")
+    private String frontendUrl;
 
     @Transactional
     public BackInStockResponseDto subscribe(Long productId, String email, Long customerId) {
@@ -105,12 +108,9 @@ public class BackInStockService {
             log.info("[BACK_IN_STOCK][NOTIFY] no pending requests for productId={}", product.getId());
             return;
         }
-        String productPath = "/products/" + product.getId();
-        if (product.getSlug() != null && !product.getSlug().isBlank()) {
-            productPath = "/products/" + product.getSlug();
-        }
-
-        String productUrl = "https://www.blossom-buds-floral-artistry.com" + productPath;
+        String productUrl = frontendUrl+"/categories/all?product="
+                + product.getId()
+                + "&fromCategory=all";
         for (BackInStockRequest req : pending) {
             try {
                 emailService.sendRichMasked(

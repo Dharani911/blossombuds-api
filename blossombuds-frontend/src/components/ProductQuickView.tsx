@@ -13,7 +13,7 @@ import {
 } from "../api/catalog";
 import { useAuth } from "../app/AuthProvider";
 import { notifyMeWhenBackInStock } from "../api/stockAlerts";
-
+import { extractCustomerFromToken } from "../lib/jwt";
 type Props = { productId: number; onClose: () => void };
 
 export default function ProductQuickView({ productId, onClose }: Props) {
@@ -39,20 +39,33 @@ const [notifyMsg, setNotifyMsg] = useState<string | null>(null);
 const [notifyErr, setNotifyErr] = useState<string | null>(null);
 const [notifyDone, setNotifyDone] = useState(false);
 
-/**
- * A customer should be treated as logged in if we have a user object,
- * not only when user.id is present.
- */
-const hasUserSession = !!user;
+function getCustomerToken(): string | null {
+  try {
+    return (
+      localStorage.getItem("bb.customer.jwt") ||
+      localStorage.getItem("bb.jwt") ||
+      null
+    );
+  } catch {
+    return null;
+  }
+}
+
+const customerToken = getCustomerToken();
+const tokenCustomer = customerToken ? extractCustomerFromToken(customerToken) : null;
 
 /**
- * Safely read session email if available.
+ * Prefer email from AuthProvider, but fall back to decoded customer JWT.
  */
 const sessionEmail =
-  typeof user?.email === "string" ? user.email.trim() : "";
+  typeof user?.email === "string" && user.email.trim()
+    ? user.email.trim()
+    : typeof tokenCustomer?.email === "string" && tokenCustomer.email.trim()
+    ? tokenCustomer.email.trim()
+    : "";
 
 /**
- * For notify-me, we only auto-submit when we already know the email.
+ * For notify-me, auto-submit only when we already know the email.
  */
 const canAutoSubmitNotify = sessionEmail.length > 0;
 useEffect(() => {
@@ -256,35 +269,34 @@ async function onNotifyMe() {
   setNotifyErr(null);
   setNotifyMsg(null);
 
-  const guestEmail = notifyEmail.trim();
+  const typedEmail = notifyEmail.trim();
+  const emailToSend = sessionEmail || typedEmail;
 
-  if (!isLoggedIn && !guestEmail) {
+  if (!emailToSend) {
     setNotifyErr("Please enter your email address.");
     return;
   }
 
-  if (!isLoggedIn) {
-    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail);
-    if (!emailOk) {
-      setNotifyErr("Please enter a valid email address.");
-      return;
-    }
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailToSend);
+  if (!emailOk) {
+    setNotifyErr("Please enter a valid email address.");
+    return;
   }
 
   try {
     setNotifyLoading(true);
 
-   const emailToSend = sessionEmail || guestEmail;
-
-   const res = await notifyMeWhenBackInStock({
-     productId: p.id,
-     email: emailToSend || undefined,
-   });
+    const res = await notifyMeWhenBackInStock({
+      productId: p.id,
+      email: emailToSend,
+    });
 
     const msg =
       typeof res === "string"
         ? res
-        : res?.message || "We’ll email you when this product is back in stock.";
+        : typeof res?.message === "string" && res.message.trim()
+        ? res.message
+        : "We’ll email you when this product is back in stock.";
 
     setNotifyMsg(msg);
     setNotifyErr(null);
