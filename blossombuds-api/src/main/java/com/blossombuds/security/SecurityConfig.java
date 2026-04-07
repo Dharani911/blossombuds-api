@@ -77,7 +77,7 @@ public class SecurityConfig {
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/**").permitAll()
 
                         // ----- AUTH (PUBLIC) -----//
-                        .requestMatchers(HttpMethod.POST, "/api/catalog/products/**/notify-me").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/catalog/products/*/notify-me").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/customers/auth/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/payments/razorpay/webhook").permitAll()
