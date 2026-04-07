@@ -11,6 +11,8 @@ import {
   type ProductImage,
   type ProductOptionWithValues,
 } from "../api/catalog";
+import { useAuth } from "../app/AuthProvider";
+import { notifyMeWhenBackInStock } from "../api/stockAlerts";
 
 type Props = { productId: number; onClose: () => void };
 
@@ -28,7 +30,19 @@ export default function ProductQuickView({ productId, onClose }: Props) {
   const [sel, setSel] = useState<Record<number, number>>({});
   const [qty, setQty] = useState(1);
   const [adding, setAdding] = useState(false);
+const { user } = useAuth();
 
+const [showNotifyForm, setShowNotifyForm] = useState(false);
+const [notifyEmail, setNotifyEmail] = useState("");
+const [notifyLoading, setNotifyLoading] = useState(false);
+const [notifyMsg, setNotifyMsg] = useState<string | null>(null);
+const [notifyErr, setNotifyErr] = useState<string | null>(null);
+const [notifyDone, setNotifyDone] = useState(false);
+useEffect(() => {
+  if (user?.email && !notifyEmail) {
+    setNotifyEmail(String(user.email));
+  }
+}, [user?.email, notifyEmail]);
   // 🔒 Lock background scroll while modal is open
   useEffect(() => {
     const prevHtml = document.documentElement.style.overflow;
@@ -218,7 +232,56 @@ export default function ProductQuickView({ productId, onClose }: Props) {
     setTimeout(() => setAdding(false), 650);
   }
 
+async function onNotifyMe() {
+  if (!p?.id) return;
 
+  setNotifyErr(null);
+  setNotifyMsg(null);
+
+  const loggedInEmail = user?.email ? String(user.email).trim() : "";
+  const guestEmail = notifyEmail.trim();
+
+  if (!loggedInEmail && !guestEmail) {
+    setNotifyErr("Please enter your email address.");
+    return;
+  }
+
+  const emailToSend = loggedInEmail || guestEmail;
+
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailToSend);
+  if (!emailOk) {
+    setNotifyErr("Please enter a valid email address.");
+    return;
+  }
+
+  try {
+    setNotifyLoading(true);
+
+    const res = await notifyMeWhenBackInStock({
+      productId: p.id,
+      email: loggedInEmail ? undefined : guestEmail,
+    });
+
+    const msg =
+      typeof res === "string"
+        ? res
+        : res?.message || "We’ll email you when this product is back in stock.";
+
+    setNotifyMsg(msg);
+    setNotifyErr(null);
+    setNotifyDone(true);
+    setShowNotifyForm(false);
+  } catch (e: any) {
+    setNotifyDone(false);
+    setNotifyErr(
+      e?.response?.data?.message ||
+      e?.response?.data ||
+      "Could not save your notification request."
+    );
+  } finally {
+    setNotifyLoading(false);
+  }
+}
   const hero = images[cur]?.url || p?.primaryImageUrl || "";
   const hasNav = images.length > 1;
 
@@ -239,7 +302,14 @@ useEffect(() => {
     }, 4500);
     return () => { if (timerRef.current) window.clearInterval(timerRef.current); };
   }, [hasNav, images.length]);
-
+useEffect(() => {
+  setShowNotifyForm(false);
+  setNotifyMsg(null);
+  setNotifyErr(null);
+  setNotifyLoading(false);
+  setNotifyDone(false);
+  setCur(0);
+}, [productId]);
   const onHover = (v: boolean) => { pauseRef.current = v; };
 
   if (typeof document === "undefined") return null;
@@ -406,21 +476,72 @@ useEffect(() => {
               )}
 
               <div className="pqv-actions">
-                <button
-                  type="button"
-                  className={"pqv-btn" + (adding ? " pulse" : "")}
-                  onClick={onAdd}
-                  disabled={adding || isUnavailable}
-                  title={isOutOfStock ? "Out of stock" : undefined}
-                >
-                  {isOutOfStock ? "Out of stock" : adding ? "Added!" : "Add to cart"}
-                </button>
+                {isOutOfStock ? (
+                  <>
+                    <button
+                      type="button"
+                      className="pqv-btn notify"
+                      onClick={() => {
+                        setNotifyErr(null);
+                        setNotifyMsg(null);
+                        if (user?.email) {
+                          onNotifyMe();
+                        } else {
+                          setShowNotifyForm((v) => !v);
+                        }
+                      }}
+                      disabled={notifyLoading}
+                      title="Notify me when back in stock"
+                    >
+                      {notifyLoading ? "Please wait..." : "🔔 Notify me"}
+                    </button>
 
-                <Link to="/cart" className="pqv-btn secondary">
-                  Go to cart
-                </Link>
+                    <Link to="/cart" className="pqv-btn secondary">
+                      Go to cart
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className={"pqv-btn" + (adding ? " pulse" : "")}
+                      onClick={onAdd}
+                      disabled={adding || isUnavailable}
+                    >
+                      {adding ? "Added!" : "Add to cart"}
+                    </button>
+
+                    <Link to="/cart" className="pqv-btn secondary">
+                      Go to cart
+                    </Link>
+                  </>
+                )}
               </div>
+{isOutOfStock && showNotifyForm && !user?.email && (
+  <div className="pqv-notify-box">
+    <div className="pqv-notify-title">Get notified when this product is back in stock</div>
+    <div className="pqv-notify-row">
+      <input
+        type="email"
+        value={notifyEmail}
+        onChange={(e) => setNotifyEmail(e.target.value)}
+        placeholder="Enter your email"
+        className="pqv-notify-input"
+      />
+      <button
+        type="button"
+        className="pqv-btn notify-submit"
+        onClick={onNotifyMe}
+        disabled={notifyLoading || notifyDone}
+      >
+        {notifyLoading ? "Submitting..." : "Submit"}
 
+      </button>
+    </div>
+  </div>
+)}
+{notifyMsg && <div className="pqv-notify-success">{notifyMsg}</div>}
+{notifyErr && <div className="pqv-notify-error">{notifyErr}</div>}
               {p.description && (
                 <div className="pqv-desc" dangerouslySetInnerHTML={{ __html: p.description }} />
               )}
@@ -734,5 +855,80 @@ const styles = `
 .pqv-stock.bad{
   background: rgba(240, 93, 139, .12);
 }
+.pqv-btn.notify{
+  background: #4A4F41;
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(74,79,65,.22);
+}
 
+.pqv-notify-box{
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(0,0,0,.08);
+  background: #fffafc;
+}
+
+.pqv-notify-title{
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--bb-primary);
+  margin-bottom: 8px;
+}
+
+.pqv-notify-row{
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.pqv-notify-input{
+  height: 42px;
+  border-radius: 10px;
+  border: 1px solid rgba(0,0,0,.12);
+  padding: 0 12px;
+  font-size: 14px;
+  outline: none;
+}
+
+.pqv-notify-input:focus{
+  border-color: var(--bb-accent);
+  box-shadow: 0 0 0 3px rgba(240,93,139,.12);
+}
+
+.pqv-btn.notify-submit{
+  height: 42px;
+}
+
+.pqv-notify-success{
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(0,160,80,.10);
+  border: 1px solid rgba(0,160,80,.18);
+  color: #1d6b3b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pqv-notify-error{
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff3f5;
+  border: 1px solid rgba(240,93,139,.25);
+  color: #b0003a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+@media (max-width: 640px){
+  .pqv-notify-row{
+    grid-template-columns: 1fr;
+  }
+
+  .pqv-btn.notify-submit{
+    width: 100%;
+  }
+}
 `;

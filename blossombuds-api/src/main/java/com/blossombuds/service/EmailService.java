@@ -26,4 +26,5 @@ public interface EmailService {
     void sendVerificationOtp(String toEmail, String otpCode);
 
     void sendPasswordResetOtp(String toEmail, String otpCode);
+    void sendRichMasked(String toEmail, String subject, String maskedBodyWithMarkers);
 }

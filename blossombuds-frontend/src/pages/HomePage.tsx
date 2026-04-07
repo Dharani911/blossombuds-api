@@ -143,7 +143,7 @@ export default function HomePage() {
                 title: "Gathered in abundance",
                 text: "Fullness, softness, and texture come together in strands prepared for ceremonies, gifting, and grand traditional styling moments.",
                 to: "/categories/1",
-                cta: "Browse garlands",
+                cta: "Browse strings",
               },
               {
                 src: product6,

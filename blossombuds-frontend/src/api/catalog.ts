@@ -92,7 +92,18 @@ export type PageResp<T> = {
   number: number; // current page index
   size: number;
 };
+export type BackInStockResponse = {
+  success: boolean;
+  message: string;
+};
 
+export async function notifyMeWhenBackInStock(productId: number, email?: string) {
+  const res = await api.post<BackInStockResponse>(
+    `/catalog/products/${productId}/notify-me`,
+    email ? { productId, email } : { productId }
+  );
+  return res.data;
+}
 /* =========================
  * Normalizers
  * ========================= */

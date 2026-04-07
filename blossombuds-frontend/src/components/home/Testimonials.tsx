@@ -81,7 +81,7 @@ export default function Testimonials({
           <span className="ts-eyebrow">Customer love</span>
           <h2 id="ts-heading">{title}</h2>
           <p>
-            Real feedback from customers who styled Blossom &amp; Buds for their
+            Real feedback from customers who styled Blossom Buds for their
             special moments.
           </p>
         </div>

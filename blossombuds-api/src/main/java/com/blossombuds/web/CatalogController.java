@@ -2,6 +2,7 @@ package com.blossombuds.web;
 
 import com.blossombuds.domain.*;
 import com.blossombuds.dto.*;
+import com.blossombuds.service.BackInStockService;
 import com.blossombuds.service.CatalogService;
 import com.blossombuds.service.GlobalSaleConfigService;
 import jakarta.validation.Valid;
@@ -36,7 +37,7 @@ public class CatalogController {
 
     private final CatalogService catalog;
     private final GlobalSaleConfigService globalSale;
-
+    private final BackInStockService backInStockService;
 
     // ────────────────────────────── Categories (admin ops) ───────────────────
 
@@ -534,5 +535,23 @@ public class CatalogController {
     public GlobalSaleConfigDto effectiveDiscount() {
         return globalSale.getEffectiveNowOrNull();
     }
+    @PostMapping("/products/{productId}/notify-me")
+    public BackInStockResponseDto notifyMeWhenBackInStock(
+            @PathVariable Long productId,
+            @RequestBody(required = false) BackInStockRequestDto dto,
+            java.security.Principal principal
+    ) {
+        Long customerId = null;
+        String email = dto != null ? dto.getEmail() : null;
 
+        if (principal != null && principal.getName() != null && principal.getName().startsWith("cust:")) {
+            try {
+                customerId = Long.parseLong(principal.getName().substring("cust:".length()));
+            } catch (Exception ignored) {
+                customerId = null;
+            }
+        }
+
+        return backInStockService.subscribe(productId, email, customerId);
+    }
 }

@@ -64,6 +64,7 @@ public class CatalogService {
     private final ProductOptionRepository optionRepo;
     private final ProductOptionValueRepository valueRepo;
     private final GlobalSaleConfigRepository globalSaleRepo;
+    private final BackInStockService backInStockService;
     private static final String CATEGORIES = "catalog.categories";
     private static final String PRODUCT_BY_ID = "catalog.productById";
     private static final String PRODUCTS_PAGE = "catalog.products.page";
@@ -384,12 +385,17 @@ public class CatalogService {
         if (dto.getPrice() != null) p.setPrice(dto.getPrice());
         if (dto.getVisible() != null)     p.setVisible(dto.getVisible());
         if (dto.getFeatured() != null)    p.setFeatured(dto.getFeatured());
-        if (dto.getInStock() != null)    p.setInStock(dto.getInStock());
+        boolean wasInStockBeforeUpdate = Boolean.TRUE.equals(p.getInStock());
+
+        if (dto.getInStock() != null) {
+            p.setInStock(dto.getInStock());
+        }
         if (dto.getExcludeFromGlobalDiscount() != null) {
             p.setExcludeFromGlobalDiscount(dto.getExcludeFromGlobalDiscount());
         }
 
         if (dto.getActive() != null) p.setActive(dto.getActive());
+        backInStockService.notifySubscribersIfBackInStock(p, wasInStockBeforeUpdate);
         log.info("[PRODUCT][UPDATE][OK] id={}", id);
         return toDto(p); // dirty checking
     }
