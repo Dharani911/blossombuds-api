@@ -23,6 +23,8 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.util.StringUtils;
 import java.io.IOException;
 import java.util.List;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.userdetails.UserDetails;
 
 /**
  * HTTP endpoints for catalog: products, product-category links,
@@ -538,6 +540,7 @@ public class CatalogController {
     public GlobalSaleConfigDto effectiveDiscount() {
         return globalSale.getEffectiveNowOrNull();
     }
+
     @PostMapping("/products/{productId}/notify-me")
     public BackInStockResponseDto notifyMeWhenBackInStock(
             @PathVariable Long productId,
@@ -546,55 +549,38 @@ public class CatalogController {
     ) {
         String dtoEmail = dto != null ? dto.getEmail() : null;
         Long customerId = extractCustomerId(authentication);
-        String principalEmail = extractEmail(authentication);
 
-        String resolvedEmail = StringUtils.hasText(dtoEmail) ? dtoEmail.trim() : principalEmail;
-
-        log.info("[BACK_IN_STOCK][API] productId={} principalName={} customerId={} dtoEmail={} principalEmail={} resolvedEmail={}",
-                productId,
+        log.info("[BACK_IN_STOCK][API] authClass={} principalClass={} authName={} customerId={} dtoEmail={}",
+                authentication != null ? authentication.getClass().getName() : null,
+                authentication != null && authentication.getPrincipal() != null
+                        ? authentication.getPrincipal().getClass().getName() : null,
                 authentication != null ? authentication.getName() : null,
                 customerId,
-                dtoEmail,
-                principalEmail,
-                resolvedEmail);
+                dtoEmail);
 
-        return backInStockService.subscribe(productId, resolvedEmail, customerId);
+        return backInStockService.subscribe(productId, dtoEmail, customerId);
     }
 
     private Long extractCustomerId(Authentication authentication) {
-        if (authentication == null) {
+        if (authentication == null || authentication.getPrincipal() == null) {
             return null;
         }
 
         Object principal = authentication.getPrincipal();
 
-        if (principal instanceof Jwt jwt) {
-            Long fromSub = parseCustomerId(jwt.getSubject());
-            if (fromSub != null) return fromSub;
-
-            Object claim = jwt.getClaims().get("customerId");
-            if (claim instanceof Number n) {
-                return n.longValue();
-            }
-            if (claim instanceof String s) {
-                try {
-                    return Long.parseLong(s.trim());
-                } catch (NumberFormatException ex) {
-                    log.warn("[BACK_IN_STOCK][API] invalid JWT customerId claim: {}", s);
-                }
-            }
+        if (principal instanceof UserDetails userDetails) {
+            return parseCustomerId(userDetails.getUsername());
         }
 
-        if (principal instanceof UserDetails userDetails) {
-            Long fromUsername = parseCustomerId(userDetails.getUsername());
-            if (fromUsername != null) return fromUsername;
+        if (principal instanceof String s) {
+            return parseCustomerId(s);
         }
 
         return parseCustomerId(authentication.getName());
     }
 
     private Long parseCustomerId(String value) {
-        if (!StringUtils.hasText(value)) {
+        if (value == null || value.isBlank()) {
             return null;
         }
 
@@ -611,6 +597,8 @@ public class CatalogController {
             return null;
         }
     }
+
+
 
     private String extractEmail(Authentication authentication) {
         if (authentication == null) {
