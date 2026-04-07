@@ -10,12 +10,13 @@ export type BackInStockResponse = {
   message: string;
 };
 
-export async function notifyMeWhenBackInStock(
-  payload: BackInStockRequest
-): Promise<BackInStockResponse> {
-  const { data } = await http.post<BackInStockResponse>(
-    `/catalog/products/${payload.productId}/notify-me`,
-    payload
-  );
-  return data;
+export function notifyMeWhenBackInStock(payload: {
+  productId: number;
+  email?: string;
+}) {
+  return http
+    .post(`/catalog/products/${payload.productId}/notify-me`, {
+      email: payload.email,
+    })
+    .then((r) => r.data);
 }

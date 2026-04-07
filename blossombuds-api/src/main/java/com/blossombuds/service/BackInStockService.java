@@ -30,6 +30,9 @@ public class BackInStockService {
 
     @Transactional
     public BackInStockResponseDto subscribe(Long productId, String email, Long customerId) {
+        log.info("[BACK_IN_STOCK][SUBSCRIBE] start productId={} customerId={} email={}",
+                productId, customerId, email);
+
         if (productId == null) {
             throw new IllegalArgumentException("productId is required");
         }
@@ -48,9 +51,13 @@ public class BackInStockService {
             customer = customerRepo.findById(customerId)
                     .orElseThrow(() -> new IllegalArgumentException("Customer not found: " + customerId));
 
+            log.info("[BACK_IN_STOCK][SUBSCRIBE] customer found id={} email={}",
+                    customer.getId(), customer.getEmail());
+
             if (customer.getEmail() == null || customer.getEmail().isBlank()) {
                 throw new IllegalArgumentException("Logged-in account does not have a valid email address.");
             }
+
             resolvedEmail = customer.getEmail().trim();
         }
 
@@ -60,12 +67,9 @@ public class BackInStockService {
 
         resolvedEmail = resolvedEmail.trim().toLowerCase();
 
-        boolean exists;
-        if (customer != null) {
-            exists = requestRepo.existsByProduct_IdAndCustomer_IdAndActiveTrueAndNotifiedFalse(productId, customer.getId());
-        } else {
-            exists = requestRepo.existsByProduct_IdAndEmailIgnoreCaseAndActiveTrueAndNotifiedFalse(productId, resolvedEmail);
-        }
+        boolean exists = customer != null
+                ? requestRepo.existsByProduct_IdAndCustomer_IdAndActiveTrueAndNotifiedFalse(productId, customer.getId())
+                : requestRepo.existsByProduct_IdAndEmailIgnoreCaseAndActiveTrueAndNotifiedFalse(productId, resolvedEmail);
 
         if (exists) {
             return new BackInStockResponseDto(true, "You are already on the notification list for this product.");
@@ -85,7 +89,6 @@ public class BackInStockService {
 
         return new BackInStockResponseDto(true, "We’ll email you when this product is back in stock.");
     }
-
     @Transactional
     public void notifySubscribersIfBackInStock(Product product, boolean wasInStockBeforeUpdate) {
         if (product == null || product.getId() == null) return;

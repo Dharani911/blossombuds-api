@@ -541,17 +541,34 @@ public class CatalogController {
             @RequestBody(required = false) BackInStockRequestDto dto,
             java.security.Principal principal
     ) {
-        Long customerId = null;
         String email = dto != null ? dto.getEmail() : null;
+        Long customerId = extractCustomerId(principal);
 
-        if (principal != null && principal.getName() != null && principal.getName().startsWith("cust:")) {
-            try {
-                customerId = Long.parseLong(principal.getName().substring("cust:".length()));
-            } catch (Exception ignored) {
-                customerId = null;
-            }
-        }
+        log.info("[BACK_IN_STOCK][API] productId={} principalName={} customerId={} dtoEmail={}",
+                productId,
+                principal != null ? principal.getName() : null,
+                customerId,
+                email);
 
         return backInStockService.subscribe(productId, email, customerId);
+    }
+
+    private Long extractCustomerId(java.security.Principal principal) {
+        if (principal == null || principal.getName() == null) {
+            return null;
+        }
+
+        String name = principal.getName().trim();
+
+        if (!name.startsWith("cust:")) {
+            return null;
+        }
+
+        try {
+            return Long.parseLong(name.substring("cust:".length()));
+        } catch (NumberFormatException ex) {
+            log.warn("[BACK_IN_STOCK][API] invalid principal format: {}", name);
+            return null;
+        }
     }
 }

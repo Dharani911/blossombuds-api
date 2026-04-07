@@ -63,6 +63,7 @@ useEffect(() => {
   // cart pill animation when count changes
   const prevCount = useRef(count);
   const [cartPop, setCartPop] = useState(false);
+
   useEffect(() => {
     if (prevCount.current !== count) {
       setCartPop(true);
@@ -238,20 +239,20 @@ async function onNotifyMe() {
   setNotifyErr(null);
   setNotifyMsg(null);
 
-  const loggedInEmail = user?.email ? String(user.email).trim() : "";
+  const isLoggedIn = !!user?.id;
   const guestEmail = notifyEmail.trim();
 
-  if (!loggedInEmail && !guestEmail) {
+  if (!isLoggedIn && !guestEmail) {
     setNotifyErr("Please enter your email address.");
     return;
   }
 
-  const emailToSend = loggedInEmail || guestEmail;
-
-  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailToSend);
-  if (!emailOk) {
-    setNotifyErr("Please enter a valid email address.");
-    return;
+  if (!isLoggedIn) {
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail);
+    if (!emailOk) {
+      setNotifyErr("Please enter a valid email address.");
+      return;
+    }
   }
 
   try {
@@ -259,7 +260,7 @@ async function onNotifyMe() {
 
     const res = await notifyMeWhenBackInStock({
       productId: p.id,
-      email: loggedInEmail ? undefined : guestEmail,
+      email: isLoggedIn ? undefined : guestEmail,
     });
 
     const msg =
@@ -484,7 +485,7 @@ useEffect(() => {
                       onClick={() => {
                         setNotifyErr(null);
                         setNotifyMsg(null);
-                        if (user?.email) {
+                        if (user?.id) {
                           onNotifyMe();
                         } else {
                           setShowNotifyForm((v) => !v);
@@ -517,7 +518,7 @@ useEffect(() => {
                   </>
                 )}
               </div>
-{isOutOfStock && showNotifyForm && !user?.email && (
+{isOutOfStock && showNotifyForm && !user?.id && (
   <div className="pqv-notify-box">
     <div className="pqv-notify-title">Get notified when this product is back in stock</div>
     <div className="pqv-notify-row">
