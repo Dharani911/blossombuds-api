@@ -55,6 +55,16 @@ const customerToken = getCustomerToken();
 const tokenCustomer = customerToken ? extractCustomerFromToken(customerToken) : null;
 
 /**
+ * Logged-in customer detection:
+ * treat as authenticated if AuthProvider has a user OR token has a customer id/sub.
+ */
+const hasLoggedInCustomer =
+  !!user ||
+  !!tokenCustomer?.id ||
+  (typeof tokenCustomer?.raw?.sub === "string" &&
+    tokenCustomer.raw.sub.startsWith("cust:"));
+
+/**
  * Prefer email from AuthProvider, but fall back to decoded customer JWT.
  */
 const sessionEmail =
@@ -65,9 +75,10 @@ const sessionEmail =
     : "";
 
 /**
- * For notify-me, auto-submit only when we already know the email.
+ * If customer is logged in, backend can resolve the registered email using customerId.
+ * So we auto-submit for logged-in customers even when frontend email is blank.
  */
-const canAutoSubmitNotify = sessionEmail.length > 0;
+const canAutoSubmitNotify = hasLoggedInCustomer || sessionEmail.length > 0;
 useEffect(() => {
   if (sessionEmail && !notifyEmail) {
     setNotifyEmail(sessionEmail);
@@ -272,15 +283,17 @@ async function onNotifyMe() {
   const typedEmail = notifyEmail.trim();
   const emailToSend = sessionEmail || typedEmail;
 
-  if (!emailToSend) {
-    setNotifyErr("Please enter your email address.");
-    return;
-  }
+  if (!hasLoggedInCustomer) {
+    if (!emailToSend) {
+      setNotifyErr("Please enter your email address.");
+      return;
+    }
 
-  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailToSend);
-  if (!emailOk) {
-    setNotifyErr("Please enter a valid email address.");
-    return;
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailToSend);
+    if (!emailOk) {
+      setNotifyErr("Please enter a valid email address.");
+      return;
+    }
   }
 
   try {
@@ -288,7 +301,7 @@ async function onNotifyMe() {
 
     const res = await notifyMeWhenBackInStock({
       productId: p.id,
-      email: emailToSend,
+      email: emailToSend || undefined,
     });
 
     const msg =
