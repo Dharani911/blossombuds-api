@@ -102,6 +102,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/payments/razorpay/orders/**").hasAnyRole("CUSTOMER","ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/payments/razorpay/verify").hasAnyRole("CUSTOMER","ADMIN")
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                                .requestMatchers(HttpMethod.POST, "/api/catalog/products/**/notify-me").permitAll()
                                 // inside authorizeHttpRequests(auth -> auth ... )
                                 .requestMatchers(HttpMethod.GET, "/api/feature-images/public/**").permitAll()
 // (optional, if your images are served via these paths)

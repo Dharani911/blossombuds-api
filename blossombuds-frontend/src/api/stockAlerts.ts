@@ -15,7 +15,7 @@ export function notifyMeWhenBackInStock(payload: {
   email?: string;
 }) {
   return http
-    .post(`/catalog/products/${payload.productId}/notify-me`, {
+    .post(`/api/catalog/products/${payload.productId}/notify-me`, {
       email: payload.email,
     })
     .then((r) => r.data);

@@ -286,14 +286,31 @@ async function onNotifyMe() {
     setShowNotifyForm(false);
   } catch (e: any) {
     setNotifyDone(false);
-    setNotifyErr(
-      e?.response?.data?.message ||
-      e?.response?.data ||
-      "Could not save your notification request."
-    );
+    setNotifyErr(toErrorMessage(e));
   } finally {
     setNotifyLoading(false);
   }
+}
+function toErrorMessage(err: any): string {
+  const data = err?.response?.data;
+
+  if (typeof data?.message === "string" && data.message.trim()) {
+    return data.message;
+  }
+
+  if (typeof data?.error === "string" && data.error.trim()) {
+    return data.error;
+  }
+
+  if (typeof data === "string" && data.trim()) {
+    return data;
+  }
+
+  if (typeof err?.message === "string" && err.message.trim()) {
+    return err.message;
+  }
+
+  return "Could not save your notification request.";
 }
   const hero = images[cur]?.url || p?.primaryImageUrl || "";
   const hasNav = images.length > 1;
