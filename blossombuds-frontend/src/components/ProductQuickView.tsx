@@ -38,11 +38,24 @@ const [notifyLoading, setNotifyLoading] = useState(false);
 const [notifyMsg, setNotifyMsg] = useState<string | null>(null);
 const [notifyErr, setNotifyErr] = useState<string | null>(null);
 const [notifyDone, setNotifyDone] = useState(false);
+
+/**
+ * A customer should be treated as logged in if we have a user object,
+ * not only when user.id is present.
+ */
+const isLoggedIn = !!user;
+
+/**
+ * Safely read session email if available.
+ */
+const sessionEmail =
+  typeof user?.email === "string" ? user.email.trim() : "";
+
 useEffect(() => {
-  if (user?.email && !notifyEmail) {
-    setNotifyEmail(String(user.email));
+  if (sessionEmail && !notifyEmail) {
+    setNotifyEmail(sessionEmail);
   }
-}, [user?.email, notifyEmail]);
+}, [sessionEmail, notifyEmail]);
   // 🔒 Lock background scroll while modal is open
   useEffect(() => {
     const prevHtml = document.documentElement.style.overflow;
@@ -239,7 +252,6 @@ async function onNotifyMe() {
   setNotifyErr(null);
   setNotifyMsg(null);
 
-  const isLoggedIn = !!user?.id;
   const guestEmail = notifyEmail.trim();
 
   if (!isLoggedIn && !guestEmail) {
@@ -485,7 +497,8 @@ useEffect(() => {
                       onClick={() => {
                         setNotifyErr(null);
                         setNotifyMsg(null);
-                        if (user?.id) {
+
+                        if (isLoggedIn) {
                           onNotifyMe();
                         } else {
                           setShowNotifyForm((v) => !v);
@@ -518,7 +531,7 @@ useEffect(() => {
                   </>
                 )}
               </div>
-{isOutOfStock && showNotifyForm && !user?.id && (
+{isOutOfStock && showNotifyForm && !isLoggedIn && (
   <div className="pqv-notify-box">
     <div className="pqv-notify-title">Get notified when this product is back in stock</div>
     <div className="pqv-notify-row">

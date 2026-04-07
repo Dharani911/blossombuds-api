@@ -17,7 +17,10 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartHttpServletRequest;
-
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.util.StringUtils;
 import java.io.IOException;
 import java.util.List;
 
@@ -539,26 +542,63 @@ public class CatalogController {
     public BackInStockResponseDto notifyMeWhenBackInStock(
             @PathVariable Long productId,
             @RequestBody(required = false) BackInStockRequestDto dto,
-            java.security.Principal principal
+            Authentication authentication
     ) {
-        String email = dto != null ? dto.getEmail() : null;
-        Long customerId = extractCustomerId(principal);
+        String dtoEmail = dto != null ? dto.getEmail() : null;
+        Long customerId = extractCustomerId(authentication);
+        String principalEmail = extractEmail(authentication);
 
-        log.info("[BACK_IN_STOCK][API] productId={} principalName={} customerId={} dtoEmail={}",
+        String resolvedEmail = StringUtils.hasText(dtoEmail) ? dtoEmail.trim() : principalEmail;
+
+        log.info("[BACK_IN_STOCK][API] productId={} principalName={} customerId={} dtoEmail={} principalEmail={} resolvedEmail={}",
                 productId,
-                principal != null ? principal.getName() : null,
+                authentication != null ? authentication.getName() : null,
                 customerId,
-                email);
+                dtoEmail,
+                principalEmail,
+                resolvedEmail);
 
-        return backInStockService.subscribe(productId, email, customerId);
+        return backInStockService.subscribe(productId, resolvedEmail, customerId);
     }
 
-    private Long extractCustomerId(java.security.Principal principal) {
-        if (principal == null || principal.getName() == null) {
+    private Long extractCustomerId(Authentication authentication) {
+        if (authentication == null) {
             return null;
         }
 
-        String name = principal.getName().trim();
+        Object principal = authentication.getPrincipal();
+
+        if (principal instanceof Jwt jwt) {
+            Long fromSub = parseCustomerId(jwt.getSubject());
+            if (fromSub != null) return fromSub;
+
+            Object claim = jwt.getClaims().get("customerId");
+            if (claim instanceof Number n) {
+                return n.longValue();
+            }
+            if (claim instanceof String s) {
+                try {
+                    return Long.parseLong(s.trim());
+                } catch (NumberFormatException ex) {
+                    log.warn("[BACK_IN_STOCK][API] invalid JWT customerId claim: {}", s);
+                }
+            }
+        }
+
+        if (principal instanceof UserDetails userDetails) {
+            Long fromUsername = parseCustomerId(userDetails.getUsername());
+            if (fromUsername != null) return fromUsername;
+        }
+
+        return parseCustomerId(authentication.getName());
+    }
+
+    private Long parseCustomerId(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+
+        String name = value.trim();
 
         if (!name.startsWith("cust:")) {
             return null;
@@ -567,8 +607,41 @@ public class CatalogController {
         try {
             return Long.parseLong(name.substring("cust:".length()));
         } catch (NumberFormatException ex) {
-            log.warn("[BACK_IN_STOCK][API] invalid principal format: {}", name);
+            log.warn("[BACK_IN_STOCK][API] invalid customer principal format: {}", name);
             return null;
         }
+    }
+
+    private String extractEmail(Authentication authentication) {
+        if (authentication == null) {
+            return null;
+        }
+
+        Object principal = authentication.getPrincipal();
+
+        if (principal instanceof Jwt jwt) {
+            Object emailClaim = jwt.getClaims().get("email");
+            if (emailClaim instanceof String email && StringUtils.hasText(email)) {
+                return email.trim().toLowerCase();
+            }
+        }
+
+        if (principal instanceof UserDetails userDetails) {
+            String username = userDetails.getUsername();
+            if (looksLikeEmail(username)) {
+                return username.trim().toLowerCase();
+            }
+        }
+
+        String name = authentication.getName();
+        if (looksLikeEmail(name)) {
+            return name.trim().toLowerCase();
+        }
+
+        return null;
+    }
+
+    private boolean looksLikeEmail(String value) {
+        return StringUtils.hasText(value) && value.contains("@");
     }
 }

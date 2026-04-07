@@ -45,7 +45,7 @@ public class BackInStockService {
         }
 
         Customer customer = null;
-        String resolvedEmail = email;
+        String resolvedEmail = (email != null ? email.trim() : null);
 
         if (customerId != null) {
             customer = customerRepo.findById(customerId)
@@ -65,7 +65,7 @@ public class BackInStockService {
             throw new IllegalArgumentException("Email is required.");
         }
 
-        resolvedEmail = resolvedEmail.trim().toLowerCase();
+        resolvedEmail = resolvedEmail.toLowerCase();
 
         boolean exists = customer != null
                 ? requestRepo.existsByProduct_IdAndCustomer_IdAndActiveTrueAndNotifiedFalse(productId, customer.getId())
@@ -105,10 +105,12 @@ public class BackInStockService {
             log.info("[BACK_IN_STOCK][NOTIFY] no pending requests for productId={}", product.getId());
             return;
         }
-        String productUrl = "/products/" + product.getId();
+        String productPath = "/products/" + product.getId();
         if (product.getSlug() != null && !product.getSlug().isBlank()) {
-            productUrl = "/products/" + product.getSlug();
+            productPath = "/products/" + product.getSlug();
         }
+
+        String productUrl = "https://www.blossom-buds-floral-artistry.com" + productPath;
         for (BackInStockRequest req : pending) {
             try {
                 emailService.sendRichMasked(
