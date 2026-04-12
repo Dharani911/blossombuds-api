@@ -26,8 +26,15 @@ import {
   type ProductImage,
   type Page,
   slugifyName,
+    listCartSuggestionsAdmin,
+    addCartSuggestion,
+    removeCartSuggestion,
+    reorderCartSuggestions,
+    searchProductsLite,
+    type CartSuggestionProductDto,
+    type ProductLite,
 } from "../../api/adminCatalog";
-
+import { listStockAlertAdminSummary, type StockAlertAdminSummary } from "../../api/stockAlerts";
 /* ---------- Theme ---------- */
 const PRIMARY = "#2F2F2F";
 const ACCENT = "#F05D8B";
@@ -142,8 +149,8 @@ export default function ProductsPage() {
   const [busyDiscount, setBusyDiscount] = useState<Record<number, boolean>>({});
   const isLocked = (id: number) =>
     !!busyFeature[id] || !!busyVisible[id] || !!busyStock[id] || !!busyDiscount[id];
-
-
+const [alertsOpen, setAlertsOpen] = useState(false);
+const [suggestionsOpen, setSuggestionsOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -337,9 +344,21 @@ async function onToggleDiscount(p: Product, nextExclude: boolean) {
               onChange={e => setQ(e.target.value)}
               placeholder="Search by name or slug…"
             />
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={PRIMARY} strokeWidth="2"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={PRIMARY} strokeWidth="2">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
           </div>
-          <button className="btn" onClick={() => setModal({ mode: "add" })}>+ Add product</button>
+
+          <button className="ghost sm" onClick={() => setAlertsOpen(true)}>
+            Stock alerts
+          </button>
+<button className="ghost sm" onClick={() => setSuggestionsOpen(true)}>
+  Cart suggestions
+</button>
+          <button className="btn" onClick={() => setModal({ mode: "add" })}>
+            + Add product
+          </button>
         </div>
       </div>
 
@@ -483,7 +502,12 @@ async function onToggleDiscount(p: Product, nextExclude: boolean) {
           dismissToast={dismissToast}
         />
       )}
-
+{alertsOpen && (
+  <StockAlertsModal onClose={() => setAlertsOpen(false)} />
+)}
+{suggestionsOpen && (
+  <CartSuggestionsModal onClose={() => setSuggestionsOpen(false)} />
+)}
       {/* Toast (only when modal is NOT open) */}
       {!modal && toast && (
         <div className={"toast " + toast.kind} onAnimationEnd={dismissToast}>
@@ -640,7 +664,7 @@ const [excludeFromGlobalDiscount, setExcludeFromGlobalDiscount] = useState<boole
                     <Toggle checked={inStock} onChange={setInStock} title={inStock ? "In stock" : "Out of stock"} />
                     <span>In stock</span>
                   </label>
-                        <label className="check">
+
                         <label className="check">
                           <Toggle
                             checked={!excludeFromGlobalDiscount} // checked means Discount ON
@@ -650,7 +674,7 @@ const [excludeFromGlobalDiscount, setExcludeFromGlobalDiscount] = useState<boole
                           <span>Discount</span>
                         </label>
 
-</label>
+
 
 
 
@@ -724,6 +748,420 @@ const [excludeFromGlobalDiscount, setExcludeFromGlobalDiscount] = useState<boole
   );
 }
 
+function StockAlertsModal({
+  onClose,
+}: {
+  onClose: () => void;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  const [rows, setRows] = useState<StockAlertAdminSummary[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        setLoading(true);
+        setErr(null);
+        const data = await listStockAlertAdminSummary();
+        if (!alive) return;
+        setRows(data || []);
+      } catch (e: any) {
+        if (!alive) return;
+        setErr(e?.response?.data?.message || "Failed to load stock alert insights.");
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  function fmtDate(value?: string) {
+    if (!value) return "-";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "-";
+    return d.toLocaleDateString("en-IN", {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+    });
+  }
+
+  function waitingDays(value?: string) {
+    if (!value) return 0;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return 0;
+    const diff = Date.now() - d.getTime();
+    return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
+  }
+
+  return (
+    <div className="modal-wrap" role="dialog" aria-modal="true">
+      <div className="modal alerts-modal">
+        <div className="modal-hd">
+          <div className="title">Stock alert insights</div>
+          <button className="x" onClick={onClose} aria-label="Close">×</button>
+        </div>
+
+        <div className="modal-bd">
+          {err && <div className="alert bad">{err}</div>}
+
+          {loading ? (
+            <SkeletonTable rows={5} />
+          ) : rows.length === 0 ? (
+            <div className="empty">No active requests for out-of-stock products.</div>
+          ) : (
+            <div className="card" style={{ boxShadow: "none", marginBottom: 0 }}>
+              <table className="grid">
+                <thead>
+                  <tr>
+                    <th style={{ width: 100 }}>Product ID</th>
+                    <th>Product Name</th>
+                    <th style={{ width: 140, textAlign: "right" }}>Requests</th>
+                    <th style={{ width: 150 }}>Waiting Since</th>
+                    <th style={{ width: 120, textAlign: "right" }}>Days</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr key={row.productId}>
+                      <td>#{row.productId}</td>
+                      <td className="strong">{row.productName}</td>
+                      <td style={{ textAlign: "right" }}>
+                        {new Intl.NumberFormat("en-IN").format(Number(row.activeRequestCount || 0))}
+                      </td>
+                      <td>{fmtDate(row.waitingSince)}</td>
+                      <td style={{ textAlign: "right" }}>
+                        {waitingDays(row.waitingSince)} day{waitingDays(row.waitingSince) === 1 ? "" : "s"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <div className="modal-ft">
+          <button className="ghost" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+function CartSuggestionsModal({
+  onClose,
+}: {
+  onClose: () => void;
+}) {
+  const MAX = 10;
+
+  const [loading, setLoading] = useState(true);
+  const [savingOrder, setSavingOrder] = useState(false);
+  const [addingId, setAddingId] = useState<number | null>(null);
+  const [removingId, setRemovingId] = useState<number | null>(null);
+
+  const [err, setErr] = useState<string | null>(null);
+  const [toast, setToast] = useState<null | { kind: "ok" | "bad"; msg: string }>(null);
+
+  const [items, setItems] = useState<CartSuggestionProductDto[]>([]);
+  const [query, setQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [results, setResults] = useState<ProductLite[]>([]);
+
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        setLoading(true);
+        setErr(null);
+        const data = await listCartSuggestionsAdmin();
+        if (!alive) return;
+        const sorted = [...(data || [])].sort(
+          (a, b) => Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0)
+        );
+        setItems(sorted);
+      } catch (e: any) {
+        if (!alive) return;
+        setErr(e?.response?.data?.message || "Failed to load cart suggestions.");
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      setResults([]);
+      return;
+    }
+
+    let alive = true;
+    const t = window.setTimeout(async () => {
+      try {
+        setSearching(true);
+        const found = await searchProductsLite(q, 20);
+        if (!alive) return;
+
+        const existingIds = new Set(items.map(x => x.productId));
+        const filtered = (found || []).filter(p => !existingIds.has(p.id));
+        setResults(filtered);
+      } catch {
+        if (!alive) return;
+        setResults([]);
+      } finally {
+        if (alive) setSearching(false);
+      }
+    }, 250);
+
+    return () => {
+      alive = false;
+      window.clearTimeout(t);
+    };
+  }, [query, items]);
+
+  function moveItem(from: number, to: number) {
+    if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) return;
+
+    const next = [...items];
+    const [picked] = next.splice(from, 1);
+    next.splice(to, 0, picked);
+
+    setItems(
+      next.map((item, idx) => ({
+        ...item,
+        sortOrder: idx,
+      }))
+    );
+  }
+
+  async function onAddProduct(product: ProductLite) {
+    if (items.length >= MAX) {
+      setToast({ kind: "bad", msg: `You can add up to ${MAX} products only.` });
+      return;
+    }
+
+    try {
+      setAddingId(product.id);
+      const created = await addCartSuggestion(product.id);
+      setItems(prev => {
+        const next = [...prev, created];
+        return next
+          .map((x, idx) => ({
+            ...x,
+            sortOrder: idx,
+          }))
+          .sort((a, b) => Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0));
+      });
+      setQuery("");
+      setResults([]);
+      setToast({ kind: "ok", msg: "Product added to cart suggestions" });
+    } catch (e: any) {
+      setToast({ kind: "bad", msg: e?.response?.data?.message || "Could not add suggestion product" });
+    } finally {
+      setAddingId(null);
+    }
+  }
+
+  async function onRemoveProduct(productId: number) {
+    try {
+      setRemovingId(productId);
+      await removeCartSuggestion(productId);
+      setItems(prev =>
+        prev
+          .filter(x => x.productId !== productId)
+          .map((x, idx) => ({
+            ...x,
+            sortOrder: idx,
+          }))
+      );
+      setToast({ kind: "ok", msg: "Product removed from suggestions" });
+    } catch (e: any) {
+      setToast({ kind: "bad", msg: e?.response?.data?.message || "Could not remove suggestion product" });
+    } finally {
+      setRemovingId(null);
+    }
+  }
+
+  async function onSaveOrder() {
+    try {
+      setSavingOrder(true);
+      await reorderCartSuggestions(
+        items.map((item, idx) => ({
+          productId: item.productId,
+          sortOrder: idx,
+        }))
+      );
+      setItems(prev =>
+        prev.map((item, idx) => ({
+          ...item,
+          sortOrder: idx,
+        }))
+      );
+      setToast({ kind: "ok", msg: "Suggestion order updated" });
+    } catch (e: any) {
+      setToast({ kind: "bad", msg: e?.response?.data?.message || "Could not save suggestion order" });
+    } finally {
+      setSavingOrder(false);
+    }
+  }
+
+  return (
+    <div className="modal-wrap" role="dialog" aria-modal="true">
+      <div className="modal suggestion-modal">
+        <div className="modal-hd">
+          <div className="title">Cart suggestions</div>
+          <button className="x" onClick={onClose} aria-label="Close">×</button>
+        </div>
+
+        <div className="modal-bd">
+          {err && <div className="alert bad">{err}</div>}
+
+          <div className="suggestion-topbar">
+            <div>
+              <div className="suggestion-count">
+                {items.length}/{MAX} products selected
+              </div>
+              <div className="hint">
+                Search by product name or product ID, add up to 10 products, and drag to reorder.
+              </div>
+            </div>
+
+            <button
+              className="btn"
+              onClick={onSaveOrder}
+              disabled={savingOrder || loading}
+            >
+              {savingOrder ? "Saving..." : "Save order"}
+            </button>
+          </div>
+
+          <div className="suggestion-searchbox">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search product by name or ID..."
+            />
+          </div>
+
+          {query.trim() && (
+            <div className="suggestion-search-results">
+              {searching ? (
+                <div className="muted">Searching...</div>
+              ) : results.length === 0 ? (
+                <div className="muted">No matching products found.</div>
+              ) : (
+                results.map((p) => (
+                  <div key={p.id} className="suggestion-search-row">
+                    <div>
+                      <div className="strong">{p.name}</div>
+                      <div className="muted">#{p.id} • ₹{new Intl.NumberFormat("en-IN").format(Number(p.price || 0))}</div>
+                    </div>
+                    <button
+                      className="ghost"
+                      onClick={() => onAddProduct(p)}
+                      disabled={addingId === p.id || items.length >= MAX}
+                    >
+                      {addingId === p.id ? "Adding..." : "Add"}
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          <div className="suggestion-list-wrap">
+            {loading ? (
+              <SkeletonTable rows={4} />
+            ) : items.length === 0 ? (
+              <div className="empty">No suggestion products added yet.</div>
+            ) : (
+              <div className="suggestion-list">
+                {items.map((item, idx) => (
+                  <div
+                    key={item.productId}
+                    className={"suggestion-item" + (dragIndex === idx ? " dragging" : "")}
+                    draggable
+                    onDragStart={() => setDragIndex(idx)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => {
+                      if (dragIndex == null) return;
+                      moveItem(dragIndex, idx);
+                      setDragIndex(null);
+                    }}
+                    onDragEnd={() => setDragIndex(null)}
+                  >
+                    <div className="suggestion-drag">⋮⋮</div>
+
+                    <div className="suggestion-main">
+                      <div className="strong">{item.productName}</div>
+                      <div className="muted">
+                        Product #{item.productId} • Position {idx + 1}
+                      </div>
+                    </div>
+
+                    <div className="suggestion-actions">
+                      <button
+                        className="ghost small"
+                        onClick={() => idx > 0 && moveItem(idx, idx - 1)}
+                        disabled={idx === 0}
+                        title="Move up"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        className="ghost small"
+                        onClick={() => idx < items.length - 1 && moveItem(idx, idx + 1)}
+                        disabled={idx === items.length - 1}
+                        title="Move down"
+                      >
+                        ↓
+                      </button>
+                      <button
+                        className="ghost small bad"
+                        onClick={() => onRemoveProduct(item.productId)}
+                        disabled={removingId === item.productId}
+                      >
+                        {removingId === item.productId ? "Removing..." : "Remove"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="modal-ft">
+          <button className="ghost" onClick={onClose}>Close</button>
+          <button
+            className="btn"
+            onClick={onSaveOrder}
+            disabled={savingOrder || loading}
+          >
+            {savingOrder ? "Saving..." : "Save order"}
+          </button>
+        </div>
+
+        {toast && (
+          <div
+            className={"toast in-modal " + toast.kind}
+            onAnimationEnd={() => setToast(null)}
+          >
+            {toast.msg}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 /* ---------------------- Images Tab ---------------------- */
 type ImagesTabProps = {
   productId: number;
@@ -2556,4 +2994,151 @@ const css = `
     transition: none !important;
   }
 }
+.alerts-modal{
+  width: 860px;
+  max-width: calc(100vw - 40px);
+}
+
+@media (max-width: 768px){
+  .alerts-modal{
+    width: 100%;
+    max-width: 100%;
+    border-radius: 0;
+  }
+}.suggestion-modal{
+   width: 980px;
+   max-width: calc(100vw - 40px);
+ }
+
+ .suggestion-topbar{
+   display:flex;
+   align-items:flex-start;
+   justify-content:space-between;
+   gap:16px;
+   margin-bottom:16px;
+   padding:14px 16px;
+   border:1px dashed rgba(0,0,0,.10);
+   border-radius:14px;
+   background:#fff;
+ }
+
+ .suggestion-count{
+   font-size:16px;
+   font-weight:800;
+   margin-bottom:4px;
+ }
+
+ .suggestion-searchbox{
+   margin-bottom:14px;
+ }
+
+ .suggestion-searchbox input{
+   width:100%;
+   height:46px;
+   border:1px solid rgba(0,0,0,.08);
+   border-radius:14px;
+   padding:0 16px;
+   outline:none;
+   background:#fff;
+   font-size:14px;
+ }
+
+ .suggestion-searchbox input:focus{
+   border-color:${ACCENT};
+   box-shadow:0 0 0 4px rgba(240,93,139,0.1);
+ }
+
+ .suggestion-search-results{
+   border:1px solid rgba(0,0,0,.08);
+   border-radius:16px;
+   background:#fff;
+   overflow:hidden;
+   margin-bottom:18px;
+ }
+
+ .suggestion-search-row{
+   display:flex;
+   align-items:center;
+   justify-content:space-between;
+   gap:12px;
+   padding:14px 16px;
+   border-top:1px solid rgba(0,0,0,.06);
+ }
+
+ .suggestion-search-row:first-child{
+   border-top:none;
+ }
+
+ .suggestion-list-wrap{
+   margin-top:10px;
+ }
+
+ .suggestion-list{
+   display:grid;
+   gap:10px;
+ }
+
+ .suggestion-item{
+   display:grid;
+   grid-template-columns: 32px 1fr auto;
+   align-items:center;
+   gap:12px;
+   padding:14px 16px;
+   border:1px solid rgba(0,0,0,.08);
+   border-radius:16px;
+   background:#fff;
+   box-shadow:0 8px 20px rgba(0,0,0,.05);
+   transition:all .15s ease;
+ }
+
+ .suggestion-item:hover{
+   transform:translateY(-1px);
+   box-shadow:0 12px 28px rgba(0,0,0,.08);
+ }
+
+ .suggestion-item.dragging{
+   opacity:.55;
+ }
+
+ .suggestion-drag{
+   font-size:18px;
+   font-weight:900;
+   opacity:.45;
+   cursor:grab;
+   user-select:none;
+   text-align:center;
+ }
+
+ .suggestion-main{
+   min-width:0;
+ }
+
+ .suggestion-actions{
+   display:flex;
+   align-items:center;
+   gap:8px;
+ }
+
+ @media (max-width: 768px){
+   .suggestion-modal{
+     width:100%;
+     max-width:100%;
+     border-radius:0;
+   }
+
+   .suggestion-topbar{
+     flex-direction:column;
+     align-items:stretch;
+   }
+
+   .suggestion-item{
+     grid-template-columns: 24px 1fr;
+   }
+
+   .suggestion-actions{
+     grid-column: 1 / -1;
+     justify-content:flex-end;
+     margin-top:4px;
+   }
+ }
 `;

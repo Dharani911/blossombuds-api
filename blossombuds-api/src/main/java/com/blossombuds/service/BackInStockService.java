@@ -3,6 +3,7 @@ package com.blossombuds.service;
 import com.blossombuds.domain.BackInStockRequest;
 import com.blossombuds.domain.Customer;
 import com.blossombuds.domain.Product;
+import com.blossombuds.dto.BackInStockAdminSummaryDto;
 import com.blossombuds.dto.BackInStockResponseDto;
 import com.blossombuds.repository.BackInStockRequestRepository;
 import com.blossombuds.repository.CustomerRepository;
@@ -10,6 +11,7 @@ import com.blossombuds.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
@@ -28,6 +30,7 @@ public class BackInStockService {
     private final ProductRepository productRepo;
     private final CustomerRepository customerRepo;
     private final EmailService emailService;
+    private final BackInStockRequestRepository backInStockRequestRepository;
     @Value("${app.frontend.baseUrl}")
     private String frontendUrl;
 
@@ -143,5 +146,10 @@ public class BackInStockService {
                         product.getId(), req.getEmail(), ex);
             }
         }
+    }
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasRole('ADMIN')")
+    public List<BackInStockAdminSummaryDto> listAdminSummary() {
+        return backInStockRequestRepository.findAdminSummaryForOutOfStockProducts();
     }
 }

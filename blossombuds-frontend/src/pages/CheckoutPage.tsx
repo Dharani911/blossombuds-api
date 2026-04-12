@@ -426,7 +426,26 @@ svg.icon { width: 24px; height: 24px; }
   margin-left:8px;
   filter:none; /* keep tag readable if you later change blur behavior */
 }
+.delivery-note{
+  margin-top:8px;
+  padding:10px 12px;
+  border-radius:12px;
+  background: rgba(246,195,32,.10);
+  border:1px solid rgba(246,195,32,.22);
+}
 
+.delivery-note-title{
+  font-size:12px;
+  font-weight:900;
+  color: var(--primary);
+  margin-bottom:4px;
+}
+
+.delivery-note-text{
+  font-size:12.5px;
+  line-height:1.5;
+  color:#444;
+}
 `;
 
 // INR
@@ -798,9 +817,10 @@ useEffect(() => {
     try {
       // We purposely use itemsSubtotal BEFORE discounts (to match your service’s threshold logic)
       const { data } = await http.post(`/api/shipping/preview`, {
-        itemsSubtotal: itemsSubtotalBeforeDiscount,  // ✅ pre-discount
+        itemsSubtotal: itemsSubtotalBeforeDiscount,
         stateId: addr.stateId ?? null,
         districtId: addr.districtId ?? null,
+        deliveryPartnerId: partnerId || null,
       });
 
       const fee = Number(data?.fee ?? 0);
@@ -823,7 +843,7 @@ useEffect(() => {
     }
     refreshShippingPreview(selectedDomesticAddress);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [international, selectedDomesticAddress?.id, subtotal]);
+  }, [international, selectedDomesticAddress?.id, itemsSubtotalBeforeDiscount, partnerId]);
 
   // Grand total now uses the previewed shippingFee
   const grandTotal = useMemo(() => {
@@ -1363,6 +1383,18 @@ useEffect(() => {
                         </option>
                       ))}
                     </select>
+                    <div className="delivery-note">
+                      <div className="delivery-note-title">Delivery information</div>
+                      <div className="delivery-note-text">
+                        <div>• Speed Post: typically 2 days after dispatch</div>
+                        <div>• Standard courier: typically 3–4 days after dispatch</div>
+                        <div style={{ marginTop: 6 }}>
+                          If courier service is not available in your area, we will assist in coordinating
+                          with the courier. However, the customer will be responsible for following up and
+                          collecting the parcel from the nearest courier office, if required.
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Coupon row with Apply + Clear */}

@@ -144,11 +144,20 @@ public class OrderService {
 
         BigDecimal expectedShipping;
         if (india) {
-            expectedShipping = deliveryFeeService.computeFeeWithThreshold(
-                    dto.getItemsSubtotal(), dto.getShipStateId(), dto.getShipDistrictId()
+            expectedShipping = deliveryFeeService.computeFee(
+                    dto.getItemsSubtotal(),
+                    dto.getShipStateId(),
+                    dto.getShipDistrictId(),
+                    dto.getDeliveryPartnerId()
             );
-            if (expectedShipping == null || expectedShipping.signum() < 0) expectedShipping = BigDecimal.ZERO;
-        } else {
+
+            if (expectedShipping == null || expectedShipping.signum() < 0) {
+                expectedShipping = BigDecimal.ZERO;
+            }
+
+            log.info("[ORDER][SHIPPING] partnerId={} expectedShipping={}",
+                    dto.getDeliveryPartnerId(), expectedShipping);
+        }else {
             expectedShipping = dto.getShippingFee() == null ? BigDecimal.ZERO : dto.getShippingFee();
         }
 
@@ -231,6 +240,7 @@ public class OrderService {
 
         return saved;
     }
+
     @Transactional
     public Order createOrderAsPaid(OrderDto dto, List<OrderItemDto> items) {
         // Reuse your existing createOrder(OrderDto) logic but do not send confirmation yet.

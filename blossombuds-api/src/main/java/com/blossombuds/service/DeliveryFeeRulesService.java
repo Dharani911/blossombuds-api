@@ -2,7 +2,9 @@ package com.blossombuds.service;
 
 import com.blossombuds.domain.DeliveryFeeRules;
 import com.blossombuds.domain.DeliveryFeeRules.RuleScope;
+import com.blossombuds.domain.DeliveryPartner;
 import com.blossombuds.repository.DeliveryFeeRulesRepository;
+import com.blossombuds.repository.DeliveryPartnerRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
@@ -26,7 +28,7 @@ public class DeliveryFeeRulesService {
 
     private final DeliveryFeeRulesRepository ruleRepo;
     private final SettingsService settingsService;
-
+    private final DeliveryPartnerRepository deliveryPartnerRepository;
     /* ============================ FEE LOOKUP ============================ */
 
     /** Finds the most specific *active* fee (district → state → default), if any. */
@@ -59,6 +61,53 @@ public class DeliveryFeeRulesService {
         }
         log.warn("[FEE][MISSING] No active delivery fee found for stateId={}, districtId={}", stateId, districtId);
         return Optional.empty();
+    }
+
+    public BigDecimal computeFee(
+            BigDecimal itemsSubtotal,
+            Long stateId,
+            Long districtId,
+            Long deliveryPartnerId
+    ) {
+        DeliveryPartner partner = null;
+
+        if (deliveryPartnerId != null) {
+            partner = deliveryPartnerRepository.findById(deliveryPartnerId).orElse(null);
+        }
+
+        // Fixed-fee partner (e.g. Speed Post)
+        if (partner != null && partner.getFixedFeeAmount() != null) {
+            BigDecimal fixed = sanitize(partner.getFixedFeeAmount());
+
+            if (Boolean.TRUE.equals(partner.getOverrideFreeShipping())) {
+                log.info("[FEE][PARTNER_FIXED] partnerId={} fixedFee={} overrideFreeShipping=true",
+                        partner.getId(), fixed);
+                return fixed;
+            }
+
+            boolean thresholdFree = isThresholdFreeShippingEligible(itemsSubtotal);
+            if (thresholdFree) {
+                log.info("[FEE][PARTNER_FIXED] partnerId={} threshold met -> zero", partner.getId());
+                return BigDecimal.ZERO;
+            }
+
+            log.info("[FEE][PARTNER_FIXED] partnerId={} fixedFee={}", partner.getId(), fixed);
+            return fixed;
+        }
+
+        // Normal partner flow
+        if (isThresholdFreeShippingEligible(itemsSubtotal)) {
+            log.info("[FEE][THRESHOLD] threshold met -> free shipping");
+            return BigDecimal.ZERO;
+        }
+
+        return getEffectiveFeeOrZero(stateId, districtId);
+    }
+    public boolean isThresholdFreeShippingEligible(BigDecimal itemsSubtotal) {
+        if (itemsSubtotal == null) return false;
+
+        var threshold = getBigDecimalSetting(KEY_FREE_THRESHOLD).orElse(VERY_LARGE);
+        return itemsSubtotal.compareTo(threshold) >= 0;
     }
 
     /** Returns the effective fee or zero when no *active* rule exists. */

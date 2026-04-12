@@ -20,3 +20,16 @@ export function notifyMeWhenBackInStock(payload: {
     })
     .then((r) => r.data);
 }
+
+
+export type StockAlertAdminSummary = {
+  productId: number;
+  productName: string;
+  activeRequestCount: number;
+  waitingSince: string; // ISO datetime
+};
+
+export async function listStockAlertAdminSummary(): Promise<StockAlertAdminSummary[]> {
+  const { data } = await http.get<StockAlertAdminSummary[]>("/api/catalog/stock-alerts/summary");
+  return data || [];
+}

@@ -2,6 +2,8 @@ package com.blossombuds.dto;
 
 import lombok.Data;
 
+import java.math.BigDecimal;
+
 /** DTO for delivery/courier partners. */
 @Data
 public class DeliveryPartnerDto {
@@ -12,6 +14,8 @@ public class DeliveryPartnerDto {
     private String name;
     /** URL template for tracking, e.g. https://track.example.com/{trackingNumber} */
     private String trackingUrlTemplate;
+    private BigDecimal fixedFeeAmount;
+    private Boolean overrideFreeShipping;
     /** Active flag (defaults to true on create). */
     private Boolean active;
     /** Visibility flag — when false, partner is hidden from customers but visible to admin. */

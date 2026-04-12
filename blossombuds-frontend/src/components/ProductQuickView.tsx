@@ -482,6 +482,9 @@ useEffect(() => {
 
             <div className="pqv-info">
               <h1 className="pqv-title">{p.name}</h1>
+              <div className={`pqv-stock ${isOutOfStock ? "bad" : "ok"}`}>
+                {isOutOfStock ? "Out of stock" : "In stock"}
+              </div>
               <div className="pqv-price">
                 {displayPrices.showDiscount ? (
                   <div className="pqv-price-row">

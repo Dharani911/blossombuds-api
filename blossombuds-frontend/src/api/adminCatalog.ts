@@ -20,7 +20,12 @@ function pageSize(p: Page<any>) {
   const c = Array.isArray((p as any).content) ? (p as any).content.length : 0;
   return Number((p as any).size ?? (p as any).pageSize ?? c);
 }
-
+export type CartSuggestionProductDto = {
+  productId: number;
+  productName: string;
+  sortOrder: number;
+  active: boolean;
+};
 export type ProductDto = {
   id?: number;
   slug?: string | null;
@@ -34,7 +39,24 @@ export type ProductDto = {
   featuredRank?: number | null;
   excludeFromGlobalDiscount?: boolean;
 };
+export async function listCartSuggestionsAdmin(): Promise<CartSuggestionProductDto[]> {
+  const { data } = await adminHttp.get(`/api/catalog/admin/cart-suggestions`);
+  return Array.isArray(data) ? data : [];
+}
 
+export async function addCartSuggestion(productId: number): Promise<CartSuggestionProductDto> {
+  const { data } = await adminHttp.post(`/api/catalog/admin/cart-suggestions/${productId}`);
+  return data as CartSuggestionProductDto;
+}
+
+export async function removeCartSuggestion(productId: number): Promise<void> {
+  await adminHttp.delete(`/api/catalog/admin/cart-suggestions/${productId}`);
+}
+export async function reorderCartSuggestions(
+  items: Array<{ productId: number; sortOrder: number }>
+): Promise<void> {
+  await adminHttp.put(`/api/catalog/admin/cart-suggestions/reorder`, items);
+}
 
 export type Product = {
   id: number;

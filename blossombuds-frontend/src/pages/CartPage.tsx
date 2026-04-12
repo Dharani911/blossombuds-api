@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../app/AuthProvider";
 import { useCart } from "../app/CartProvider";
-import { listProductImages, getProduct } from "../api/catalog";
+import { listProductImages, getProduct, listCartSuggestions, type Product } from "../api/catalog";
 
 const styles = `
 .cart-wrap{ --ink:rgba(0,0,0,.08); --accent:#F05D8B; --gold:#F6C320; --primary:#4A4F41; --danger:#D7263D;
@@ -362,7 +362,161 @@ const styles = `
     justify-content: center;
   }
 }
+.suggest-wrap{
+  margin-top:16px;
+}
 
+.suggest-card{
+  background:#fff;
+  border:1px solid var(--ink);
+  border-radius:16px;
+  box-shadow:0 12px 36px rgba(0,0,0,.08);
+  overflow:hidden;
+}
+
+.suggest-head{
+  padding:10px 12px;
+  border-bottom:1px solid var(--ink);
+  background:linear-gradient(180deg, rgba(246,195,32,.08), rgba(255,255,255,.95));
+  font-weight:900;
+  font-size:13px;
+}
+
+.suggest-sub{
+  padding:0 12px 10px;
+  font-size:12px;
+  opacity:.72;
+}
+
+.suggest-grid{
+  padding:12px;
+  display:grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap:12px;
+}
+
+@media (max-width: 980px){
+  .suggest-grid{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px){
+  .suggest-grid{
+    grid-template-columns: 1fr;
+  }
+}
+
+.suggest-item{
+  border:1px solid var(--ink);
+  border-radius:14px;
+  overflow:hidden;
+  background:#fff;
+  box-shadow:0 8px 22px rgba(0,0,0,.05);
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+}
+
+.suggest-thumb{
+  aspect-ratio: 1 / 1;
+  background:#f7f7f7;
+  overflow:hidden;
+}
+
+.suggest-thumb img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+
+.suggest-thumb .ph{
+  width:100%;
+  height:100%;
+  display:grid;
+  place-items:center;
+  font-size:12px;
+  opacity:.6;
+}
+
+.suggest-body{
+  padding:10px;
+  display:grid;
+  gap:6px;
+  min-width:0;
+}
+
+.suggest-name{
+  font-size:14px;
+  font-weight:800;
+  color:var(--primary);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.suggest-price{
+  font-size:14px;
+  font-weight:900;
+  color:var(--accent);
+}
+
+.suggest-price-old{
+  font-size:12px;
+  opacity:.6;
+  text-decoration:line-through;
+  margin-right:6px;
+  color:#222;
+}
+
+.suggest-actions{
+  display:grid;
+  gap:8px;
+  margin-top:2px;
+}
+
+.suggest-btn{
+  height:38px;
+  border:none;
+  border-radius:10px;
+  background:var(--accent);
+  color:#fff;
+  font-weight:900;
+  cursor:pointer;
+  box-shadow:0 10px 20px rgba(240,93,139,.22);
+}
+
+.suggest-btn:hover{
+  transform:translateY(-1px);
+}
+
+.suggest-link{
+  height:36px;
+  border:1px solid var(--ink);
+  border-radius:10px;
+  background:#fff;
+  color:var(--primary);
+  font-weight:800;
+  text-decoration:none;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.suggest-badge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:fit-content;
+  height:22px;
+  padding:0 10px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:900;
+  background:rgba(240,93,139,.12);
+  color:var(--accent);
+}
 `;
 
 function isAwsSignedUrl(url: string) {
@@ -435,7 +589,57 @@ function Thumb({ productId, src, alt }: { productId?: number; src?: string; alt:
     </div>
   );
 }
+function SuggestThumb({ productId, src, alt }: { productId?: number; src?: string | null; alt: string }) {
+  const [imgSrc, setImgSrc] = useState<string | null>(src ? cacheBust(src) : null);
 
+  useEffect(() => {
+    let alive = true;
+
+    async function resolveFresh() {
+      if (!productId) {
+        setImgSrc(src ? cacheBust(src) : null);
+        return;
+      }
+
+      try {
+        const imgs = await listProductImages(productId);
+        if (!alive) return;
+        const first = (imgs || [])
+          .filter((im) => !!im?.url)
+          .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))[0];
+
+        if (first?.url) {
+          setImgSrc(cacheBust(first.url));
+          return;
+        }
+      } catch {}
+
+      try {
+        const p = await getProduct(productId);
+        if (!alive) return;
+        if ((p as any)?.primaryImageUrl) {
+          setImgSrc(cacheBust((p as any).primaryImageUrl));
+          return;
+        }
+      } catch {}
+
+      if (alive) setImgSrc(src ? cacheBust(src) : null);
+    }
+
+    resolveFresh();
+    return () => { alive = false; };
+  }, [productId, src]);
+
+  return (
+    <div className="suggest-thumb" aria-label={alt}>
+      {imgSrc ? (
+        <img src={imgSrc} alt={alt} loading="lazy" />
+      ) : (
+        <div className="ph">No image</div>
+      )}
+    </div>
+  );
+}
 function inr(n: number) {
   try {
     return new Intl.NumberFormat("en-IN", {
@@ -453,14 +657,42 @@ export default function CartPage() {
   const nav = useNavigate();
   const location = useLocation();
 
-  const { items, total, remove, setQty, clear, refresh } = useCart();
+const { items, total, remove, setQty, clear, refresh, add } = useCart();
   const [checking, setChecking] = useState(false);
-
+const [suggestions, setSuggestions] = useState<Product[]>([]);
+const [suggestLoading, setSuggestLoading] = useState(false);
   const hasUnavailable = useMemo(
     () => items.some((it: any) => it.unavailable === true),
     [items]
   );
+useEffect(() => {
+  let alive = true;
 
+  (async () => {
+    try {
+      setSuggestLoading(true);
+      const rows = await listCartSuggestions();
+      if (!alive) return;
+
+      const cartProductIds = new Set(
+        items.map((it: any) => Number(it.productId)).filter(Boolean)
+      );
+
+      const filtered = (rows || [])
+        .filter((p) => !cartProductIds.has(Number(p.id)))
+        .slice(0, 10);
+
+      setSuggestions(filtered);
+    } catch {
+      if (!alive) return;
+      setSuggestions([]);
+    } finally {
+      if (alive) setSuggestLoading(false);
+    }
+  })();
+
+  return () => { alive = false; };
+}, [items]);
   // Refresh when Cart page opens (force)
   useEffect(() => {
     let live = true;
@@ -495,7 +727,26 @@ export default function CartPage() {
 
     nav("/checkout");
   }
-
+function addSuggestedProduct(p: Product) {
+  add({
+    id: `${p.id}:base`,
+    productId: p.id,
+    name: p.name,
+    price: Number(p.finalPrice ?? p.price ?? 0),
+    originalPrice:
+      p.originalPrice != null ? Number(p.originalPrice) : Number(p.price ?? 0),
+    qty: 1,
+    image: (p as any).primaryImageUrl || "",
+    variant: "",
+    selectedValueIds: [],
+    inStock: p.inStock !== false,
+    unavailable:
+      p.inStock === false ||
+      p.active === false ||
+      p.visible === false,
+    lastCheckedAt: Date.now(),
+  });
+}
   // ✅ helper: treat "unavailable" as the only time we show the pill & hide qty
   const isUnavailable = (it: any) => it?.unavailable === true;
 
@@ -520,133 +771,222 @@ export default function CartPage() {
           </Link>
         </div>
       ) : (
-        <div className="grid">
-          <section className="card items">
-            <div className="items-head">Items</div>
+                <>
+                  <div className="grid">
+                    <section className="card items">
+                      <div className="items-head">Items</div>
 
-            <div className="items-list">
-              {items.map((it: any) => (
-                <div className="row" key={it.id}>
-                  <Thumb productId={it.productId} src={it.image} alt={it.name} />
+                      <div className="items-list">
+                        {items.map((it: any) => (
+                          <div className="row" key={it.id}>
+                            <Thumb productId={it.productId} src={it.image} alt={it.name} />
 
-                  <div className="meta">
-                    <div className="name">{it.name}</div>
-                    {it.variant && (
-                      <div className="variant" title={it.variant}>
-                        {it.variant}
+                            <div className="meta">
+                              <div className="name">{it.name}</div>
+                              {it.variant && (
+                                <div className="variant" title={it.variant}>
+                                  {it.variant}
+                                </div>
+                              )}
+
+                              <span className="small">
+                                {it.originalPrice != null && Number(it.originalPrice) > Number(it.price) ? (
+                                  <>
+                                    <span style={{ textDecoration: "line-through", opacity: 0.65, marginRight: 6 }}>
+                                      {inr(it.originalPrice)}
+                                    </span>
+                                    <span style={{ fontWeight: 900 }}>{inr(it.price)}</span> each
+                                  </>
+                                ) : (
+                                  <>
+                                    {inr(it.price)} each
+                                  </>
+                                )}
+                              </span>
+                            </div>
+
+                            {isUnavailable(it) ? (
+                              <div className="stock-slot">
+                                <span className="stock bad">Unavailable</span>
+                              </div>
+                            ) : (
+                              <div className="qty-mini">
+                                <button onClick={() => setQty(it.id, Math.max(1, it.qty - 1))}>
+                                  −
+                                </button>
+                                <span>{it.qty}</span>
+                                <button onClick={() => setQty(it.id, it.qty + 1)}>+</button>
+                              </div>
+                            )}
+
+                            <div className="price-remove-wrap">
+                              <div className="line">{inr(it.price * it.qty)}</div>
+                              <button className="rm" onClick={() => remove(it.id)}>
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    )}
+                    </section>
 
-                    {/* ✅ no "in stock" pill at all */}
-                   <span className="small">
-                     {it.originalPrice != null && Number(it.originalPrice) > Number(it.price) ? (
-                       <>
-                         <span style={{ textDecoration: "line-through", opacity: 0.65, marginRight: 6 }}>
-                           {inr(it.originalPrice)}
-                         </span>
-                         <span style={{ fontWeight: 900 }}>{inr(it.price)}</span> each
-                       </>
-                     ) : (
-                       <>
-                         {inr(it.price)} each
-                       </>
-                     )}
-                   </span>
+                    <aside className="card sum">
+                      <div className="sum-head">Order Summary</div>
+                      <div className="sum-inner">
+                        {hasUnavailable && (
+                          <div className="notice">
+                            Some items in your cart are unavailable (hidden/out of stock). Remove them to continue.
+                          </div>
+                        )}
 
+                        <div className="row-sum">
+                          <span className="lbl">Subtotal</span>
+                          <span className="val">{inr(total)}</span>
+                        </div>
+                        <div className="hr" />
+                        <div className="row-sum total">
+                          <span>Total</span>
+                          <span>{inr(total)}</span>
+                        </div>
+
+                        <div className="actions">
+                          <button
+                            className="primary"
+                            onClick={handleProceed}
+                            disabled={checking || hasUnavailable}
+                            title={
+                              hasUnavailable
+                                ? "Remove unavailable items to proceed"
+                                : checking
+                                ? "Checking availability…"
+                                : undefined
+                            }
+                          >
+                            {checking ? "Checking…" : "Proceed to Checkout"}
+                          </button>
+
+                          <button className="secondary" onClick={() => nav("/categories")}>
+                            Continue Shopping
+                          </button>
+
+                          <button
+                            className="danger"
+                            onClick={() => {
+                              const ok = confirm("Clear all items from your cart?");
+                              if (ok) clear();
+                            }}
+                          >
+                            Clear Cart
+                          </button>
+
+                          <button
+                            className="danger"
+                            onClick={async () => {
+                              try {
+                                setChecking(true);
+                                await refresh(true);
+                              } finally {
+                                setChecking(false);
+                              }
+                            }}
+                          >
+                            Refresh Availability
+                          </button>
+                        </div>
+                      </div>
+                    </aside>
                   </div>
 
-                  {/* ✅ If unavailable => pill replaces qty completely */}
-                  {isUnavailable(it) ? (
-                    <div className="stock-slot">
-                      <span className="stock bad">Unavailable</span>
-                    </div>
-                  ) : (
-                    <div className="qty-mini">
-                      <button onClick={() => setQty(it.id, Math.max(1, it.qty - 1))}>
-                        −
-                      </button>
-                      <span>{it.qty}</span>
-                      <button onClick={() => setQty(it.id, it.qty + 1)}>+</button>
-                    </div>
+                  {(suggestLoading || suggestions.length > 0) && (
+                    <section className="suggest-wrap">
+                      <div className="suggest-card">
+                        <div className="suggest-head">You may also like</div>
+                        <div className="suggest-sub">
+                          Handpicked products chosen from admin suggestions.
+                        </div>
+
+                        {suggestLoading ? (
+                          <div className="suggest-grid">
+                            {Array.from({ length: 4 }).map((_, i) => (
+                              <div key={i} className="suggest-item">
+                                <div className="suggest-thumb">
+                                  <div className="ph">Loading…</div>
+                                </div>
+                                <div className="suggest-body">
+                                  <div className="small">Loading product…</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="suggest-grid">
+                            {suggestions.map((p) => {
+                              const discounted =
+                                p.originalPrice != null &&
+                                p.finalPrice != null &&
+                                Number(p.finalPrice) < Number(p.originalPrice);
+
+                              const finalUnit = Number(p.finalPrice ?? p.price ?? 0);
+
+                              return (
+                                <div key={p.id} className="suggest-item">
+                                  <SuggestThumb
+                                    productId={p.id}
+                                    src={(p as any).primaryImageUrl || null}
+                                    alt={p.name}
+                                  />
+
+                                  <div className="suggest-body">
+                                    <div className="suggest-name" title={p.name}>
+                                      {p.name}
+                                    </div>
+
+                                    {discounted && (
+                                      <span className="suggest-badge">
+                                        {Math.round(Number(p.discountPercentOff || 0))}% OFF
+                                      </span>
+                                    )}
+
+                                    <div className="suggest-price">
+                                      {discounted ? (
+                                        <>
+                                          <span className="suggest-price-old">
+                                            {inr(Number(p.originalPrice))}
+                                          </span>
+                                          {inr(finalUnit)}
+                                        </>
+                                      ) : (
+                                        inr(finalUnit)
+                                      )}
+                                    </div>
+
+                                    <div className="suggest-actions">
+                                      <button
+                                        className="suggest-btn"
+                                        onClick={() => addSuggestedProduct(p)}
+                                        disabled={
+                                          p.inStock === false ||
+                                          p.active === false ||
+                                          p.visible === false
+                                        }
+                                      >
+                                        {p.inStock === false ? "Out of stock" : "Add to cart"}
+                                      </button>
+
+                                      <Link className="suggest-link" to={`/products/${p.id}`}>
+                                        View product
+                                      </Link>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </section>
                   )}
-
-                  <div className="price-remove-wrap">
-                    <div className="line">{inr(it.price * it.qty)}</div>
-                    <button className="rm" onClick={() => remove(it.id)}>
-                      ✕
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <aside className="card sum">
-            <div className="sum-head">Order Summary</div>
-            <div className="sum-inner">
-              {hasUnavailable && (
-                <div className="notice">
-                  Some items in your cart are unavailable (hidden/out of stock). Remove them to continue.
-                </div>
-              )}
-
-              <div className="row-sum">
-                <span className="lbl">Subtotal</span>
-                <span className="val">{inr(total)}</span>
-              </div>
-              <div className="hr" />
-              <div className="row-sum total">
-                <span>Total</span>
-                <span>{inr(total)}</span>
-              </div>
-
-              <div className="actions">
-                <button
-                  className="primary"
-                  onClick={handleProceed}
-                  disabled={checking || hasUnavailable}
-                  title={
-                    hasUnavailable
-                      ? "Remove unavailable items to proceed"
-                      : checking
-                      ? "Checking availability…"
-                      : undefined
-                  }
-                >
-                  {checking ? "Checking…" : "Proceed to Checkout"}
-                </button>
-
-                <button className="secondary" onClick={() => nav("/categories")}>
-                  Continue Shopping
-                </button>
-
-                <button
-                  className="danger"
-                  onClick={() => {
-                    const ok = confirm("Clear all items from your cart?");
-                    if (ok) clear();
-                  }}
-                >
-                  Clear Cart
-                </button>
-
-                <button
-                  className="danger"
-                  onClick={async () => {
-                    try {
-                      setChecking(true);
-                      await refresh(true);
-                    } finally {
-                      setChecking(false);
-                    }
-                  }}
-                >
-                  Refresh Availability
-                </button>
-              </div>
-            </div>
-          </aside>
-        </div>
+                </>
       )}
     </div>
   );

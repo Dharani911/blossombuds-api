@@ -33,6 +33,10 @@ public class DeliveryPartnerService {
         p.setCode(safeTrim(dto.getCode()));                    // <— code (not slug)
         p.setName(safeTrim(dto.getName()));
         p.setTrackingUrlTemplate(safeTrim(dto.getTrackingUrlTemplate()));
+        p.setFixedFeeAmount(dto.getFixedFeeAmount());
+        p.setOverrideFreeShipping(
+                dto.getOverrideFreeShipping() != null ? dto.getOverrideFreeShipping() : Boolean.FALSE
+        );
         p.setActive(dto.getActive() != null ? dto.getActive() : Boolean.TRUE);
         p.setVisible(dto.getVisible() != null ? dto.getVisible() : Boolean.TRUE);
         //p.setCreatedBy(actor);
@@ -54,6 +58,8 @@ public class DeliveryPartnerService {
         if (dto.getCode() != null)               p.setCode(safeTrim(dto.getCode()));
         if (dto.getName() != null)               p.setName(safeTrim(dto.getName()));
         if (dto.getTrackingUrlTemplate() != null)p.setTrackingUrlTemplate(safeTrim(dto.getTrackingUrlTemplate()));
+        if (dto.getFixedFeeAmount() != null)        p.setFixedFeeAmount(dto.getFixedFeeAmount());
+        if (dto.getOverrideFreeShipping() != null)  p.setOverrideFreeShipping(dto.getOverrideFreeShipping());
         if (dto.getActive() != null)             p.setActive(dto.getActive());
         if (dto.getVisible() != null)            p.setVisible(dto.getVisible());
 

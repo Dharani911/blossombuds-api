@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+          http://www.liquibase.org/xml/ns/dbchangelog
+          http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.17.xsd">
+
+    <changeSet id="0027-01-cart-suggestion-products-table" author="dharani">
+        <createTable tableName="cart_suggestion_products">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+
+            <column name="product_id" type="BIGINT">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uk_cart_suggestion_product"/>
+            </column>
+
+            <column name="sort_order" type="INT" defaultValueNumeric="0"/>
+
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="created_by" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMP"/>
+            <column name="modified_by" type="VARCHAR(120)"/>
+            <column name="modified_at" type="TIMESTAMP"/>
+        </createTable>
+
+        <createIndex tableName="cart_suggestion_products" indexName="idx_csp_active">
+            <column name="active"/>
+        </createIndex>
+
+        <createIndex tableName="cart_suggestion_products" indexName="idx_csp_sort_order">
+            <column name="sort_order"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

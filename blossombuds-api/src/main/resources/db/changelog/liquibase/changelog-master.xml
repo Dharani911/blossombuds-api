@@ -36,4 +36,5 @@
     <include file="db/changelog/liquibase/changes/0024-add-global-sale-config.xml"/>
     <include file="db/changelog/liquibase/changes/0025-add-category-table-image.xml"/>
     <include file="db/changelog/liquibase/changes/0026-create-back-in-stock-request.xml"/>
+    <include file="db/changelog/liquibase/changes/0027-add-fixed-fee-to-delivery-partners.xml"/>
 </databaseChangeLog>

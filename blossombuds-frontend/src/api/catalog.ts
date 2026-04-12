@@ -82,7 +82,11 @@ export type ProductOptionWithValues = {
 
   values: ProductOptionValue[];
 };
-
+export type CartSuggestionProduct = {
+  productId: number;
+  sortOrder?: number | null;
+  active?: boolean | null;
+};
 
 /** Generic Page shape (Spring-style). */
 export type PageResp<T> = {
@@ -98,11 +102,15 @@ export type BackInStockResponse = {
 };
 
 export async function notifyMeWhenBackInStock(productId: number, email?: string) {
-  const res = await api.post<BackInStockResponse>(
-    `/catalog/products/${productId}/notify-me`,
+  const res = await http.post<BackInStockResponse>(
+    `/api/catalog/products/${productId}/notify-me`,
     email ? { productId, email } : { productId }
   );
   return res.data;
+}
+export async function listCartSuggestions(): Promise<Product[]> {
+  const { data } = await http.get(`/api/catalog/cart-suggestions`);
+  return (Array.isArray(data) ? data : []).map(normalizeProduct);
 }
 /* =========================
  * Normalizers
@@ -330,6 +338,7 @@ export async function getProductOptionsWithValues(productId: number): Promise<Pr
   return Array.isArray(data) ? (data as ProductOptionWithValues[]) : [];
 }
 
+
 export async function getProductFresh(productId: number) {
   return http
     .get(`api/catalog/products/${productId}`, {
@@ -378,4 +387,5 @@ export default {
   listOptionValues,
   getProductOptionsWithValues,
   listCategoriesForProduct,
+  listCartSuggestions,
 };

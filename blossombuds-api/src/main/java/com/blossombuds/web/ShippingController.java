@@ -34,9 +34,10 @@ public class ShippingController {
     public Map<String, Object> quote(
             @RequestParam(required = false) @PositiveOrZero BigDecimal itemsSubtotal,
             @RequestParam(required = false) @Min(1) Long stateId,
-            @RequestParam(required = false) @Min(1) Long districtId
+            @RequestParam(required = false) @Min(1) Long districtId,
+            @RequestParam(required = false) @Min(1) Long deliveryPartnerId
     ) {
-        BigDecimal fee = deliveryFeeService.computeFeeWithThreshold(itemsSubtotal, stateId, districtId);
+        BigDecimal fee = deliveryFeeService.computeFee(itemsSubtotal, stateId, districtId, deliveryPartnerId);
         return Map.of(
                 "itemsSubtotal", itemsSubtotal == null ? BigDecimal.ZERO : itemsSubtotal,
                 "stateId", stateId,
@@ -50,7 +51,7 @@ public class ShippingController {
         Long stateId = req.getStateId();
         Long districtId = req.getDistrictId();
 
-        BigDecimal fee = deliveryFeeService.computeFeeWithThreshold(subtotal, stateId, districtId);
+        BigDecimal fee = deliveryFeeService.computeFee(subtotal, stateId, districtId, req.getDeliveryPartnerId());
         boolean free = fee == null || fee.signum() == 0;
 
         ShippingPreviewResponse res = new ShippingPreviewResponse();
@@ -63,6 +64,7 @@ public class ShippingController {
         private BigDecimal itemsSubtotal;
         private Long stateId;
         private Long districtId;
+        private Long deliveryPartnerId;
     }
     @Data public static class ShippingPreviewResponse {
         private BigDecimal fee;

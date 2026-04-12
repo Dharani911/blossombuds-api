@@ -2,7 +2,9 @@ package com.blossombuds.web;
 
 import com.blossombuds.domain.*;
 import com.blossombuds.dto.*;
+import com.blossombuds.repository.ProductRepository;
 import com.blossombuds.service.BackInStockService;
+import com.blossombuds.service.CartSuggestionService;
 import com.blossombuds.service.CatalogService;
 import com.blossombuds.service.GlobalSaleConfigService;
 import jakarta.validation.Valid;
@@ -43,6 +45,8 @@ public class CatalogController {
     private final CatalogService catalog;
     private final GlobalSaleConfigService globalSale;
     private final BackInStockService backInStockService;
+    private final CartSuggestionService cartSuggestionService;
+private final ProductRepository productRepository;
 
     // ────────────────────────────── Categories (admin ops) ───────────────────
 
@@ -560,7 +564,45 @@ public class CatalogController {
 
         return backInStockService.subscribe(productId, dtoEmail, customerId);
     }
+    @GetMapping("/stock-alerts/summary")
+    @PreAuthorize("hasRole('ADMIN')")
+    public List<BackInStockAdminSummaryDto> listStockAlertSummary() {
+        return backInStockService.listAdminSummary();
+    }
 
+    @GetMapping("/cart-suggestions")
+    public List<ProductDto> listCartSuggestions() {
+        return cartSuggestionService.listCustomerSuggestions()
+                .stream()
+                .map(catalog::toProductDto)
+                .toList();
+    }
+
+    @GetMapping("/admin/cart-suggestions")
+    @PreAuthorize("hasRole('ADMIN')")
+    public List<CartSuggestionProductDto> listAdminSuggestions() {
+        return cartSuggestionService.listAdminSuggestions();
+    }
+
+    @PostMapping("/admin/cart-suggestions/{productId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @ResponseStatus(HttpStatus.CREATED)
+    public CartSuggestionProductDto addCartSuggestion(@PathVariable Long productId) {
+        return cartSuggestionService.addSuggestionAndReturnDto(productId);
+    }
+
+    @DeleteMapping("/admin/cart-suggestions/{productId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void removeCartSuggestion(@PathVariable Long productId) {
+        cartSuggestionService.removeProduct(productId);
+    }
+    @PutMapping("/admin/cart-suggestions/reorder")
+    @PreAuthorize("hasRole('ADMIN')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void reorderCartSuggestions(@RequestBody List<CartSuggestionReorderDto> items) {
+        cartSuggestionService.reorder(items);
+    }
     private Long extractCustomerId(Authentication authentication) {
         if (authentication == null || authentication.getPrincipal() == null) {
             return null;

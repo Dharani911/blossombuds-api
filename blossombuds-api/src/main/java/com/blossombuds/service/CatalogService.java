@@ -971,7 +971,10 @@ public class CatalogService {
         log.info("[IMAGE][LIST_RESP][OK] productId={} count={}", productId, out.size());
         return out;
     }
-
+    /** Public mapper for product entity to DTO. */
+    public ProductDto toProductDto(Product product) {
+        return toDto(product);
+    }
     public ProductImageDto toResponse(ProductImage img) {
         String key = img.getPublicId();
         String signed = (key != null) ? signGetUrl(key, java.time.Duration.ofMinutes(30)) : null;

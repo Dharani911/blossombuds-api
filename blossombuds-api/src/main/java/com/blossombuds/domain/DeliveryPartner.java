@@ -45,6 +45,14 @@ public class DeliveryPartner {
     @Column(name = "tracking_url_template", columnDefinition = "text")
     private String trackingUrlTemplate;
 
+    /** Optional fixed shipping fee for this partner (e.g. Speed Post). */
+    @Column(name = "fixed_fee_amount", precision = 10, scale = 2)
+    private java.math.BigDecimal fixedFeeAmount;
+
+    /** If true, fixed fee is charged even when normal shipping would be free. */
+    @Column(name = "override_free_shipping", nullable = false)
+    private Boolean overrideFreeShipping = Boolean.FALSE;
+
     /** Soft-delete flag (when false, record is considered deleted). */
     @Column(name = "active", nullable = false)
     private Boolean active = Boolean.TRUE;
