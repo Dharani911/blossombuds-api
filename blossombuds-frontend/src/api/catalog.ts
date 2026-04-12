@@ -101,13 +101,7 @@ export type BackInStockResponse = {
   message: string;
 };
 
-export async function notifyMeWhenBackInStock(productId: number, email?: string) {
-  const res = await http.post<BackInStockResponse>(
-    `/api/catalog/products/${productId}/notify-me`,
-    email ? { productId, email } : { productId }
-  );
-  return res.data;
-}
+
 export async function listCartSuggestions(): Promise<Product[]> {
   const { data } = await http.get(`/api/catalog/cart-suggestions`);
   return (Array.isArray(data) ? data : []).map(normalizeProduct);

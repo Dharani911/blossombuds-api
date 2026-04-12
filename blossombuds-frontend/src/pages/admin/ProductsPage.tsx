@@ -33,8 +33,10 @@ import {
     searchProductsLite,
     type CartSuggestionProductDto,
     type ProductLite,
+    type StockAlertAdminSummary,
+    listStockAlertAdminSummary
 } from "../../api/adminCatalog";
-import { listStockAlertAdminSummary, type StockAlertAdminSummary } from "../../api/stockAlerts";
+
 /* ---------- Theme ---------- */
 const PRIMARY = "#2F2F2F";
 const ACCENT = "#F05D8B";
@@ -350,12 +352,13 @@ async function onToggleDiscount(p: Product, nextExclude: boolean) {
             </svg>
           </div>
 
-          <button className="ghost sm" onClick={() => setAlertsOpen(true)}>
+          <button className="top-action-btn" onClick={() => setAlertsOpen(true)}>
             Stock alerts
           </button>
-<button className="ghost sm" onClick={() => setSuggestionsOpen(true)}>
-  Cart suggestions
-</button>
+
+          <button className="top-action-btn" onClick={() => setSuggestionsOpen(true)}>
+            Cart suggestions
+          </button>
           <button className="btn" onClick={() => setModal({ mode: "add" })}>
             + Add product
           </button>
@@ -3140,5 +3143,26 @@ const css = `
      justify-content:flex-end;
      margin-top:4px;
    }
+ }
+ .top-action-btn{
+   height: 40px;
+   padding: 0 16px;
+   border-radius: 12px;
+   border: 1px solid rgba(0,0,0,.10);
+   background: #fff;
+   color: #2F2F2F;
+   font-weight: 800;
+   font-size: 13px;
+   cursor: pointer;
+   box-shadow: 0 8px 20px rgba(0,0,0,.05);
+   transition: all .18s ease;
+   white-space: nowrap;
+ }
+
+ .top-action-btn:hover{
+   transform: translateY(-1px);
+   border-color: rgba(240,93,139,.30);
+   background: rgba(240,93,139,.04);
+   box-shadow: 0 12px 28px rgba(0,0,0,.08);
  }
 `;

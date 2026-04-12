@@ -57,6 +57,17 @@ export async function reorderCartSuggestions(
 ): Promise<void> {
   await adminHttp.put(`/api/catalog/admin/cart-suggestions/reorder`, items);
 }
+export type StockAlertAdminSummary = {
+  productId: number;
+  productName: string;
+  activeRequestCount: number;
+  waitingSince: string;
+};
+
+export async function listStockAlertAdminSummary(): Promise<StockAlertAdminSummary[]> {
+  const { data } = await adminHttp.get<StockAlertAdminSummary[]>("/api/catalog/stock-alerts/summary");
+  return data || [];
+}
 
 export type Product = {
   id: number;
