@@ -19,4 +19,5 @@ public interface DeliveryPartnerRepository extends JpaRepository<DeliveryPartner
 
     /** Lists all visible partners (for customer-facing features). */
     List<DeliveryPartner> findByVisibleTrue();
+    List<DeliveryPartner> findByActiveTrueAndVisibleTrue();
 }

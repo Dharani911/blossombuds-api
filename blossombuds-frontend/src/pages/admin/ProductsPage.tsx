@@ -910,7 +910,7 @@ function CartSuggestionsModal({
     const t = window.setTimeout(async () => {
       try {
         setSearching(true);
-        const found = await searchProductsLite(q, 20);
+        const found = await searchProductsLite(q, 700);
         if (!alive) return;
 
         const existingIds = new Set(items.map(x => x.productId));

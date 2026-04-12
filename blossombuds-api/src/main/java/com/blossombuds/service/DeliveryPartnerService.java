@@ -28,7 +28,7 @@ public class DeliveryPartnerService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public DeliveryPartner create(DeliveryPartnerDto dto, String actor) {
-        if (dto == null) throw new IllegalArgumentException("DeliveryPartnerDto is required");
+        validatePartnerDto(dto);
         DeliveryPartner p = new DeliveryPartner();
         p.setCode(safeTrim(dto.getCode()));                    // <— code (not slug)
         p.setName(safeTrim(dto.getName()));
@@ -41,16 +41,70 @@ public class DeliveryPartnerService {
         p.setVisible(dto.getVisible() != null ? dto.getVisible() : Boolean.TRUE);
         //p.setCreatedBy(actor);
         //p.setCreatedAt(OffsetDateTime.now());
+        validateResolvedPartner(p);
         log.info("[DELIVERY_PARTNER][CREATE] Partner created: code={}, name={}, actor={}", p.getCode(), p.getName(), actor);
         return partnerRepo.save(p);
     }
+    private void validatePartnerDto(DeliveryPartnerDto dto) {
+        if (dto == null) {
+            throw new IllegalArgumentException("DeliveryPartnerDto is required");
+        }
 
+        String code = safeTrim(dto.getCode());
+        String name = safeTrim(dto.getName());
+
+        if (code == null || code.isBlank()) {
+            throw new IllegalArgumentException("Partner code is required");
+        }
+
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("Partner name is required");
+        }
+
+        if (dto.getFixedFeeAmount() != null && dto.getFixedFeeAmount().signum() < 0) {
+            throw new IllegalArgumentException("Fixed fee amount cannot be negative");
+        }
+
+        if (Boolean.TRUE.equals(dto.getOverrideFreeShipping()) && dto.getFixedFeeAmount() == null) {
+            throw new IllegalArgumentException("Override free shipping requires a fixed fee amount");
+        }
+    }
+    private void validatePartnerDtoForUpdate(DeliveryPartnerDto dto) {
+        if (dto == null) {
+            throw new IllegalArgumentException("DeliveryPartnerDto is required");
+        }
+
+        if (dto.getFixedFeeAmount() != null && dto.getFixedFeeAmount().signum() < 0) {
+            throw new IllegalArgumentException("Fixed fee amount cannot be negative");
+        }
+
+        if (Boolean.TRUE.equals(dto.getOverrideFreeShipping()) && dto.getFixedFeeAmount() == null) {
+            throw new IllegalArgumentException("Override free shipping requires a fixed fee amount");
+        }
+    }
+    private void validateResolvedPartner(DeliveryPartner p) {
+        if (safeTrim(p.getCode()) == null || safeTrim(p.getCode()).isBlank()) {
+            throw new IllegalArgumentException("Partner code is required");
+        }
+
+        if (safeTrim(p.getName()) == null || safeTrim(p.getName()).isBlank()) {
+            throw new IllegalArgumentException("Partner name is required");
+        }
+
+        if (p.getFixedFeeAmount() != null && p.getFixedFeeAmount().signum() < 0) {
+            throw new IllegalArgumentException("Fixed fee amount cannot be negative");
+        }
+
+        if (Boolean.TRUE.equals(p.getOverrideFreeShipping()) && p.getFixedFeeAmount() == null) {
+            throw new IllegalArgumentException("Override free shipping requires a fixed fee amount");
+        }
+    }
     /** Updates mutable partner fields by id. */
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public DeliveryPartner update(Long id, DeliveryPartnerDto dto, String actor) {
         if (id == null) throw new IllegalArgumentException("id is required");
-        if (dto == null) throw new IllegalArgumentException("DeliveryPartnerDto is required");
+        validatePartnerDtoForUpdate(dto);
 
         DeliveryPartner p = partnerRepo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("DeliveryPartner not found: " + id));
@@ -62,9 +116,9 @@ public class DeliveryPartnerService {
         if (dto.getOverrideFreeShipping() != null)  p.setOverrideFreeShipping(dto.getOverrideFreeShipping());
         if (dto.getActive() != null)             p.setActive(dto.getActive());
         if (dto.getVisible() != null)            p.setVisible(dto.getVisible());
-
+        validateResolvedPartner(p);
         log.info("[DELIVERY_PARTNER][UPDATE] Partner updated: id={}, actor={}", id, actor);
-        return p;
+        return partnerRepo.save(p);
     }
 
     /** Returns a partner by id or throws if missing. */
@@ -93,7 +147,7 @@ public class DeliveryPartnerService {
 
     /** Lists only visible partners (for customer-facing features). */
     public List<DeliveryPartner> listVisible() {
-        return partnerRepo.findByVisibleTrue();
+        return partnerRepo.findByActiveTrueAndVisibleTrue();
     }
 
     /** Soft-disables or enables a partner (soft-delete). */
@@ -104,7 +158,7 @@ public class DeliveryPartnerService {
         DeliveryPartner p = get(id);
         p.setActive(active);
         log.info("[DELIVERY_PARTNER][ACTIVE] Set active={} for id={}, actor={}", active, id, actor);
-        return p;
+        return partnerRepo.save(p);
     }
 
     /** Toggles visibility (hide/show from customers). */
@@ -115,7 +169,7 @@ public class DeliveryPartnerService {
         DeliveryPartner p = get(id);
         p.setVisible(visible);
         log.info("[DELIVERY_PARTNER][VISIBLE] Set visible={} for id={}, actor={}", visible, id, actor);
-        return p;
+        return partnerRepo.save(p);
     }
 
     /** Permanently deletes a partner (prefer setActive(false) to retain history). */

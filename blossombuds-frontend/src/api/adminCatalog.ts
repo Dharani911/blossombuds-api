@@ -582,7 +582,7 @@ export function resolveBasePrice(p: { price: any }): number {
 // Replace the whole function with this robust version
 export type ProductLite = { id: number; name: string; price: number };
 
-export async function searchProductsLite(q: string, size = 20): Promise<ProductLite[]> {
+export async function searchProductsLite(q: string, size = 700): Promise<ProductLite[]> {
   const term = (q || "").trim();
   // Try several common keys the API might accept; backend will ignore unknown ones
   const params: any = {

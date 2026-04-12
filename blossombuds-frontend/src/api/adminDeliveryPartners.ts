@@ -5,8 +5,10 @@ export type DeliveryPartner = {
   name: string;
   code: string;
   trackingUrlTemplate?: string | null;
+  fixedFeeAmount?: number | null;
+  overrideFreeShipping?: boolean;
   active?: boolean;
-  visible?: boolean;  // visibility flag (hide from customers)
+  visible?: boolean;
 };
 
 export async function listPartners(): Promise<DeliveryPartner[]> {

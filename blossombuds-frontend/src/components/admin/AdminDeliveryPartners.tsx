@@ -66,16 +66,18 @@ export default function AdminDeliveryPartners() {
     );
   }, [rows, q]);
 
-  function openNew() {
-    setMode("new");
-    setDraft({
-      name: "",
-      code: "",
-      trackingUrlTemplate: "",
-      active: true,
-      visible: true,
-    } as DeliveryPartner);
-  }
+ function openNew() {
+   setMode("new");
+   setDraft({
+     name: "",
+     code: "",
+     trackingUrlTemplate: "",
+     fixedFeeAmount: null,
+     overrideFreeShipping: false,
+     active: true,
+     visible: true,
+   });
+ }
 
   function openEdit(p: DeliveryPartner) {
     setMode("edit");
@@ -90,10 +92,23 @@ export default function AdminDeliveryPartners() {
 
   async function save() {
     if (!draft) return;
+
     const name = (draft.name || "").trim();
     const code = sanitizeCode(draft.code);
+
     if (!name || !code) {
       setToast({ kind: "bad", msg: "Name and a valid Code are required." });
+      return;
+    }
+
+    const rawFee = draft.fixedFeeAmount;
+    const normalizedFee =
+      rawFee === null || rawFee === undefined || rawFee === ("" as any)
+        ? null
+        : Number(rawFee);
+
+    if (normalizedFee != null && (!Number.isFinite(normalizedFee) || normalizedFee < 0)) {
+      setToast({ kind: "bad", msg: "Fixed fee must be a valid non-negative number." });
       return;
     }
 
@@ -103,7 +118,9 @@ export default function AdminDeliveryPartners() {
         ...draft,
         name,
         code,
-        trackingUrlTemplate: (draft.trackingUrlTemplate || "").trim() || null as any,
+        trackingUrlTemplate: (draft.trackingUrlTemplate || "").trim() || null,
+        fixedFeeAmount: normalizedFee,
+        overrideFreeShipping: Boolean(draft.overrideFreeShipping),
       };
 
       let saved: DeliveryPartner;
@@ -114,11 +131,14 @@ export default function AdminDeliveryPartners() {
         saved = await updatePartner(Number(draft.id), payload);
         setRows(rs => rs.map(r => (r.id === saved.id ? saved : r)));
       }
+
       setToast({ kind: "ok", msg: "Saved partner." });
       closeModal();
     } catch (e: any) {
       setToast({ kind: "bad", msg: e?.message || "Save failed." });
-    } finally { setSaving(false); }
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function toggleActiveRow(p: DeliveryPartner) {
@@ -200,6 +220,8 @@ export default function AdminDeliveryPartners() {
                 <div>Name</div>
                 <div>Code</div>
                 <div>Tracking URL Template</div>
+                <div>Fixed Fee</div>
+                <div>Free-Shipping Override</div>
                 <div>Status</div>
                 <div style={{ textAlign: "right" }}>Actions</div>
               </div>
@@ -208,6 +230,15 @@ export default function AdminDeliveryPartners() {
                   <div className="dp-name">{p.name}</div>
                   <div className="dp-code"><code>{p.code}</code></div>
                   <div className="dp-ellipsis" title={p.trackingUrlTemplate || ""}>{p.trackingUrlTemplate || "—"}</div>
+                  <div>
+                    {p.fixedFeeAmount != null ? `₹${Number(p.fixedFeeAmount).toFixed(2)}` : "—"}
+                  </div>
+
+                  <div className="dp-status">
+                    <span className={p.overrideFreeShipping ? "dp-chip bad" : "dp-chip ok"}>
+                      {p.overrideFreeShipping ? "Overrides" : "Normal"}
+                    </span>
+                  </div>
                   <div className="dp-status">
                     <span className={p.visible !== false ? "dp-chip ok" : "dp-chip bad"}>{p.visible !== false ? "Visible" : "Hidden"}</span>
                   </div>
@@ -256,6 +287,38 @@ export default function AdminDeliveryPartners() {
                     onChange={e => setDraft({ ...draft, trackingUrlTemplate: e.target.value })}
                     placeholder="https://track.example.com/{trackingNumber}"
                   />
+                </div>
+                <div className="dp-f">
+                  <label>Fixed Fee Amount (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={draft.fixedFeeAmount ?? ""}
+                    onChange={e =>
+                      setDraft({
+                        ...draft,
+                        fixedFeeAmount: e.target.value === "" ? null : Number(e.target.value),
+                      })
+                    }
+                    placeholder="80"
+                  />
+                </div>
+
+                <div className="dp-f dp-chk">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(draft.overrideFreeShipping)}
+                      onChange={e =>
+                        setDraft({
+                          ...draft,
+                          overrideFreeShipping: e.target.checked,
+                        })
+                      }
+                    />
+                    <span>Override free shipping threshold</span>
+                  </label>
                 </div>
                 <div className="dp-f dp-chk">
                   <label>

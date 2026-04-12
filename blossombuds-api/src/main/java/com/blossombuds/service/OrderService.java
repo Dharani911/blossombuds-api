@@ -142,24 +142,17 @@ public class OrderService {
             }
         }
 
-        BigDecimal expectedShipping;
-        if (india) {
-            expectedShipping = deliveryFeeService.computeFee(
-                    dto.getItemsSubtotal(),
-                    dto.getShipStateId(),
-                    dto.getShipDistrictId(),
-                    dto.getDeliveryPartnerId()
-            );
+        BigDecimal expectedShipping = resolveShippingFee(
+                nzd(dto.getItemsSubtotal()),
+                dto.getShipStateId(),
+                dto.getShipDistrictId(),
+                dto.getDeliveryPartnerId(),
+                country,
+                dto.getShippingFee()
+        );
 
-            if (expectedShipping == null || expectedShipping.signum() < 0) {
-                expectedShipping = BigDecimal.ZERO;
-            }
-
-            log.info("[ORDER][SHIPPING] partnerId={} expectedShipping={}",
-                    dto.getDeliveryPartnerId(), expectedShipping);
-        }else {
-            expectedShipping = dto.getShippingFee() == null ? BigDecimal.ZERO : dto.getShippingFee();
-        }
+        log.info("[ORDER][SHIPPING] partnerId={} expectedShipping={}",
+                dto.getDeliveryPartnerId(), expectedShipping);
 
         BigDecimal itemsSubtotal = nzd(dto.getItemsSubtotal());
         BigDecimal discountTotal = nzd(dto.getDiscountTotal());
@@ -375,14 +368,48 @@ public class OrderService {
             existing.setShipLine2(patch.getShipLine2());
             existing.setShipPincode(patch.getShipPincode());
 
+            Country country = existing.getShipCountry();
+            if (patch.getShipCountryId() != null) {
+                country = countryRepository.findById(patch.getShipCountryId())
+                        .orElseThrow(() -> new IllegalArgumentException("Country not found: " + patch.getShipCountryId()));
+                existing.setShipCountry(country);
+            }
+
+            State state = existing.getShipState();
+            if (patch.getShipStateId() != null) {
+                state = stateRepository.findById(patch.getShipStateId())
+                        .orElseThrow(() -> new IllegalArgumentException("State not found: " + patch.getShipStateId()));
+                existing.setShipState(state);
+            }
+
+            District district = existing.getShipDistrict();
+            if (patch.getShipDistrictId() != null) {
+                district = districtRepository.findById(patch.getShipDistrictId())
+                        .orElseThrow(() -> new IllegalArgumentException("District not found: " + patch.getShipDistrictId()));
+                existing.setShipDistrict(district);
+            }
+
             BigDecimal itemsSubtotal =
                     (items != null && !items.isEmpty())
                             ? computeItemsSubtotal(items)
                             : (patch.getItemsSubtotal() != null ? patch.getItemsSubtotal() : existing.getItemsSubtotal());
 
-            BigDecimal discount = nzd(patch.getDiscountTotal() != null ? patch.getDiscountTotal() : existing.getDiscountTotal());
-            BigDecimal shipping = nzd(patch.getShippingFee()    != null ? patch.getShippingFee()    : existing.getShippingFee());
             itemsSubtotal = nzd(itemsSubtotal);
+
+            BigDecimal discount =
+                    nzd(patch.getDiscountTotal() != null ? patch.getDiscountTotal() : existing.getDiscountTotal());
+
+            Long effectivePartnerId =
+                    patch.getDeliveryPartnerId() != null ? patch.getDeliveryPartnerId() : existing.getDeliveryPartnerId();
+
+            BigDecimal shipping = resolveShippingFee(
+                    itemsSubtotal,
+                    state != null ? state.getId() : null,
+                    district != null ? district.getId() : null,
+                    effectivePartnerId,
+                    country,
+                    patch.getShippingFee()
+            );
 
             BigDecimal grand = itemsSubtotal.add(shipping).subtract(discount);
             if (grand.signum() < 0) grand = BigDecimal.ZERO;
@@ -1036,7 +1063,30 @@ public class OrderService {
         log.info("[PAYMENT][RECORDED] Payment recorded successfully for orderId: {}", orderId);
         return p;
     }
+    private BigDecimal resolveShippingFee(
+            BigDecimal itemsSubtotal,
+            Long stateId,
+            Long districtId,
+            Long deliveryPartnerId,
+            Country country,
+            BigDecimal requestedShippingFee
+    ) {
+        if (country == null) {
+            return BigDecimal.ZERO;
+        }
 
+        if (isIndia(country)) {
+            BigDecimal fee = deliveryFeeService.computeFee(
+                    itemsSubtotal,
+                    stateId,
+                    districtId,
+                    deliveryPartnerId
+            );
+            return fee == null || fee.signum() < 0 ? BigDecimal.ZERO : fee;
+        }
+
+        return requestedShippingFee == null ? BigDecimal.ZERO : requestedShippingFee;
+    }
     // ───────────────────────────── View DTOs ─────────────────────────────
 
     @Data public static class OrderLiteDto {
