@@ -21,7 +21,7 @@ public interface BackInStockRequestRepository extends JpaRepository<BackInStockR
         count(s.id),
         min(s.createdAt)
     )
-    from BackInStockRequests s
+    from BackInStockRequest s
     join s.product p
     where s.active = true
       and p.active = true
