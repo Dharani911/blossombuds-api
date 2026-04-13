@@ -217,34 +217,49 @@ export default function AdminDeliveryPartners() {
           {!loading && !err && filtered.length > 0 && (
             <div className="dp-table">
               <div className="dp-thead">
-                <div>Name</div>
-                <div>Code</div>
-                <div>Tracking URL Template</div>
-                <div>Fixed Fee</div>
-                <div>Free-Shipping Override</div>
+                <div>Partner</div>
+                <div>Shipping</div>
                 <div>Status</div>
                 <div style={{ textAlign: "right" }}>Actions</div>
               </div>
               {filtered.map(p => (
                 <div className="dp-row" key={p.id ?? p.code}>
-                  <div className="dp-name">{p.name}</div>
-                  <div className="dp-code"><code>{p.code}</code></div>
-                  <div className="dp-ellipsis" title={p.trackingUrlTemplate || ""}>{p.trackingUrlTemplate || "—"}</div>
-                  <div>
-                    {p.fixedFeeAmount != null ? `₹${Number(p.fixedFeeAmount).toFixed(2)}` : "—"}
+                  <div className="dp-partner">
+                    <div className="dp-name">{p.name}</div>
+                    <div className="dp-subline">
+                      <span className="dp-code"><code>{p.code}</code></span>
+                      {p.trackingUrlTemplate ? (
+                        <span className="dp-track" title={p.trackingUrlTemplate}>
+                          {p.trackingUrlTemplate}
+                        </span>
+                      ) : (
+                        <span className="dp-track muted">No tracking URL</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="dp-shipmeta">
+                    <div className="dp-fee">
+                      {p.fixedFeeAmount != null ? `₹${Number(p.fixedFeeAmount).toFixed(2)}` : "No fixed fee"}
+                    </div>
+                    <div className="dp-chiprow">
+                      <span className={p.overrideFreeShipping ? "dp-chip bad" : "dp-chip ok"}>
+                        {p.overrideFreeShipping ? "Overrides free shipping" : "Normal shipping"}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="dp-status">
-                    <span className={p.overrideFreeShipping ? "dp-chip bad" : "dp-chip ok"}>
-                      {p.overrideFreeShipping ? "Overrides" : "Normal"}
+                    <span className={p.visible !== false ? "dp-chip ok" : "dp-chip bad"}>
+                      {p.visible !== false ? "Visible" : "Hidden"}
                     </span>
                   </div>
-                  <div className="dp-status">
-                    <span className={p.visible !== false ? "dp-chip ok" : "dp-chip bad"}>{p.visible !== false ? "Visible" : "Hidden"}</span>
-                  </div>
+
                   <div className="dp-act">
                     <button className="dp-ghost dp-sm" onClick={() => openEdit(p)}>Edit</button>
-                    <button className="dp-ghost dp-sm" onClick={() => toggleVisibleRow(p)}>{p.visible !== false ? "Hide" : "Show"}</button>
+                    <button className="dp-ghost dp-sm" onClick={() => toggleVisibleRow(p)}>
+                      {p.visible !== false ? "Hide" : "Show"}
+                    </button>
                     <button className="dp-ghost dp-sm bad" onClick={() => remove(p)}>Delete</button>
                   </div>
                 </div>
@@ -466,8 +481,10 @@ const css = `
 .dp-table{ display:grid; max-height:400px; overflow-y:auto; }
 .dp-thead, .dp-row{
   display:grid;
-  grid-template-columns: 1.3fr 1fr 2.2fr 1fr 1.4fr;
-  gap:16px; padding:14px 20px; align-items:center;
+  grid-template-columns: minmax(260px, 1.7fr) minmax(180px, 1fr) 120px minmax(180px, auto);
+  gap:16px;
+  padding:14px 20px;
+  align-items:center;
 }
 .dp-thead{
   font-weight:900; font-size:11px; text-transform:uppercase; letter-spacing:.8px;
@@ -611,17 +628,153 @@ const css = `
 
 /* ─────────────── RESPONSIVE ─────────────── */
 @media (max-width: 1024px){
-  .dp-thead, .dp-row{ grid-template-columns: 1.2fr 1fr 2fr 1fr 1.3fr; padding:12px 16px; }
+  .dp-thead, .dp-row{
+    grid-template-columns: minmax(220px, 1.5fr) minmax(160px, 1fr) 110px minmax(170px, auto);
+    gap:12px;
+    padding:12px 16px;
+  }
 }
 @media (max-width: 768px){
-  .dp-hd{ flex-direction:column; align-items:stretch; gap:12px; }
-  .dp-hd-right{ justify-content:flex-start; }
-  .dp-search input{ min-width:100%; }
-  .dp-thead, .dp-row{ grid-template-columns: 1fr 1fr; gap:8px; }
-  .dp-status, .dp-act{ grid-column:1/-1; }
-  .dp-act{ justify-content:flex-start; gap:6px; }
+  .dp-hd{
+    flex-direction:column;
+    align-items:stretch;
+    gap:12px;
+  }
+
+  .dp-hd-right{
+    justify-content:flex-start;
+  }
+
+  .dp-search{
+    width:100%;
+  }
+
+  .dp-search input{
+    min-width:100%;
+    width:100%;
+  }
+
+  .dp-thead{
+    display:none;
+  }
+
+  .dp-table{
+    display:grid;
+    gap:10px;
+    padding:12px;
+    max-height:none;
+    overflow:visible;
+  }
+
+  .dp-row{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap:10px 12px;
+    padding:14px;
+    border:1px solid var(--dp-ink2);
+    border-radius:16px;
+    background:#fff;
+    box-shadow:0 6px 18px rgba(0,0,0,.05);
+  }
+
+  .dp-name{
+    grid-column:1 / -1;
+    font-size:15px;
+  }
+
+  .dp-code,
+  .dp-ellipsis,
+  .dp-fee,
+  .dp-center,
+  .dp-status{
+    min-width:0;
+  }
+
+  .dp-ellipsis{
+    white-space:normal;
+    overflow:visible;
+    text-overflow:unset;
+    word-break:break-word;
+  }
+
+  .dp-act{
+    grid-column:1 / -1;
+    justify-content:flex-start;
+    flex-wrap:wrap;
+    gap:6px;
+    margin-top:4px;
+  }
 }
 @media (prefers-reduced-motion: reduce){
   .dp-sheet, .dp-toast, .dp-btn, .dp-ghost, .dp-row{ animation:none; transition:none; }
+}
+.dp-fee{
+  font-weight:700;
+  font-size:13px;
+  white-space:nowrap;
+}
+
+.dp-center{
+  display:flex;
+  align-items:center;
+}
+
+.dp-status{
+  display:flex;
+  align-items:center;
+}
+.dp-partner{
+  min-width:0;
+  display:grid;
+  gap:6px;
+}
+
+.dp-subline{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-width:0;
+  flex-wrap:wrap;
+}
+
+.dp-track{
+  min-width:0;
+  max-width:100%;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  font-size:12px;
+  color:var(--dp-subtle);
+}
+
+.dp-shipmeta{
+  display:grid;
+  gap:8px;
+  min-width:0;
+}
+
+.dp-chiprow{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+}
+
+.dp-fee{
+  font-weight:700;
+  font-size:13px;
+  white-space:nowrap;
+}
+
+.dp-status{
+  display:flex;
+  align-items:center;
+}
+
+.dp-act{
+  display:flex;
+  gap:8px;
+  justify-content:flex-end;
+  flex-wrap:wrap;
 }
 `;
