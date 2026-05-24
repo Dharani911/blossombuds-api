@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+          http://www.liquibase.org/xml/ns/dbchangelog
+          https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="create-razorpay-webhook-inbox-table" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="razorpay_webhook_inbox"/>
+            </not>
+        </preConditions>
+        <createTable tableName="razorpay_webhook_inbox">
+            <column name="id" type="BIGSERIAL">
+                <constraints primaryKey="true" primaryKeyName="pk_razorpay_webhook_inbox" nullable="false"/>
+            </column>
+
+            <column name="environment" type="VARCHAR(20)">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="event_type" type="VARCHAR(80)">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="rzp_order_id" type="VARCHAR(80)"/>
+
+            <column name="rzp_payment_id" type="VARCHAR(80)"/>
+
+            <column name="payload_json" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="status" type="VARCHAR(20)">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="attempt_count" type="INT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="last_error" type="VARCHAR(1000)"/>
+
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE"
+                    defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="processed_at" type="TIMESTAMP WITH TIME ZONE"/>
+        </createTable>
+
+        <createIndex indexName="idx_rzp_webhook_status" tableName="razorpay_webhook_inbox">
+            <column name="status"/>
+        </createIndex>
+
+        <createIndex indexName="idx_rzp_webhook_event" tableName="razorpay_webhook_inbox">
+            <column name="event_type"/>
+        </createIndex>
+
+        <createIndex indexName="idx_rzp_webhook_payment" tableName="razorpay_webhook_inbox">
+            <column name="rzp_payment_id"/>
+        </createIndex>
+
+        <createIndex indexName="idx_rzp_webhook_order" tableName="razorpay_webhook_inbox">
+            <column name="rzp_order_id"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

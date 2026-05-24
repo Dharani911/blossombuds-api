@@ -61,4 +61,16 @@ public class RazorpayApiClient {
         String raw = keyId + ":" + keySecret;
         return "Basic " + Base64.getEncoder().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
     }
+    public Map<String, Object> fetchOrderPayments(String rzpOrderId) {
+        String url = props.getBaseUrl() + "/orders/" + rzpOrderId + "/payments";
+
+        HttpHeaders h = new HttpHeaders();
+        h.set("Authorization", basicAuth(props.getKeyId(), props.getKeySecret()));
+
+        ResponseEntity<Map> resp = rest.exchange(url, HttpMethod.GET, new HttpEntity<>(h), Map.class);
+        if (!resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null) {
+            throw new IllegalStateException("Failed to fetch Razorpay order payments");
+        }
+        return resp.getBody();
+    }
 }

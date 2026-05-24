@@ -11,6 +11,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 /** Finalizes a PENDING CheckoutIntent into a paid Order + captured Payment (idempotent). */
@@ -45,24 +47,33 @@ public class CheckoutFinalizeService {
 
         // Normalize status
         String st = (ci.getStatus() == null) ? "" : ci.getStatus().trim().toUpperCase();
+        boolean reclaimStaleConverting = false;
 
-        // ✅ Idempotency + concurrency guard
         if ("CONVERTED".equals(st)) {
             log.info("[PAYMENT][FINALIZE][SKIP] already converted | rzpOrderId={}", rzpOrderId);
             return;
         }
+
         if ("CONVERTING".equals(st)) {
-            log.info("[PAYMENT][FINALIZE][SKIP] converting in progress | rzpOrderId={}", rzpOrderId);
-            return;
+            if (ci.getModifiedAt() != null
+                    && ci.getModifiedAt().isAfter(LocalDateTime.now().minusMinutes(5))) {
+                log.info("[PAYMENT][FINALIZE][SKIP] converting still fresh | rzpOrderId={}", rzpOrderId);
+                return;
+            }
+
+            reclaimStaleConverting = true;
+            log.warn("[PAYMENT][FINALIZE][RECOVER] stale CONVERTING -> reclaiming | rzpOrderId={}", rzpOrderId);
         }
-        if (!"PENDING".equals(st)) {
+
+        if (!"PENDING".equals(st) && !reclaimStaleConverting) {
             log.info("[PAYMENT][FINALIZE][SKIP] status={} | rzpOrderId={}", st, rzpOrderId);
             return;
         }
 
         // ✅ Mark converting FIRST (prevents duplicate order creation on crash/retry)
         ci.setStatus("CONVERTING");
-        checkoutIntentRepository.save(ci);
+        ci.setModifiedAt(LocalDateTime.now());
+        checkoutIntentRepository.saveAndFlush(ci);
 
         // Materialize LOBs while TX is open
         try {
@@ -92,12 +103,14 @@ public class CheckoutFinalizeService {
             // Mark intent converted
             ci.setStatus("CONVERTED");
             ci.setActive(Boolean.FALSE);
+            ci.setModifiedAt(LocalDateTime.now());
             checkoutIntentRepository.save(ci);
 
             log.info("[PAYMENT][FINALIZE][OK] rzpOrderId={} rzpPaymentId={} orderId={}", rzpOrderId, rzpPaymentId, order.getId());
         }catch (RuntimeException e) {
             // revert so it can be retried
             ci.setStatus("PENDING");
+            ci.setModifiedAt(LocalDateTime.now());
             checkoutIntentRepository.save(ci);
             log.error("[PAYMENT][FINALIZE][ERR] rzpOrderId={} reverting to PENDING", rzpOrderId, e);
             throw e;
@@ -120,7 +133,8 @@ public class CheckoutFinalizeService {
         // If rzpOrderId not stored yet (crash gap), store it now
         if (ci.getRzpOrderId() == null || ci.getRzpOrderId().isBlank()) {
             ci.setRzpOrderId(rzpOrderId);
-            checkoutIntentRepository.save(ci);
+            ci.setModifiedAt(LocalDateTime.now());
+            checkoutIntentRepository.saveAndFlush(ci);
         }
 
         // Now reuse existing finalize path (by rzpOrderId)

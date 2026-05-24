@@ -4,7 +4,6 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.Where;
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -56,4 +55,29 @@ public class CheckoutIntent {
     @Column(name = "created_by", length = 64) private String createdBy;
     @Column(name = "modified_at") private LocalDateTime modifiedAt;
     @Column(name = "modified_by", length = 64) private String modifiedBy;
+    /** Sets default values before the checkout intent is first saved. */
+    @PrePersist
+    public void prePersist() {
+        LocalDateTime now = LocalDateTime.now();
+
+        if (createdAt == null) {
+            createdAt = now;
+        }
+
+        modifiedAt = now;
+
+        if (active == null) {
+            active = Boolean.TRUE;
+        }
+
+        if (status == null || status.isBlank()) {
+            status = "PENDING";
+        }
+    }
+
+    /** Updates modifiedAt whenever the checkout intent changes. */
+    @PreUpdate
+    public void preUpdate() {
+        modifiedAt = LocalDateTime.now();
+    }
 }

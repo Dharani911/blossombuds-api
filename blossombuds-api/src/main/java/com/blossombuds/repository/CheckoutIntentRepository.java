@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.CrudRepository;
 
+import java.util.List;
 import java.util.Optional;
 
 /** JPA repository for checkout intents. */
@@ -23,5 +24,5 @@ public interface CheckoutIntentRepository extends JpaRepository<CheckoutIntent, 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select ci from CheckoutIntent ci where ci.id = :id")
     Optional<CheckoutIntent> findForUpdateById(Long id);
-
+    List<CheckoutIntent> findTop100ByStatusInAndActiveTrueOrderByIdAsc(List<String> statuses);
 }

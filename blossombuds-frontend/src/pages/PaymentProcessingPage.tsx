@@ -10,7 +10,43 @@ export default function PaymentProcessingPage() {
     const [error, setError] = useState<string | null>(null);
     const [processing, setProcessing] = useState(true);
     const STORAGE_KEY = "rzp_last_success";
+async function verifyWithRetry(payload: {
+  razorpayOrderId: string;
+  razorpayPaymentId: string;
+  razorpaySignature: string;
+  currency: string;
+}) {
+  let lastError: any = null;
 
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    try {
+      await http.post("/api/payments/razorpay/verify", payload);
+      return;
+    } catch (e: any) {
+      lastError = e;
+
+      const status = e?.response?.status;
+      const message = String(e?.response?.data?.message || e?.message || "").toLowerCase();
+
+      const retryable =
+        !status ||
+        status >= 500 ||
+        message.includes("timeout") ||
+        message.includes("lock") ||
+        message.includes("deadlock") ||
+        message.includes("temporary") ||
+        message.includes("transient");
+
+      if (!retryable || attempt === 5) {
+        throw e;
+      }
+
+      await new Promise((r) => setTimeout(r, attempt * 1500));
+    }
+  }
+
+  throw lastError;
+}
     function readStoredPayload() {
       try {
         const raw = sessionStorage.getItem(STORAGE_KEY);
@@ -57,13 +93,12 @@ export default function PaymentProcessingPage() {
         // Verify payment and create order
         (async () => {
             try {
-                await http.post("/api/payments/razorpay/verify", {
+                await verifyWithRetry({
                   razorpayOrderId,
                   razorpayPaymentId,
                   razorpaySignature,
                   currency,
                 });
-
 
                 // ✅ show success UI state
                 setError(null);

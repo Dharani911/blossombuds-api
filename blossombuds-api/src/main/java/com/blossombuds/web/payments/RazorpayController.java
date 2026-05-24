@@ -8,6 +8,7 @@ import com.blossombuds.security.RazorPayProperties;
 import com.blossombuds.service.OrderService;
 import com.blossombuds.service.payments.CheckoutFinalizeService;
 import com.blossombuds.service.payments.RazorpayService;
+import com.blossombuds.service.payments.RazorpayWebhookInboxService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Data;
@@ -35,7 +36,7 @@ public class RazorpayController {
     private final RazorPayProperties props;
     private final ObjectMapper om;
     private final CheckoutFinalizeService finalizeService;
-
+    private final RazorpayWebhookInboxService webhookInboxService;
 
     @GetMapping("/config")
     @PreAuthorize("permitAll()")
@@ -130,11 +131,14 @@ public class RazorpayController {
     public void webhookLive(@RequestBody String body,
                             @RequestHeader("X-Razorpay-Signature") String signature) {
         String secret = props.getWebhookSecret();
-        if (secret == null || secret.isBlank())
+        if (secret == null || secret.isBlank()) {
             throw new IllegalStateException("Live webhook secret not configured");
-        if (!rzp.verifyWebhookSignature(body, signature, secret))
+        }
+        if (!rzp.verifyWebhookSignature(body, signature, secret)) {
             throw new IllegalArgumentException("Invalid LIVE webhook signature");
-        handleWebhook(body, "LIVE");
+        }
+
+        webhookInboxService.ingest(body, "LIVE");
     }
 
     /** TEST webhook (Razorpay Test dashboard) — distinct secret & path. */
@@ -143,11 +147,13 @@ public class RazorpayController {
     public void webhookTest(@RequestBody String body,
                             @RequestHeader("X-Razorpay-Signature") String signature) {
         String secret = props.getWebhookSecretTest();
-        if (secret == null || secret.isBlank())
+        if (secret == null || secret.isBlank()) {
             throw new IllegalStateException("Test webhook secret not configured");
-        if (!rzp.verifyWebhookSignature(body, signature, secret))
+        }
+        if (!rzp.verifyWebhookSignature(body, signature, secret)) {
             throw new IllegalArgumentException("Invalid TEST webhook signature");
-        handleWebhook(body, "TEST");
+        }
+        webhookInboxService.ingest(body, "TEST");
     }
 
     /** STAGE webhook (Razorpay Test dashboard; separate secret) — distinct path. */
@@ -156,11 +162,13 @@ public class RazorpayController {
     public void webhookStage(@RequestBody String body,
                              @RequestHeader("X-Razorpay-Signature") String signature) {
         String secret = props.getWebhookSecretStage();
-        if (secret == null || secret.isBlank())
+        if (secret == null || secret.isBlank()) {
             throw new IllegalStateException("Stage webhook secret not configured");
-        if (!rzp.verifyWebhookSignature(body, signature, secret))
+        }
+        if (!rzp.verifyWebhookSignature(body, signature, secret)) {
             throw new IllegalArgumentException("Invalid STAGE webhook signature");
-        handleWebhook(body, "STAGE");
+        }
+        webhookInboxService.ingest(body, "STAGE");
     }
 
     /* ----------------------------- Helpers ----------------------------- */

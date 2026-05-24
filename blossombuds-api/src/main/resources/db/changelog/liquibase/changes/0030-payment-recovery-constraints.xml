@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+          http://www.liquibase.org/xml/ns/dbchangelog
+          https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="0030-01-unique-razorpay-payment-id" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists indexName="uk_payments_rzp_payment_id"/>
+            </not>
+        </preConditions>
+
+        <createIndex tableName="payments" indexName="uk_payments_rzp_payment_id" unique="true">
+            <column name="rzp_payment_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="0030-02-unique-checkout-intent-rzp-order-id" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists indexName="uk_checkout_intent_rzp_order_id"/>
+            </not>
+        </preConditions>
+
+        <createIndex tableName="checkout_intent" indexName="uk_checkout_intent_rzp_order_id" unique="true">
+            <column name="rzp_order_id"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>
