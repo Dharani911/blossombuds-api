@@ -24,7 +24,7 @@ public class CheckoutReconciliationService {
     private final CheckoutFinalizeService finalizeService;
     private final SettingsService settingsService;
 
-    @Scheduled(fixedDelay = 60000)
+    @Scheduled(fixedDelay = 300000)
     public void reconcilePendingIntents() {
         LocalDateTime now = LocalDateTime.now();
 
@@ -33,7 +33,7 @@ public class CheckoutReconciliationService {
 
         LocalDateTime maxAgeStart = now.minusHours(maxAgeHours);
         LocalDateTime startTime = cutoffAt.isAfter(maxAgeStart) ? cutoffAt : maxAgeStart;
-        LocalDateTime safeUpperTime = now.minusMinutes(2);
+        LocalDateTime safeUpperTime = now.minusMinutes(5);
 
         if (!startTime.isBefore(safeUpperTime)) {
             log.info("[CHECKOUT][RECONCILE][SKIP] No safe window | startTime={} safeUpperTime={}",

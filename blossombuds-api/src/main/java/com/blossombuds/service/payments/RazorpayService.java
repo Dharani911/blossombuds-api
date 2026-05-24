@@ -104,7 +104,14 @@ public class RazorpayService {
         log.debug("🔒 verifyWebhookSignature (custom secret) | valid={}", valid);
         return valid;
     }
+    /** Checks whether a captured Razorpay payment has already been recorded. */
+    public boolean isPaymentAlreadyRecorded(String rzpPaymentId) {
+        if (rzpPaymentId == null || rzpPaymentId.isBlank()) {
+            return false;
+        }
 
+        return paymentRepo.findByRzpPaymentId(rzpPaymentId).isPresent();
+    }
     /** Records a successful captured payment for an order (idempotent by rzpPaymentId). */
     @Transactional
     public Payment recordCapturedPayment(Long orderId,

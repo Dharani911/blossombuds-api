@@ -69,7 +69,17 @@ public class CheckoutFinalizeService {
             log.info("[PAYMENT][FINALIZE][SKIP] status={} | rzpOrderId={}", st, rzpOrderId);
             return;
         }
+        if (rzp.isPaymentAlreadyRecorded(rzpPaymentId)) {
+            log.info("[PAYMENT][FINALIZE][SKIP] payment already recorded | rzpOrderId={} rzpPaymentId={}",
+                    rzpOrderId, rzpPaymentId);
 
+            ci.setStatus("CONVERTED");
+            ci.setActive(Boolean.FALSE);
+            ci.setModifiedAt(LocalDateTime.now());
+            checkoutIntentRepository.save(ci);
+
+            return;
+        }
         // ✅ Mark converting FIRST (prevents duplicate order creation on crash/retry)
         ci.setStatus("CONVERTING");
         ci.setModifiedAt(LocalDateTime.now());
