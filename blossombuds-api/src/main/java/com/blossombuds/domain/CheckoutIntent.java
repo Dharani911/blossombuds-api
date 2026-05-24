@@ -12,7 +12,7 @@ import java.time.OffsetDateTime;
 @Entity
 @Table(name = "checkout_intent")
 @Getter @Setter
-@Where(clause = "active = true")
+
 public class CheckoutIntent {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
