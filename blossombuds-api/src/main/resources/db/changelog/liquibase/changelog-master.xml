@@ -40,4 +40,5 @@
     <include file="db/changelog/liquibase/changes/0028-cart-suggestion-products-table.xml"/>
     <include file="db/changelog/liquibase/changes/0029-create-razorpay-webhook-inbox-table.xml"/>
     <include file="db/changelog/liquibase/changes/0030-payment-recovery-constraints.xml"/>
+    <include file="db/changelog/liquibase/changes/0031-add-gst-fields-to-orders.xml"/>
 </databaseChangeLog>

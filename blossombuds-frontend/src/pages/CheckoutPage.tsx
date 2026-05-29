@@ -511,6 +511,8 @@ useEffect(() => {
   const [couponErr, setCouponErr] = useState<string | null>(null);
   const [couponAmt, setCouponAmt] = useState(0);
 
+  const [couponId, setCouponId] = useState<number | null>(null);
+
   // Modals
   const [selectSheetOpen, setSelectSheetOpen] = useState(false); // address selection sheet
   const [manageMode, setManageMode] = useState(false);
@@ -712,8 +714,15 @@ useEffect(() => {
         }
       );
       const amt = Number(data?.discount || 0);
-      if (amt > 0) setCouponAmt(amt);
-      else setCouponErr("Coupon not applicable for this order.");
+      const id = Number(data?.couponId ?? data?.id ?? 0);
+
+      if (amt > 0) {
+        setCouponAmt(amt);
+        setCouponId(id > 0 ? id : null);
+      } else {
+        setCouponId(null);
+        setCouponErr("Coupon not applicable for this order.");
+      }
     } catch (e: any) {
       setCouponErr(e?.response?.data?.message || e?.message || "Coupon validation failed.");
     }
@@ -725,6 +734,7 @@ useEffect(() => {
     setCoupon("");
     setCouponErr(null);
     setCouponAmt(0);
+    setCouponId(null);
   }
 
   // Helper labels
@@ -845,11 +855,22 @@ useEffect(() => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [international, selectedDomesticAddress?.id, itemsSubtotalBeforeDiscount, partnerId]);
 
-  // Grand total now uses the previewed shippingFee
-  const grandTotal = useMemo(() => {
-    const ship = international ? 0 : (shippingFee || 0);
-    return Math.max(0, subtotal + ship - discountTotal);
-  }, [international, subtotal, shippingFee, discountTotal]);
+// GST applies only on discounted item subtotal. Shipping is added after GST.
+const gstRate = 10;
+
+const taxableAmount = useMemo(() => {
+  return Number(Math.max(0, subtotal - discountTotal).toFixed(2));
+}, [subtotal, discountTotal]);
+
+const gstAmount = useMemo(() => {
+  if (international) return 0;
+  return Number(((taxableAmount * gstRate) / 100).toFixed(2));
+}, [international, taxableAmount]);
+
+const grandTotal = useMemo(() => {
+  const ship = international ? 0 : Number(shippingFee || 0);
+  return Number((taxableAmount + gstAmount + ship).toFixed(2));
+}, [international, taxableAmount, gstAmount, shippingFee]);
 
 
   async function onPlaceDomestic() {
@@ -895,11 +916,14 @@ useEffect(() => {
       itemsSubtotal: subtotal,
       shippingFee: shippingFee || 0,
       discountTotal,
+      taxableAmount,
+      gstRate,
+      gstAmount,
       grandTotal,
       currency: "INR",
       deliveryPartnerId: typeof partnerId === "number" ? partnerId : undefined,
       courierName: partnerName,
-      couponId: typeof couponId === "number" ? couponId : undefined,
+      couponId: couponId ?? undefined,
       couponCode: couponAmt > 0 ? coupon.trim() : undefined,
       orderNotes: orderNotes.trim() ? orderNotes.trim() : undefined,
 
@@ -1547,36 +1571,49 @@ useEffect(() => {
               })}
             </div>
 
-            <div className="row-sum">
-              <span>Subtotal</span>
-              <span>{inr(subtotal)}</span>
-            </div>
+           <div className="row-sum">
+             <span>Subtotal</span>
+             <span>{inr(subtotal)}</span>
+           </div>
 
-            {/* Shipping row (domestic only) */}
-            {!international && (
-              <div className="row-sum">
-                <span>Shipping</span>
-                <span>
-                  {shippingLoading
-                    ? "Calculating…"
-                    : shippingErr
-                      ? "—"
-                      : inr(shippingFee || 0)}
-                </span>
-              </div>
-            )}
+           {!international && couponAmt > 0 && (
+             <div className="row-sum">
+               <span>Discount</span>
+               <span>−{inr(discountTotal)}</span>
+             </div>
+           )}
 
-            {!international && couponAmt > 0 && (
-              <div className="row-sum">
-                <span>Discount</span>
-                <span>−{inr(couponAmt)}</span>
-              </div>
-            )}
+           {!international && (
+             <div className="row-sum">
+               <span>Taxable amount</span>
+               <span>{inr(taxableAmount)}</span>
+             </div>
+           )}
 
-            <div className="row-sum total">
-              <span>Total</span>
-              <span>{inr(international ? subtotal : grandTotal)}</span>
-            </div>
+           {!international && (
+             <div className="row-sum">
+               <span>GST ({gstRate}%)</span>
+               <span>{inr(gstAmount)}</span>
+             </div>
+           )}
+
+           {!international && (
+             <div className="row-sum">
+               <span>Shipping</span>
+               <span>
+                 {shippingLoading
+                   ? "Calculating…"
+                   : shippingErr
+                     ? "—"
+                     : inr(shippingFee || 0)}
+               </span>
+             </div>
+           )}
+
+           <div className="row-sum total">
+             <span>Total payable</span>
+             <span>{inr(international ? subtotal : grandTotal)}</span>
+           </div>
 
             {shippingErr && !international && (
               <div className="small" style={{ color: "#b0003a" }}>{shippingErr}</div>

@@ -163,29 +163,74 @@ public class SmtpEmailService implements EmailService {
     }
 
     /** Sends order confirmation with code and total (public code is YYNNNN; rendered as BBYYNNNN). */
+    /** Sends order confirmation with code, GST breakdown, and final total. */
     @Override
     public void sendOrderConfirmation(String toEmail, String toName,
-                                      String publicCodeYYNNNN, String currency, BigDecimal grandTotal) {
-        log.info("[EMAIL][ORDER_CONFIRMED] to='{}' code='{}'", toEmail, publicCodeYYNNNN);
+                                      String publicCodeYYNNNN,
+                                      String currency,
+                                      BigDecimal itemsSubtotal,
+                                      BigDecimal discountTotal,
+                                      BigDecimal taxableAmount,
+                                      BigDecimal gstRate,
+                                      BigDecimal gstAmount,
+                                      BigDecimal shippingFee,
+                                      BigDecimal grandTotal) {
+        log.info("[EMAIL][ORDER_CONFIRMED][GST] to='{}' code='{}'", toEmail, publicCodeYYNNNN);
+
         String subject = "Your order " + publicCodeYYNNNN + " is confirmed";
-        String total = formatMoney(grandTotal, currency);
+        String gstin = setting("brand.gstin", "");
+
+        StringBuilder totals = new StringBuilder();
+        totals.append("Items Subtotal:  ").append(formatMoney(itemsSubtotal, currency)).append("\n");
+
+        if (discountTotal != null && discountTotal.signum() > 0) {
+            totals.append("Discount:        -").append(formatMoney(discountTotal, currency)).append("\n");
+        }
+
+        totals.append("Taxable Amount:  ").append(formatMoney(taxableAmount, currency)).append("\n");
+        totals.append("GST (")
+                .append(formatPercent(gstRate))
+                .append("%):        ")
+                .append(formatMoney(gstAmount, currency))
+                .append("\n");
+        totals.append("Shipping:        ").append(formatMoney(shippingFee, currency)).append("\n");
+        totals.append("Total Paid:      ").append(formatMoney(grandTotal, currency)).append("\n");
+
+        if (hasText(gstin)) {
+            totals.append("GSTIN:           ").append(gstin).append("\n");
+        }
+
         String body = """
-            Hi %s,
+        Hi %s,
 
-            Thank you for your order with %s.
+        Thank you for your order with %s.
 
-            Order:  %s
-            Total:  %s
+        Order:  %s
 
-            You’ll receive another update as soon as your items are dispatched.
+        %s
+        You’ll receive another update as soon as your items are dispatched.
 
-            %s
+        %s
 
-            Warm regards,
-            %s
-            """.formatted(safeName(toName), brandName(), publicCodeYYNNNN, total, contactLineText(), brandName());
+        Warm regards,
+        %s
+        """.formatted(
+                safeName(toName),
+                brandName(),
+                publicCodeYYNNNN,
+                totals,
+                contactLineText(),
+                brandName()
+        );
 
         sendRichMasked(toEmail, subject, body);
+    }
+
+    private String formatPercent(BigDecimal rate) {
+        if (rate == null) {
+            return "0";
+        }
+        return rate.setScale(2, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString();
     }
 
     /** Sends a notification when order status changes, optionally with note and tracking link. */

@@ -174,6 +174,18 @@ public class Order {
     @ToString.Exclude
     private Country shipCountry;
 
+    /** Taxable item amount after discount, before GST. */
+    @Column(name = "taxable_amount", precision = 12, scale = 2)
+    private BigDecimal taxableAmount;
+
+    /** GST rate percentage applied to taxable item amount. */
+    @Column(name = "gst_rate", precision = 5, scale = 2)
+    private BigDecimal gstRate;
+
+    /** GST amount applied to this order. */
+    @Column(name = "gst_amount", precision = 12, scale = 2)
+    private BigDecimal gstAmount;
+
     // --- audit ---
 
     /** Soft-visibility flag for this order. */

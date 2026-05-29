@@ -18,6 +18,9 @@ public class OrderDto {
     private BigDecimal itemsSubtotal;
     private BigDecimal shippingFee;
     private BigDecimal discountTotal;
+    private BigDecimal taxableAmount;
+    private BigDecimal gstRate;
+    private BigDecimal gstAmount;
     private BigDecimal grandTotal;
     private String currency;
 
@@ -52,6 +55,8 @@ public class OrderDto {
     private Long shipCountryId;
     private Long CouponId;
     private String CouponCode;
+
+
 
     private Boolean active;
 }

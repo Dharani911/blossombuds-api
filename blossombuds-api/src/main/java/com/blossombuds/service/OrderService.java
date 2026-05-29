@@ -11,7 +11,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import java.math.RoundingMode;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -43,6 +43,7 @@ public class OrderService {
     private final CouponRepository couponRepository;
     private final CouponRedemptionRepository couponRedemptionRepository;
     private final CatalogService catalogService;
+    private final SettingsService settingsService;
 
 
     /** Optional: used to call next_public_code(); can be null in tests. */
@@ -158,8 +159,11 @@ public class OrderService {
         BigDecimal discountTotal = nzd(dto.getDiscountTotal());
         if (discountTotal.signum() < 0) discountTotal = BigDecimal.ZERO;
 
-        BigDecimal computedGrand = itemsSubtotal.add(expectedShipping).subtract(discountTotal);
-        if (computedGrand.signum() < 0) computedGrand = BigDecimal.ZERO;
+        GstTotals gstTotals = calculateGstTotals(itemsSubtotal, discountTotal, expectedShipping);
+        BigDecimal computedGrand = gstTotals.grandTotal();
+
+        log.info("[ORDER][GST] taxableAmount={} gstRate={} gstAmount={} shipping={} grandTotal={}",
+                gstTotals.taxableAmount(), gstTotals.gstRate(), gstTotals.gstAmount(), expectedShipping, computedGrand);
 
         Order o = new Order();
         o.setPublicCode(code);
@@ -169,6 +173,9 @@ public class OrderService {
         o.setItemsSubtotal(itemsSubtotal);
         o.setShippingFee(expectedShipping);
         o.setDiscountTotal(discountTotal);
+        o.setTaxableAmount(gstTotals.taxableAmount());
+        o.setGstRate(gstTotals.gstRate());
+        o.setGstAmount(gstTotals.gstAmount());
         o.setGrandTotal(computedGrand);
         o.setCurrency(dto.getCurrency());
 
@@ -262,6 +269,12 @@ public class OrderService {
                     cust.getName(),
                     o.getPublicCode(),
                     o.getCurrency(),
+                    o.getItemsSubtotal(),
+                    o.getDiscountTotal(),
+                    o.getTaxableAmount(),
+                    o.getGstRate(),
+                    o.getGstAmount(),
+                    o.getShippingFee(),
                     o.getGrandTotal()
             );
         }
@@ -304,11 +317,30 @@ public class OrderService {
 
         log.info("[EMAIL][ORDER_CONFIRM] Sending order confirmation to customer {}", cust.getId());
         emailService.sendOrderConfirmation(
-                cust.getEmail(), cust.getName(), order.getPublicCode(), order.getCurrency(), order.getGrandTotal()
+                cust.getEmail(),
+                cust.getName(),
+                order.getPublicCode(),
+                order.getCurrency(),
+                order.getItemsSubtotal(),
+                order.getDiscountTotal(),
+                order.getTaxableAmount(),
+                order.getGstRate(),
+                order.getGstAmount(),
+                order.getShippingFee(),
+                order.getGrandTotal()
         );
         return order;
     }
+    /** Returns true when an existing order already has GST/tax fields. */
+    private boolean hasGstBreakdown(Order order) {
+        if (order == null) {
+            return false;
+        }
 
+        return nzd(order.getTaxableAmount()).signum() > 0
+                || nzd(order.getGstAmount()).signum() > 0
+                || nzd(order.getGstRate()).signum() > 0;
+    }
     private static OrderItemDto ensureItemNumbers(OrderItemDto it){
         if (it.getQuantity()   == null) it.setQuantity(1);
         if (it.getUnitPrice()  == null) it.setUnitPrice(BigDecimal.ZERO);
@@ -411,13 +443,32 @@ public class OrderService {
                     patch.getShippingFee()
             );
 
-            BigDecimal grand = itemsSubtotal.add(shipping).subtract(discount);
-            if (grand.signum() < 0) grand = BigDecimal.ZERO;
+            boolean existingHasGstBreakdown = hasGstBreakdown(existing);
 
-            existing.setItemsSubtotal(itemsSubtotal);
-            existing.setDiscountTotal(discount);
-            existing.setShippingFee(shipping);
-            existing.setGrandTotal(grand);
+            if (existingHasGstBreakdown) {
+                GstTotals gstTotals = calculateGstTotals(itemsSubtotal, discount, shipping);
+
+                existing.setItemsSubtotal(itemsSubtotal);
+                existing.setDiscountTotal(discount);
+                existing.setShippingFee(shipping);
+                existing.setTaxableAmount(gstTotals.taxableAmount());
+                existing.setGstRate(gstTotals.gstRate());
+                existing.setGstAmount(gstTotals.gstAmount());
+                existing.setGrandTotal(gstTotals.grandTotal());
+            } else {
+                // Old order: preserve old tax/grand total behavior.
+                existing.setItemsSubtotal(itemsSubtotal);
+                existing.setDiscountTotal(discount);
+                existing.setShippingFee(shipping);
+
+                if (patch.getGrandTotal() != null) {
+                    existing.setGrandTotal(patch.getGrandTotal());
+                }
+
+                existing.setTaxableAmount(nzd(existing.getTaxableAmount()));
+                existing.setGstRate(nzd(existing.getGstRate()));
+                existing.setGstAmount(nzd(existing.getGstAmount()));
+            }
         }
 
         orderRepo.save(existing);
@@ -588,6 +639,9 @@ public class OrderService {
         d.setItemsSubtotal(nzd(o.getItemsSubtotal()));
         d.setShippingFee(nzd(o.getShippingFee()));
         d.setDiscountTotal(nzd(o.getDiscountTotal()));
+        d.setTaxableAmount(nzd(o.getTaxableAmount()));
+        d.setGstRate(nzd(o.getGstRate()));
+        d.setGstAmount(nzd(o.getGstAmount()));
         d.setGrandTotal(nzd(o.getGrandTotal()));
         d.setCurrency(o.getCurrency());
         d.setOrderNotes(o.getOrderNotes());
@@ -668,6 +722,9 @@ public class OrderService {
         private BigDecimal itemsSubtotal;
         private BigDecimal shippingFee;
         private BigDecimal discountTotal;
+        private BigDecimal taxableAmount;
+        private BigDecimal gstRate;
+        private BigDecimal gstAmount;
         private BigDecimal grandTotal;
         private String currency;
 
@@ -888,6 +945,9 @@ public class OrderService {
         d.setItemsSubtotal(nzd(o.getItemsSubtotal()));
         d.setShippingFee(nzd(o.getShippingFee()));
         d.setDiscountTotal(nzd(o.getDiscountTotal()));
+        d.setTaxableAmount(nzd(o.getTaxableAmount()));
+        d.setGstRate(nzd(o.getGstRate()));
+        d.setGstAmount(nzd(o.getGstAmount()));
         d.setGrandTotal(nzd(o.getGrandTotal()));
         d.setCurrency(o.getCurrency());
         d.setOrderNotes(o.getOrderNotes());
@@ -1087,6 +1147,61 @@ public class OrderService {
 
         return requestedShippingFee == null ? BigDecimal.ZERO : requestedShippingFee;
     }
+    /** Returns true when GST is enabled for checkout calculations. */
+    private boolean isGstEnabled() {
+        String value = settingsService.safeGet("checkout.gst.enabled");
+        return value == null || value.isBlank() || Boolean.parseBoolean(value.trim());
+    }
+
+    /** Reads GST rate from settings, defaulting to 10%. */
+    private BigDecimal gstRate() {
+        String value = settingsService.safeGet("checkout.gst.rate");
+        if (value == null || value.isBlank()) {
+            return BigDecimal.valueOf(10).setScale(2, RoundingMode.HALF_UP);
+        }
+
+        try {
+            BigDecimal rate = new BigDecimal(value.trim()).setScale(2, RoundingMode.HALF_UP);
+            return rate.signum() < 0 ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP) : rate;
+        } catch (NumberFormatException e) {
+            log.warn("[ORDER][GST] Invalid checkout.gst.rate='{}'. Using 10", value);
+            return BigDecimal.valueOf(10).setScale(2, RoundingMode.HALF_UP);
+        }
+    }
+
+    /** Calculates GST only on items subtotal after discount; shipping is added after GST. */
+    private GstTotals calculateGstTotals(BigDecimal itemsSubtotal, BigDecimal discountTotal, BigDecimal shippingFee) {
+        BigDecimal items = nzd(itemsSubtotal);
+        BigDecimal discount = nzd(discountTotal);
+        BigDecimal shipping = nzd(shippingFee);
+
+        if (discount.signum() < 0) discount = BigDecimal.ZERO;
+
+        BigDecimal taxableAmount = items.subtract(discount);
+        if (taxableAmount.signum() < 0) taxableAmount = BigDecimal.ZERO;
+        taxableAmount = taxableAmount.setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal rate = isGstEnabled() ? gstRate() : BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal gstAmount = taxableAmount
+                .multiply(rate)
+                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+
+        BigDecimal grandTotal = taxableAmount
+                .add(gstAmount)
+                .add(shipping)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        return new GstTotals(taxableAmount, rate, gstAmount, grandTotal);
+    }
+
+    /** Immutable GST total calculation result. */
+    private record GstTotals(
+            BigDecimal taxableAmount,
+            BigDecimal gstRate,
+            BigDecimal gstAmount,
+            BigDecimal grandTotal
+    ) {}
     // ───────────────────────────── View DTOs ─────────────────────────────
 
     @Data public static class OrderLiteDto {
@@ -1098,6 +1213,9 @@ public class OrderService {
         private BigDecimal itemsSubtotal;
         private BigDecimal shippingFee;
         private BigDecimal discountTotal;
+        private BigDecimal taxableAmount;
+        private BigDecimal gstRate;
+        private BigDecimal gstAmount;
         private BigDecimal grandTotal;
         private String currency;
 

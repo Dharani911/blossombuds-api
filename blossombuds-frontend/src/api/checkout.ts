@@ -7,10 +7,13 @@ export type OrderDto = {
   publicCode?: string;
   customerId?: number;
 
-  itemsSubtotal?: number | string;
-  shippingFee?: number | string;
-  discountTotal?: number | string;
-  grandTotal?: number | string;
+  itemsSubtotal?: number;
+  shippingFee?: number;
+  discountTotal?: number;
+  taxableAmount?: number;
+  gstRate?: number;
+  gstAmount?: number;
+  grandTotal?: number;
   currency?: string;
 
   courierName?: string;

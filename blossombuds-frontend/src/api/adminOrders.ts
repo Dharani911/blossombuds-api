@@ -36,8 +36,14 @@ export type OrderLite = {
   modified_at?: string;
   createdDate?: string;
 
-  grandTotal?: number;
-  shippingFee?: number;
+    itemsSubtotal?: number;
+    shippingFee?: number;
+    discountTotal?: number;
+    taxableAmount?: number;
+    gstRate?: number;
+    gstAmount?: number;
+    grandTotal?: number;
+    currency?: string;
 
   // shipping/contact echoes
   shipName?: string;
@@ -190,11 +196,14 @@ export async function updateOrder(orderId: number, payload: {
   order?: Partial<{
     customerId: number;
     status: OrderStatus;
-    itemsSubtotal: number;
-    shippingFee: number;
-    discountTotal: number;
-    grandTotal: number;
-    currency: string;
+        itemsSubtotal: number;
+        shippingFee: number;
+        discountTotal: number;
+        taxableAmount?: number;
+        gstRate?: number;
+        gstAmount?: number;
+        grandTotal: number;
+        currency: string;
 
     courierName?: string;
     orderNotes?: string;
@@ -243,11 +252,14 @@ export async function createOrderWithItems(payload: {
     customerId: number;
     status?: OrderStatus;
 
-    itemsSubtotal?: number;
-    shippingFee?: number;
-    discountTotal?: number;
-    grandTotal?: number;
-    currency?: string;
+        itemsSubtotal?: number;
+        shippingFee?: number;
+        discountTotal?: number;
+        taxableAmount?: number;
+        gstRate?: number;
+        gstAmount?: number;
+        grandTotal?: number;
+        currency?: string;
 
     courierName?: string;
     orderNotes?: string;

@@ -67,6 +67,7 @@ public class PrintService {
         String fromAddress  = safe(setting("brand.address", "Chennai, TN"));
         String supportEmail = safe(setting("brand.support_email", "support@example.com"));
         String supportPhone = safe(setting("brand.whatsapp", "+91-00000-00000"));
+        String gstin        = safe(setting("brand.gstin", ""));
         log.debug("[PRINT][INVOICE] Settings loaded: brandName='{}', supportEmail='{}'", brandName, supportEmail);
 
         byte[] pdfBytes= buildPdf(doc -> {
@@ -94,18 +95,40 @@ public class PrintService {
             BigDecimal subtotal = nvl(order.getItemsSubtotal());
             BigDecimal shipping = nvl(order.getShippingFee());
             BigDecimal discount = nvl(order.getDiscountTotal());
+            BigDecimal taxable  = nvl(order.getTaxableAmount());
+            BigDecimal gstRate  = nvl(order.getGstRate());
+            BigDecimal gst      = nvl(order.getGstAmount());
             BigDecimal grand    = nvl(order.getGrandTotal());
-
+            boolean hasGstBreakdown =
+                    taxable.signum() > 0 ||
+                            gst.signum() > 0 ||
+                            gstRate.signum() > 0;
             PdfPTable totals = new PdfPTable(new float[]{6f, 2f});
             totals.setWidthPercentage(100);
-            totals.addCell(kvCell("Subtotal", subtotal.toPlainString()));
-            totals.addCell(kvCell("Shipping", shipping.toPlainString()));
-            totals.addCell(kvCell("Discounts", "-" + discount.toPlainString()));
-            totals.addCell(kvCellBold("Grand Total (" + safe(order.getCurrency()) + ")", grand.toPlainString(), true));
+
+            totals.addCell(kvCell("Items Subtotal", inr(subtotal)));
+
+            if (discount.signum() > 0) {
+                totals.addCell(kvCell("Discounts", "-" + inr(discount)));
+            }
+
+            if (hasGstBreakdown) {
+                totals.addCell(kvCell("Taxable Amount", inr(taxable)));
+                totals.addCell(kvCell("GST (" + gstRate.stripTrailingZeros().toPlainString() + "%)", inr(gst)));
+            }
+
+            totals.addCell(kvCell("Shipping", inr(shipping)));
+            totals.addCell(kvCellBold("Grand Total (" + safe(order.getCurrency()) + ")", inr(grand), true));
+
             doc.add(totals);
 
             doc.add(spacer());
             doc.add(new Paragraph("From: " + fromAddress));
+
+            if (!gstin.isBlank()) {
+                doc.add(new Paragraph("GSTIN: " + gstin));
+            }
+
             doc.add(new Paragraph("Support: " + supportEmail + " / " + supportPhone));
         });
         log.info("[PRINT][INVOICE] Invoice PDF generated for orderId={}, size={} bytes", orderId, pdfBytes.length);

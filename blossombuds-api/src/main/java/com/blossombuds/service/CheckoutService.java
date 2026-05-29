@@ -18,7 +18,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import java.math.RoundingMode;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -41,6 +41,8 @@ public class CheckoutService {
     private final CheckoutTxService checkoutTxService;
     private final ObjectMapper om = new ObjectMapper();
     private final ProductRepository productRepo;
+    private final SettingsService settingsService;
+    private final DeliveryFeeRulesService deliveryFeeService;
     /** Starts checkout. India → returns RZP order payload; Intl → WhatsApp URL. */
     /*@Transactional
     public Decision startCheckout(OrderDto orderDraft, List<OrderItemDto> items) {
@@ -129,7 +131,10 @@ public class CheckoutService {
             return Decision.whatsapp(url);
         }
 
-        // India: (1) commit intent first
+
+        // India: backend-authoritative pricing before creating intent/Razorpay order
+        applyBackendGstTotals(orderDraft, country);
+
         BigDecimal grand = nvl(orderDraft.getGrandTotal());
         String currency = normCurrency(orderDraft.getCurrency());
         log.info("[CHECKOUT][INDIA] Creating intent (commit-first) grand={} currency='{}'", grand, currency);
@@ -221,5 +226,79 @@ public class CheckoutService {
 
         public static Decision rzpOrder(Map<String,Object> rzp, String currency) { return new Decision(Type.RZP_ORDER, rzp, currency, null); }
         public static Decision whatsapp(String url) { return new Decision(Type.WHATSAPP, null, null, url); }
+    }
+    /** Returns true when GST is enabled for checkout calculations. */
+    private boolean isGstEnabled() {
+        String value = settingsService.safeGet("checkout.gst.enabled");
+        return value == null || value.isBlank() || Boolean.parseBoolean(value.trim());
+    }
+
+    /** Reads GST rate from settings, defaulting to 10%. */
+    private BigDecimal gstRate() {
+        String value = settingsService.safeGet("checkout.gst.rate");
+        if (value == null || value.isBlank()) {
+            return BigDecimal.valueOf(10).setScale(2, RoundingMode.HALF_UP);
+        }
+
+        try {
+            BigDecimal rate = new BigDecimal(value.trim()).setScale(2, RoundingMode.HALF_UP);
+            return rate.signum() < 0 ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP) : rate;
+        } catch (NumberFormatException e) {
+            log.warn("[CHECKOUT][GST] Invalid checkout.gst.rate='{}'. Using 10", value);
+            return BigDecimal.valueOf(10).setScale(2, RoundingMode.HALF_UP);
+        }
+    }
+
+    /** Applies backend-authoritative GST totals to the order draft before Razorpay order creation. */
+    private void applyBackendGstTotals(OrderDto orderDraft, Country country) {
+        BigDecimal itemsSubtotal = nvl(orderDraft.getItemsSubtotal());
+        BigDecimal discountTotal = nvl(orderDraft.getDiscountTotal());
+        if (discountTotal.signum() < 0) discountTotal = BigDecimal.ZERO;
+
+        BigDecimal shippingFee = resolveCheckoutShippingFee(orderDraft, country, itemsSubtotal);
+
+        BigDecimal taxableAmount = itemsSubtotal.subtract(discountTotal);
+        if (taxableAmount.signum() < 0) taxableAmount = BigDecimal.ZERO;
+        taxableAmount = taxableAmount.setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal rate = isGstEnabled() ? gstRate() : BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal gstAmount = taxableAmount
+                .multiply(rate)
+                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+
+        BigDecimal grandTotal = taxableAmount
+                .add(gstAmount)
+                .add(shippingFee)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        orderDraft.setShippingFee(shippingFee);
+        orderDraft.setDiscountTotal(discountTotal);
+        orderDraft.setTaxableAmount(taxableAmount);
+        orderDraft.setGstRate(rate);
+        orderDraft.setGstAmount(gstAmount);
+        orderDraft.setGrandTotal(grandTotal);
+
+        log.info("[CHECKOUT][GST] taxableAmount={} gstRate={} gstAmount={} shipping={} grandTotal={}",
+                taxableAmount, rate, gstAmount, shippingFee, grandTotal);
+    }
+
+    /** Resolves checkout shipping fee in the same way as order creation. */
+    private BigDecimal resolveCheckoutShippingFee(OrderDto orderDraft, Country country, BigDecimal itemsSubtotal) {
+        if (country == null) {
+            return BigDecimal.ZERO;
+        }
+
+        if (isIndia(country)) {
+            BigDecimal fee = deliveryFeeService.computeFee(
+                    itemsSubtotal,
+                    orderDraft.getShipStateId(),
+                    orderDraft.getShipDistrictId(),
+                    orderDraft.getDeliveryPartnerId()
+            );
+            return fee == null || fee.signum() < 0 ? BigDecimal.ZERO : fee.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        return nvl(orderDraft.getShippingFee());
     }
 }

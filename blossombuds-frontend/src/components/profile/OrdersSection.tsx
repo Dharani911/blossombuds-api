@@ -24,8 +24,11 @@ type OrderDetail = {
   itemsSubtotal?: number;
   shippingFee?: number;
   discountTotal?: number;
+  taxableAmount?: number;
+  gstRate?: number;
+  gstAmount?: number;
   couponCode?: string;
-  total?: number;
+  grandTotal?: number;
   trackingNumber?: string;
   trackingUrl?: string;
   orderId?: number;
@@ -81,10 +84,13 @@ function normLine(r: any): OrderLine {
 
 function normDetail(o: any): OrderDetail {
   const items: OrderLine[] = Array.isArray(o?.items) ? o.items.map(normLine) : [];
-  const sub = Number(o?.itemsSubtotal ?? o?.items_SubTotal ?? 0);
+  const sub = Number(o?.itemsSubtotal ?? o?.items_SubTotal ?? o?.items_subtotal ?? 0);
   const ship = Number(o?.shippingFee ?? o?.shipping_fee ?? 0);
-  const disc = Number(o?.discountTotal ?? o?.discount_Total ?? 0);
-  const total = Number(o?.grandTotal ?? o?.grand_Total ?? 0);
+  const disc = Number(o?.discountTotal ?? o?.discount_Total ?? o?.discount_total ?? 0);
+  const taxable = Number(o?.taxableAmount ?? o?.taxable_amount ?? 0);
+  const gstRate = Number(o?.gstRate ?? o?.gst_rate ?? 0);
+  const gstAmount = Number(o?.gstAmount ?? o?.gst_amount ?? 0);
+  const total = Number(o?.grandTotal ?? o?.grand_Total ?? o?.grand_total ?? 0);
 
   return {
     publicCode: o?.publicCode ?? o?.code ?? "",
@@ -92,6 +98,9 @@ function normDetail(o: any): OrderDetail {
     itemsSubtotal: sub,
     shippingFee: ship,
     discountTotal: disc,
+    taxableAmount: taxable,
+    gstRate,
+    gstAmount,
     couponCode: o?.couponCode ?? o?.coupon ?? undefined,
     grandTotal: total,
     trackingNumber: o?.trackingNumber ?? o?.tracking_no ?? undefined,
@@ -179,7 +188,15 @@ export default function OrdersSection({ orders }: { orders: OrderLite[] }) {
   const showTracking =
     detail?.status?.toUpperCase() === "DISPATCHED" ||
     detail?.status?.toUpperCase() === "DELIVERED";
+const hasGstBreakdown = useMemo(() => {
+  if (!detail) return false;
 
+  return (
+    Number(detail.taxableAmount || 0) > 0 ||
+    Number(detail.gstAmount || 0) > 0 ||
+    Number(detail.gstRate || 0) > 0
+  );
+}, [detail]);
   // --------- Deep link: parse ?code=&pid=&itemId= and open drawer ----------
   useEffect(() => {
     const sp = new URLSearchParams(location.search);
@@ -423,17 +440,36 @@ export default function OrdersSection({ orders }: { orders: OrderLite[] }) {
                       <span>Sub-total</span>
                       <span>{currency(detail.itemsSubtotal)}</span>
                     </div>
+
+                    {Number(detail.discountTotal || 0) > 0 && (
+                      <div className="row">
+                        <span>
+                          Discount
+                          {detail.couponCode ? ` (Coupon: ${detail.couponCode})` : ""}
+                        </span>
+                        <span>-{currency(detail.discountTotal)}</span>
+                      </div>
+                    )}
+
+                    {hasGstBreakdown && (
+                      <>
+                        <div className="row">
+                          <span>Taxable amount</span>
+                          <span>{currency(detail.taxableAmount)}</span>
+                        </div>
+
+                        <div className="row">
+                          <span>GST ({Number(detail.gstRate || 0)}%)</span>
+                          <span>{currency(detail.gstAmount)}</span>
+                        </div>
+                      </>
+                    )}
+
                     <div className="row">
                       <span>Shipping</span>
                       <span>{currency(detail.shippingFee)}</span>
                     </div>
-                    <div className="row">
-                      <span>
-                        Discount
-                        {detail.couponCode ? ` (Coupon: ${detail.couponCode})` : ""}
-                      </span>
-                      <span>-{currency(detail.discountTotal)}</span>
-                    </div>
+
                     <div className="row grand">
                       <span>Grand total</span>
                       <span>{currency(detail.grandTotal)}</span>

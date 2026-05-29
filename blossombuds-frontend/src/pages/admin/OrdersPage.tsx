@@ -1020,6 +1020,11 @@ function OrderDrawer({
     if (o.shipCountryName) parts.push(o.shipCountryName);
     return parts.join(" · ");
   }, [order]);
+  const hasGstBreakdown = order
+    ? Number((order as any).taxableAmount || 0) > 0 ||
+      Number((order as any).gstAmount || 0) > 0 ||
+      Number((order as any).gstRate || 0) > 0
+    : false;
 
   return (
     <>
@@ -1063,12 +1068,54 @@ function OrderDrawer({
 
               <div className="drawer-body">
                 <section className="facts">
-                  <div><span className="lbl">Customer</span><span>{(order as any).shipName || (order as any).customerName || (order as any).customerId || "—"}</span></div>
-                  <div><span className="lbl">Total</span><span>{fmtMoneyINR((order as any).grandTotal ?? 0)}</span></div>
-                  <div><span className="lbl">Shipping</span><span>{fmtMoneyINR((order as any).shippingFee ?? 0)}</span></div>
-                  <div><span className="lbl">Discount</span><span>{fmtMoneyINR((order as any).discountTotal ?? 0)}</span></div>
-                  <div><span className="lbl">Coupon</span><span>{(order as any).couponCode || "—"}</span></div>
-                  <div className="full"><span className="lbl">Ship to</span><span>{shipAddress || "—"}</span></div>
+                  <div>
+                    <span className="lbl">Customer</span>
+                    <span>{(order as any).shipName || (order as any).customerName || (order as any).customerId || "—"}</span>
+                  </div>
+
+                  <div>
+                    <span className="lbl">Grand Total</span>
+                    <span>{fmtMoneyINR((order as any).grandTotal ?? 0)}</span>
+                  </div>
+
+                  <div>
+                    <span className="lbl">Items Subtotal</span>
+                    <span>{fmtMoneyINR((order as any).itemsSubtotal ?? 0)}</span>
+                  </div>
+
+                  <div>
+                    <span className="lbl">Discount</span>
+                    <span>-{fmtMoneyINR((order as any).discountTotal ?? 0)}</span>
+                  </div>
+
+                  {hasGstBreakdown && (
+                    <>
+                      <div>
+                        <span className="lbl">Taxable Amount</span>
+                        <span>{fmtMoneyINR((order as any).taxableAmount ?? 0)}</span>
+                      </div>
+
+                      <div>
+                        <span className="lbl">GST ({Number((order as any).gstRate ?? 0)}%)</span>
+                        <span>{fmtMoneyINR((order as any).gstAmount ?? 0)}</span>
+                      </div>
+                    </>
+                  )}
+
+                  <div>
+                    <span className="lbl">Shipping</span>
+                    <span>{fmtMoneyINR((order as any).shippingFee ?? 0)}</span>
+                  </div>
+
+                  <div>
+                    <span className="lbl">Coupon</span>
+                    <span>{(order as any).couponCode || "—"}</span>
+                  </div>
+
+                  <div className="full">
+                    <span className="lbl">Ship to</span>
+                    <span>{shipAddress || "—"}</span>
+                  </div>
                 </section>
 
                 <section className="block actions-wrap">

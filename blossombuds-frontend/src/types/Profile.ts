@@ -39,8 +39,14 @@ export type OrderLite = {
   modified_at?: string;
   createdDate?: string;
 
-  grandTotal?: number;
+  itemsSubtotal?: number;
   shippingFee?: number;
+  discountTotal?: number;
+  taxableAmount?: number;
+  gstRate?: number;
+  gstAmount?: number;
+  grandTotal?: number;
+  currency?: string;
 
   // shipping/contact echoes
   shipName?: string;

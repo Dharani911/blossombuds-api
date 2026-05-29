@@ -12,8 +12,17 @@ public interface EmailService {
     void sendPasswordResetEmail(String toEmail, String resetUrl);
 
     /** Sends order confirmation with code and total (public code is YYNNNN; rendered as BBYYNNNN). */
+    /** Sends order confirmation with GST/tax breakdown. */
     void sendOrderConfirmation(String toEmail, String toName,
-                               String publicCodeYYNNNN, String currency, BigDecimal grandTotal);
+                               String publicCodeYYNNNN,
+                               String currency,
+                               BigDecimal itemsSubtotal,
+                               BigDecimal discountTotal,
+                               BigDecimal taxableAmount,
+                               BigDecimal gstRate,
+                               BigDecimal gstAmount,
+                               BigDecimal shippingFee,
+                               BigDecimal grandTotal);
 
     /** Sends a notification when order status changes, optionally with note and tracking link. */
     void sendOrderStatusChanged(String toEmail, String toName,
