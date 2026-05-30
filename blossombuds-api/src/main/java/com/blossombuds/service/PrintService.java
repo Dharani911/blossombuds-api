@@ -318,10 +318,18 @@ public class PrintService {
         String notes         = safe(order.getOrderNotes());
         String courier       = safe(order.getCourierName());
 
-        /*BigDecimal itemsSubtotal = nvl(order.getItemsSubtotal());
+        BigDecimal itemsSubtotal = nvl(order.getItemsSubtotal());
         BigDecimal shipping      = nvl(order.getShippingFee());
+        BigDecimal discount      = nvl(order.getDiscountTotal());
+        BigDecimal taxable       = nvl(order.getTaxableAmount());
+        BigDecimal gstRate       = nvl(order.getGstRate());
+        BigDecimal gst           = nvl(order.getGstAmount());
         BigDecimal grand         = nvl(order.getGrandTotal());
-        BigDecimal discount      = nvl(order.getDiscountTotal());*/
+
+        boolean hasGstBreakdown =
+                taxable.signum() > 0 ||
+                        gst.signum() > 0 ||
+                        gstRate.signum() > 0;
         log.debug("[PRINT][PACKING_SLIP_PAGE] orderCode={}, itemsCount={}, customer={}",
                 orderCode, items.size(), customerName);
 
@@ -615,12 +623,30 @@ public class PrintService {
         // ── TOP FRAME 3: Totals band ──
         ColumnText totalsCt = new ColumnText(writer.getDirectContent());
         totalsCt.setSimpleColumn(left, yCut + 6f, right, yCut + totalsBandHeight);
-        Paragraph totalsHdr = new Paragraph("PACKING SUMMARY", new Font(Font.HELVETICA, 11, Font.BOLD));
+        Paragraph totalsHdr = new Paragraph("TOTALS (INR)", new Font(Font.HELVETICA, 11, Font.BOLD));
         totalsHdr.setSpacingAfter(3f);
 
+        String totalsText;
+
+        if (hasGstBreakdown) {
+            totalsText =
+                    "Items: " + inr(itemsSubtotal) + "  -  " +
+                            "Discount: " + inr(discount) + "  =  " +
+                            "Taxable: " + inr(taxable) + "  +  " +
+                            "GST (" + gstRate.stripTrailingZeros().toPlainString() + "%): " + inr(gst) + "  +  " +
+                            "Shipping: " + inr(shipping) + "  =  " +
+                            "Total: " + inr(grand);
+        } else {
+            totalsText =
+                    "Items: " + inr(itemsSubtotal) + "  +  " +
+                            "Shipping: " + inr(shipping) + "  -  " +
+                            "Discount: " + inr(discount) + "  =  " +
+                            "Total: " + inr(grand);
+        }
+
         Paragraph totalsP = new Paragraph(
-                "Total Items: " + items.size(),
-                new Font(Font.HELVETICA, 10, Font.BOLD)
+                totalsText,
+                new Font(Font.HELVETICA, 7, Font.BOLD)
         );
 
         totalsCt.addElement(totalsHdr);
