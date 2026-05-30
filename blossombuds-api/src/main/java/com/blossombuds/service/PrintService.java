@@ -106,19 +106,19 @@ public class PrintService {
             PdfPTable totals = new PdfPTable(new float[]{6f, 2f});
             totals.setWidthPercentage(100);
 
-            totals.addCell(kvCell("Items Subtotal", inr(subtotal)));
+            addTotalRow(totals, "Items Subtotal", inr(subtotal), false);
 
             if (discount.signum() > 0) {
-                totals.addCell(kvCell("Discounts", "-" + inr(discount)));
+                addTotalRow(totals, "Discounts", "-" + inr(discount), false);
             }
 
             if (hasGstBreakdown) {
-                totals.addCell(kvCell("Taxable Amount", inr(taxable)));
-                totals.addCell(kvCell("GST (" + gstRate.stripTrailingZeros().toPlainString() + "%)", inr(gst)));
+                addTotalRow(totals, "Taxable Amount", inr(taxable), false);
+                addTotalRow(totals, "GST (" + gstRate.stripTrailingZeros().toPlainString() + "%)", inr(gst), false);
             }
 
-            totals.addCell(kvCell("Shipping", inr(shipping)));
-            totals.addCell(kvCellBold("Grand Total (" + safe(order.getCurrency()) + ")", inr(grand), true));
+            addTotalRow(totals, "Shipping", inr(shipping), false);
+            addTotalRow(totals, "Grand Total (" + safe(order.getCurrency()) + ")", inr(grand), true);
 
             doc.add(totals);
 
@@ -133,6 +133,28 @@ public class PrintService {
         });
         log.info("[PRINT][INVOICE] Invoice PDF generated for orderId={}, size={} bytes", orderId, pdfBytes.length);
         return pdfBytes;
+    }
+    /** Adds one total row to a two-column totals table. */
+    private void addTotalRow(PdfPTable table, String label, String value, boolean bold) {
+        Font font = new Font(Font.HELVETICA, bold ? 11 : 10, bold ? Font.BOLD : Font.NORMAL);
+
+        PdfPCell left = new PdfPCell(new Phrase(label, font));
+        left.setPadding(6f);
+        left.setBorder(Rectangle.BOX);
+        if (bold) {
+            left.setGrayFill(0.95f);
+        }
+
+        PdfPCell right = new PdfPCell(new Phrase(value, font));
+        right.setPadding(6f);
+        right.setHorizontalAlignment(Element.ALIGN_RIGHT);
+        right.setBorder(Rectangle.BOX);
+        if (bold) {
+            right.setGrayFill(0.95f);
+        }
+
+        table.addCell(left);
+        table.addCell(right);
     }
 
     /** Generates packing slip PDF bytes for a given order id (no pricing). */
@@ -296,10 +318,10 @@ public class PrintService {
         String notes         = safe(order.getOrderNotes());
         String courier       = safe(order.getCourierName());
 
-        BigDecimal itemsSubtotal = nvl(order.getItemsSubtotal());
+        /*BigDecimal itemsSubtotal = nvl(order.getItemsSubtotal());
         BigDecimal shipping      = nvl(order.getShippingFee());
         BigDecimal grand         = nvl(order.getGrandTotal());
-        BigDecimal discount      = nvl(order.getDiscountTotal());
+        BigDecimal discount      = nvl(order.getDiscountTotal());*/
         log.debug("[PRINT][PACKING_SLIP_PAGE] orderCode={}, itemsCount={}, customer={}",
                 orderCode, items.size(), customerName);
 
@@ -593,15 +615,14 @@ public class PrintService {
         // ── TOP FRAME 3: Totals band ──
         ColumnText totalsCt = new ColumnText(writer.getDirectContent());
         totalsCt.setSimpleColumn(left, yCut + 6f, right, yCut + totalsBandHeight);
-        Paragraph totalsHdr = new Paragraph("TOTALS (INR)", new Font(Font.HELVETICA, 11, Font.BOLD));
+        Paragraph totalsHdr = new Paragraph("PACKING SUMMARY", new Font(Font.HELVETICA, 11, Font.BOLD));
         totalsHdr.setSpacingAfter(3f);
+
         Paragraph totalsP = new Paragraph(
-                "Items: " + inr(itemsSubtotal) + "  +  " +
-                        "Shipping: " + inr(shipping) + "  -  " +
-                        "Discount: " + inr(discount) + "  =  " +
-                        "Total: " + inr(grand),
+                "Total Items: " + items.size(),
                 new Font(Font.HELVETICA, 10, Font.BOLD)
         );
+
         totalsCt.addElement(totalsHdr);
         totalsCt.addElement(totalsP);
         totalsCt.go();
