@@ -114,7 +114,7 @@ public class PrintService {
 
             if (hasGstBreakdown) {
                 addTotalRow(totals, "Taxable Amount", inr(taxable), false);
-                addTotalRow(totals, "GST (" + gstRate.stripTrailingZeros().toPlainString() + "%)", inr(gst), false);
+                addTotalRow(totals, "GST", inr(gst), false);
             }
 
             addTotalRow(totals, "Shipping", inr(shipping), false);
@@ -633,7 +633,7 @@ public class PrintService {
                     "Items: " + inr(itemsSubtotal) + "  -  " +
                             "Discount: " + inr(discount) + "  =  " +
                             "Taxable: " + inr(taxable) + "  +  " +
-                            "GST (" + gstRate.stripTrailingZeros().toPlainString() + "%): " + inr(gst) + "  +  " +
+                            "GST: " + inr(gst) + "  +  " +
                             "Shipping: " + inr(shipping) + "  =  " +
                             "Total: " + inr(grand);
         } else {

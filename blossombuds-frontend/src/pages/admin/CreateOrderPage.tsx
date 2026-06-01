@@ -75,6 +75,9 @@ const fmtCurrency = (amount: number, _code: Currency = "INR") => {
   try { return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(Number(amount || 0)); }
   catch { return `₹${Number(amount || 0).toFixed(2)}`; }
 };
+const GST_THRESHOLD_AMOUNT = 10000;
+const GST_RATE_ABOVE_THRESHOLD = 8;
+const GST_RATE_DEFAULT = 10;
 
 function deriveUnitPrice(basePrice: number, selected?: SelectedValue[] | null): number {
   const deltas = (selected || [])
@@ -495,18 +498,35 @@ export default function CreateOrderPage() {
   function onQtyInput(k: string, raw: string) {
     setCart(prev => prev.map(x => {
       if (x.key !== k) return x;
-      // accept empty, digits only otherwise
-      if (raw === "") return { ...x, qtyInput: "" };
-      if (!/^\d+$/.test(raw)) return x; // ignore invalid keystrokes
-      const n = Math.min(999999, Number(raw));
-      return { ...x, qtyInput: String(n) };
+
+      // Allow empty while typing, but make calculations reflect it as 0 immediately.
+      if (raw === "") {
+        return { ...x, qtyInput: "", quantity: 0 };
+      }
+
+      // Accept digits only.
+      if (!/^\d+$/.test(raw)) return x;
+
+      const n = Math.min(999999, Math.max(0, Number(raw)));
+
+      return {
+        ...x,
+        qtyInput: String(n),
+        quantity: n,
+      };
     }));
   }
   function onQtyBlur(k: string) {
     setCart(prev => prev.map(x => {
       if (x.key !== k) return x;
+
       const n = Math.max(1, Number(x.qtyInput || x.quantity || 1));
-      return { ...x, quantity: n, qtyInput: String(n) };
+
+      return {
+        ...x,
+        quantity: n,
+        qtyInput: String(n),
+      };
     }));
   }
 
@@ -609,18 +629,53 @@ export default function CreateOrderPage() {
 
   // Domestic: auto calculate; International: manual entry (lenient)
   async function refreshShipping() {
-    if (isIntl) { setShippingErr(null); return; }
+    if (isIntl) {
+      setShippingErr(null);
+      return;
+    }
+
+    if (!cart.length) {
+      setShippingFee(0);
+      setShippingErr(null);
+      return;
+    }
+
     const addr = selectedAddress;
-    if (!addr) { setShippingFee(0); setShippingErr("Select an address to compute shipping."); return; }
+
+    if (!addr) {
+      setShippingFee(0);
+      setShippingErr("Select an address to compute shipping.");
+      return;
+    }
+
+    if (!partnerId) {
+      setShippingFee(0);
+      setShippingErr("Select a delivery partner to compute shipping.");
+      return;
+    }
+
+    const liveSubtotal = cart.reduce(
+      (s, l) => s + (Number(l.quantity || 0) * Number(l.unitPrice || 0)),
+      0
+    );
+
+    if (liveSubtotal <= 0) {
+      setShippingFee(0);
+      setShippingErr(null);
+      return;
+    }
+
     setShippingLoading(true);
     setShippingErr(null);
+
     try {
-      const subtotal = cart.reduce((s, l) => s + (l.quantity * (l.unitPrice || 0)), 0);
       const { fee } = await previewShipping({
-        itemsSubtotal: subtotal,
+        itemsSubtotal: liveSubtotal,
         stateId: addr.stateId ?? undefined,
         districtId: addr.districtId ?? undefined,
+        deliveryPartnerId: typeof partnerId === "number" ? partnerId : undefined,
       });
+
       setShippingFee(Number(fee || 0));
     } catch (e: any) {
       setShippingFee(0);
@@ -632,17 +687,48 @@ export default function CreateOrderPage() {
   }
 
   useEffect(() => {
-    if (!isIntl) { void refreshShipping(); }
+    if (isIntl) return;
+
+    const timer = window.setTimeout(() => {
+      void refreshShipping();
+    }, 250);
+
+    return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isIntl, selectedAddrId, cart]);
+  }, [
+    isIntl,
+    selectedAddrId,
+    selectedAddress?.stateId,
+    selectedAddress?.districtId,
+    partnerId,
+    cart,
+  ]);
 
   const subtotal = useMemo(
-    () => cart.reduce((s, l) => s + (l.quantity * (l.unitPrice || 0)), 0),
+    () => cart.reduce(
+      (s, l) => s + (Number(l.quantity || 0) * Number(l.unitPrice || 0)),
+      0
+    ),
     [cart]
   );
+  const taxableAmount = useMemo(
+    () => Math.max(0, Number(subtotal || 0) - Number(couponAmt || 0)),
+    [subtotal, couponAmt]
+  );
+
+  const gstRate = useMemo(
+    () => taxableAmount > GST_THRESHOLD_AMOUNT ? GST_RATE_ABOVE_THRESHOLD : GST_RATE_DEFAULT,
+    [taxableAmount]
+  );
+
+  const gstAmount = useMemo(
+    () => Number(((taxableAmount * gstRate) / 100).toFixed(2)),
+    [taxableAmount, gstRate]
+  );
+
   const grand = useMemo(
-    () => Math.max(0, subtotal + Number(shippingFee || 0) - Number(couponAmt || 0)),
-    [subtotal, shippingFee, couponAmt]
+    () => Math.max(0, taxableAmount + gstAmount + Number(shippingFee || 0)),
+    [taxableAmount, gstAmount, shippingFee]
   );
 
   // Create order
@@ -680,8 +766,12 @@ export default function CreateOrderPage() {
 
       itemsSubtotal: Number(subtotal || 0),
       discountTotal: Number(couponAmt || 0),
-      shippingFee: feeNum,                                   // ✅ send fee for domestic & international
-      currency,                                              // "INR"
+      taxableAmount: Number(taxableAmount || 0),
+      gstRate: Number(gstRate || 0),
+      gstAmount: Number(gstAmount || 0),
+      shippingFee: feeNum,
+      grandTotal: Number(grand || 0),
+      currency,                                            // "INR"
       couponCode: coupon.trim() || undefined,
       couponId: couponId ?? undefined,
       courierName: isIntl
@@ -1021,7 +1111,7 @@ export default function CreateOrderPage() {
               </div>
 
               <div className="unit-cell">{fmtCurrency(line.unitPrice, currency)}</div>
-              <div className="total-cell">{fmtCurrency((Number(line.qtyInput ?? line.quantity) || line.quantity) * (line.unitPrice || 0), currency)}</div>
+              <div className="total-cell">{fmtCurrency((line.quantity || 0) * (line.unitPrice || 0), currency)}</div>
               <div><button type="button" className="ghost sm as-btn" onClick={() => removeLine(line.key)}>Remove</button></div>
             </div>
           ))}
@@ -1051,8 +1141,17 @@ export default function CreateOrderPage() {
               <button className="ghost as-btn" onClick={applyCoupon} disabled={!coupon.trim() || !customer?.id}>Apply</button>
               <button className="ghost as-btn" onClick={clearCoupon} disabled={!coupon.trim() && !couponErr && !(couponAmt > 0)}>Clear</button>
             </div>
-          </div>
 
+          </div>
+<div className="row-sum">
+  <span>Taxable Amount</span>
+  <span>{fmtCurrency(taxableAmount, currency)}</span>
+</div>
+
+<div className="row-sum">
+  <span>GST</span>
+  <span>{fmtCurrency(gstAmount, currency)}</span>
+</div>
           {!isIntl ? (
             <>
               <div className="row-sum">

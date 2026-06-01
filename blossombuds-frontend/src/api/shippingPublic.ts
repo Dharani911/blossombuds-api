@@ -7,7 +7,7 @@ export async function quoteShipping(itemsSubtotal: number, stateId?: number, dis
   return data as { itemsSubtotal: number; stateId?: number; districtId?: number; fee: string | number };
 }
 
-export async function previewShipping(body: { itemsSubtotal: number; stateId?: number; districtId?: number }) {
+export async function previewShipping(body: { itemsSubtotal: number; stateId?: number; districtId?: number; deliveryPartnerId?: number }) {
   const { data } = await http.post("/api/shipping/preview", body);
   return data as { fee: number; free: boolean };
 }

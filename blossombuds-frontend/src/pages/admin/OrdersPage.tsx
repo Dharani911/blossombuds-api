@@ -1096,7 +1096,7 @@ function OrderDrawer({
                       </div>
 
                       <div>
-                        <span className="lbl">GST ({Number((order as any).gstRate ?? 0)}%)</span>
+                        <span className="lbl">GST</span>
                         <span>{fmtMoneyINR((order as any).gstAmount ?? 0)}</span>
                       </div>
                     </>

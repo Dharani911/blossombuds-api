@@ -459,7 +459,7 @@ const hasGstBreakdown = useMemo(() => {
                         </div>
 
                         <div className="row">
-                          <span>GST ({Number(detail.gstRate || 0)}%)</span>
+                          <span>GST</span>
                           <span>{currency(detail.gstAmount)}</span>
                         </div>
                       </>

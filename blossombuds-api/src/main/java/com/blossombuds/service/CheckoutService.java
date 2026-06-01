@@ -43,6 +43,14 @@ public class CheckoutService {
     private final ProductRepository productRepo;
     private final SettingsService settingsService;
     private final DeliveryFeeRulesService deliveryFeeService;
+    private static final BigDecimal GST_THRESHOLD_AMOUNT =
+            BigDecimal.valueOf(10000).setScale(2, RoundingMode.HALF_UP);
+
+    private static final BigDecimal GST_RATE_ABOVE_THRESHOLD =
+            BigDecimal.valueOf(8).setScale(2, RoundingMode.HALF_UP);
+
+    private static final BigDecimal GST_RATE_DEFAULT =
+            BigDecimal.valueOf(10).setScale(2, RoundingMode.HALF_UP);
     /** Starts checkout. India → returns RZP order payload; Intl → WhatsApp URL. */
     /*@Transactional
     public Decision startCheckout(OrderDto orderDraft, List<OrderItemDto> items) {
@@ -233,7 +241,7 @@ public class CheckoutService {
         return value == null || value.isBlank() || Boolean.parseBoolean(value.trim());
     }
 
-    /** Reads GST rate from settings, defaulting to 10%. */
+    /** Reads GST rate from settings, defaulting to 10%.
     private BigDecimal gstRate() {
         String value = settingsService.safeGet("checkout.gst.rate");
         if (value == null || value.isBlank()) {
@@ -247,8 +255,22 @@ public class CheckoutService {
             log.warn("[CHECKOUT][GST] Invalid checkout.gst.rate='{}'. Using 10", value);
             return BigDecimal.valueOf(10).setScale(2, RoundingMode.HALF_UP);
         }
-    }
+    }*/
+    /** Returns the GST rate based on the taxable amount threshold. */
+    /** Returns the GST rate based on the taxable amount threshold. */
+    private BigDecimal gstRateForTaxableAmount(BigDecimal taxableAmount) {
+        BigDecimal taxable = nvl(taxableAmount).setScale(2, RoundingMode.HALF_UP);
 
+        if (!isGstEnabled()) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        if (taxable.compareTo(GST_THRESHOLD_AMOUNT) > 0) {
+            return GST_RATE_ABOVE_THRESHOLD;
+        }
+
+        return GST_RATE_DEFAULT;
+    }
     /** Applies backend-authoritative GST totals to the order draft before Razorpay order creation. */
     private void applyBackendGstTotals(OrderDto orderDraft, Country country) {
         BigDecimal itemsSubtotal = nvl(orderDraft.getItemsSubtotal());
@@ -261,7 +283,7 @@ public class CheckoutService {
         if (taxableAmount.signum() < 0) taxableAmount = BigDecimal.ZERO;
         taxableAmount = taxableAmount.setScale(2, RoundingMode.HALF_UP);
 
-        BigDecimal rate = isGstEnabled() ? gstRate() : BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        BigDecimal rate = gstRateForTaxableAmount(taxableAmount);
 
         BigDecimal gstAmount = taxableAmount
                 .multiply(rate)
@@ -279,8 +301,8 @@ public class CheckoutService {
         orderDraft.setGstAmount(gstAmount);
         orderDraft.setGrandTotal(grandTotal);
 
-        log.info("[CHECKOUT][GST] taxableAmount={} gstRate={} gstAmount={} shipping={} grandTotal={}",
-                taxableAmount, rate, gstAmount, shippingFee, grandTotal);
+        log.info("[CHECKOUT][GST] taxableAmount={} gstApplied={} gstAmount={} shipping={} grandTotal={}",
+                taxableAmount, rate.signum() > 0, gstAmount, shippingFee, grandTotal);
     }
 
     /** Resolves checkout shipping fee in the same way as order creation. */

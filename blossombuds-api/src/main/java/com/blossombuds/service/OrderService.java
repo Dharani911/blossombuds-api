@@ -45,7 +45,14 @@ public class OrderService {
     private final CatalogService catalogService;
     private final SettingsService settingsService;
 
+    private static final BigDecimal GST_THRESHOLD_AMOUNT =
+            BigDecimal.valueOf(10000).setScale(2, RoundingMode.HALF_UP);
 
+    private static final BigDecimal GST_RATE_ABOVE_THRESHOLD =
+            BigDecimal.valueOf(8).setScale(2, RoundingMode.HALF_UP);
+
+    private static final BigDecimal GST_RATE_DEFAULT =
+            BigDecimal.valueOf(10).setScale(2, RoundingMode.HALF_UP);
     /** Optional: used to call next_public_code(); can be null in tests. */
     private final JdbcTemplate jdbcTemplate;
 
@@ -162,8 +169,8 @@ public class OrderService {
         GstTotals gstTotals = calculateGstTotals(itemsSubtotal, discountTotal, expectedShipping);
         BigDecimal computedGrand = gstTotals.grandTotal();
 
-        log.info("[ORDER][GST] taxableAmount={} gstRate={} gstAmount={} shipping={} grandTotal={}",
-                gstTotals.taxableAmount(), gstTotals.gstRate(), gstTotals.gstAmount(), expectedShipping, computedGrand);
+        log.info("[ORDER][GST] taxableAmount={} gstApplied={} gstAmount={} shipping={} grandTotal={}",
+                gstTotals.taxableAmount(), gstTotals.gstRate().signum() > 0, gstTotals.gstAmount(), expectedShipping, computedGrand);
 
         Order o = new Order();
         o.setPublicCode(code);
@@ -1153,20 +1160,20 @@ public class OrderService {
         return value == null || value.isBlank() || Boolean.parseBoolean(value.trim());
     }
 
-    /** Reads GST rate from settings, defaulting to 10%. */
-    private BigDecimal gstRate() {
-        String value = settingsService.safeGet("checkout.gst.rate");
-        if (value == null || value.isBlank()) {
-            return BigDecimal.valueOf(10).setScale(2, RoundingMode.HALF_UP);
+    /** Returns the GST rate based on the taxable amount threshold. */
+    /** Returns the GST rate based on the taxable amount threshold. */
+    private BigDecimal gstRateForTaxableAmount(BigDecimal taxableAmount) {
+        BigDecimal taxable = nzd(taxableAmount).setScale(2, RoundingMode.HALF_UP);
+
+        if (!isGstEnabled()) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         }
 
-        try {
-            BigDecimal rate = new BigDecimal(value.trim()).setScale(2, RoundingMode.HALF_UP);
-            return rate.signum() < 0 ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP) : rate;
-        } catch (NumberFormatException e) {
-            log.warn("[ORDER][GST] Invalid checkout.gst.rate='{}'. Using 10", value);
-            return BigDecimal.valueOf(10).setScale(2, RoundingMode.HALF_UP);
+        if (taxable.compareTo(GST_THRESHOLD_AMOUNT) > 0) {
+            return GST_RATE_ABOVE_THRESHOLD;
         }
+
+        return GST_RATE_DEFAULT;
     }
 
     /** Calculates GST only on items subtotal after discount; shipping is added after GST. */
@@ -1181,7 +1188,7 @@ public class OrderService {
         if (taxableAmount.signum() < 0) taxableAmount = BigDecimal.ZERO;
         taxableAmount = taxableAmount.setScale(2, RoundingMode.HALF_UP);
 
-        BigDecimal rate = isGstEnabled() ? gstRate() : BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        BigDecimal rate = gstRateForTaxableAmount(taxableAmount);
 
         BigDecimal gstAmount = taxableAmount
                 .multiply(rate)

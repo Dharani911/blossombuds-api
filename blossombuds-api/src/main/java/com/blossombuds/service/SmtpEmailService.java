@@ -188,9 +188,7 @@ public class SmtpEmailService implements EmailService {
         }
 
         totals.append("Taxable Amount:  ").append(formatMoney(taxableAmount, currency)).append("\n");
-        totals.append("GST (")
-                .append(formatPercent(gstRate))
-                .append("%):        ")
+        totals.append("GST:             ")
                 .append(formatMoney(gstAmount, currency))
                 .append("\n");
         totals.append("Shipping:        ").append(formatMoney(shippingFee, currency)).append("\n");

@@ -856,16 +856,23 @@ useEffect(() => {
   }, [international, selectedDomesticAddress?.id, itemsSubtotalBeforeDiscount, partnerId]);
 
 // GST applies only on discounted item subtotal. Shipping is added after GST.
-const gstRate = 10;
+const GST_THRESHOLD_AMOUNT = 10000;
+const GST_RATE_ABOVE_THRESHOLD = 8;
+const GST_RATE_DEFAULT = 10;
 
 const taxableAmount = useMemo(() => {
   return Number(Math.max(0, subtotal - discountTotal).toFixed(2));
 }, [subtotal, discountTotal]);
 
+const gstRate = useMemo(() => {
+  if (international) return 0;
+  return taxableAmount > GST_THRESHOLD_AMOUNT ? GST_RATE_ABOVE_THRESHOLD : GST_RATE_DEFAULT;
+}, [international, taxableAmount]);
+
 const gstAmount = useMemo(() => {
   if (international) return 0;
   return Number(((taxableAmount * gstRate) / 100).toFixed(2));
-}, [international, taxableAmount]);
+}, [international, taxableAmount, gstRate]);
 
 const grandTotal = useMemo(() => {
   const ship = international ? 0 : Number(shippingFee || 0);
@@ -1592,7 +1599,7 @@ const grandTotal = useMemo(() => {
 
            {!international && (
              <div className="row-sum">
-               <span>GST ({gstRate}%)</span>
+              <span>GST</span>
                <span>{inr(gstAmount)}</span>
              </div>
            )}
