@@ -41,4 +41,6 @@
     <include file="db/changelog/liquibase/changes/0029-create-razorpay-webhook-inbox-table.xml"/>
     <include file="db/changelog/liquibase/changes/0030-payment-recovery-constraints.xml"/>
     <include file="db/changelog/liquibase/changes/0031-add-gst-fields-to-orders.xml"/>
+    <include file="db/changelog/liquibase/changes/0032-whatsapp-crm-and-payment-reminders.xml"/>
+    <include file="db/changelog/liquibase/changes/0033-seed-whatsapp-settings-and-templates.xml"/>
 </databaseChangeLog>

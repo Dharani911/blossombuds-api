@@ -56,6 +56,8 @@ public class SecurityConfig {
                 // route rules (order matters: specific → general)
                 .authorizeHttpRequests(auth -> auth
                         // ----- PUBLIC GETs -----
+                        .requestMatchers(HttpMethod.GET, "/api/webhooks/whatsapp").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/webhooks/whatsapp").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/catalog/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/search/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/cms/**").permitAll()

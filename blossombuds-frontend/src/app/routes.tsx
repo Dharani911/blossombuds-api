@@ -39,6 +39,7 @@ import AdminReviewsPage from "../pages/admin/ReviewsPage";
 import SettingsPage from "../pages/admin/SettingsPage";
 import CustomersPage from "../pages/admin/CustomersPage";
 import CreateOrderPageAdmin from "../pages/admin/CreateOrderPage";
+import AdminWhatsAppPage from "../pages/admin/AdminWhatsAppPage";
 
 
 
@@ -84,7 +85,7 @@ export default function AppRoutes() {
         <Route path="/admin/login" element={<AdminLoginPage />} />
         <Route path="/admin" element={<AdminGuard />}>
           <Route element={<AdminLayout />}>
-            <Route index element={<AdminDashboardPage />} />  {/* Analytics (default) */}
+            <Route index element={<AdminDashboardPage />} />
             <Route path="products" element={<ProductsPage />} />
             <Route path="categories" element={<CategoriesPage />} />
             <Route path="orders" element={<OrdersPage />} />
@@ -92,6 +93,7 @@ export default function AppRoutes() {
             <Route path="reviews" element={<AdminReviewsPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="customers" element={<CustomersPage />} />
+            <Route path="whatsapp" element={<AdminWhatsAppPage />} />
           </Route>
         </Route>
 
