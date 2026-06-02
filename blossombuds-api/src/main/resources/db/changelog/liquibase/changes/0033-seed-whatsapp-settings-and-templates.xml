@@ -1,0 +1,303 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+    http://www.liquibase.org/xml/ns/dbchangelog
+    https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.23.xsd">
+
+    <!-- WhatsApp Cloud API: enabled flag. Keep false for dry-run mode. -->
+    <changeSet id="0033-01-seed-whatsapp-cloud-enabled" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM settings WHERE key = 'whatsapp.cloud.enabled'
+            </sqlCheck>
+        </preConditions>
+        <insert tableName="settings">
+            <column name="key" value="whatsapp.cloud.enabled"/>
+            <column name="value" value="false"/>
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+            <column name="created_at" valueDate="NOW()"/>
+            <column name="modified_by" value="liquibase"/>
+            <column name="modified_at" valueDate="NOW()"/>
+        </insert>
+        <rollback>
+            <delete tableName="settings">
+                <where>key = 'whatsapp.cloud.enabled'</where>
+            </delete>
+        </rollback>
+    </changeSet>
+
+    <!-- WhatsApp Cloud API version. -->
+    <changeSet id="0033-02-seed-whatsapp-api-version" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM settings WHERE key = 'whatsapp.cloud.api_version'
+            </sqlCheck>
+        </preConditions>
+        <insert tableName="settings">
+            <column name="key" value="whatsapp.cloud.api_version"/>
+            <column name="value" value="v25.0"/>
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+            <column name="created_at" valueDate="NOW()"/>
+            <column name="modified_by" value="liquibase"/>
+            <column name="modified_at" valueDate="NOW()"/>
+        </insert>
+        <rollback>
+            <delete tableName="settings">
+                <where>key = 'whatsapp.cloud.api_version'</where>
+            </delete>
+        </rollback>
+    </changeSet>
+
+    <!-- Meta WhatsApp phone number id. Replace value from admin/settings later. -->
+    <changeSet id="0033-03-seed-whatsapp-phone-number-id" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM settings WHERE key = 'whatsapp.cloud.phone_number_id'
+            </sqlCheck>
+        </preConditions>
+        <insert tableName="settings">
+            <column name="key" value="whatsapp.cloud.phone_number_id"/>
+            <column name="value" value=""/>
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+            <column name="created_at" valueDate="NOW()"/>
+            <column name="modified_by" value="liquibase"/>
+            <column name="modified_at" valueDate="NOW()"/>
+        </insert>
+        <rollback>
+            <delete tableName="settings">
+                <where>key = 'whatsapp.cloud.phone_number_id'</where>
+            </delete>
+        </rollback>
+    </changeSet>
+
+    <!-- Meta WhatsApp business account id. Replace value from admin/settings later. -->
+    <changeSet id="0033-04-seed-whatsapp-business-account-id" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM settings WHERE key = 'whatsapp.cloud.business_account_id'
+            </sqlCheck>
+        </preConditions>
+        <insert tableName="settings">
+            <column name="key" value="whatsapp.cloud.business_account_id"/>
+            <column name="value" value=""/>
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+            <column name="created_at" valueDate="NOW()"/>
+            <column name="modified_by" value="liquibase"/>
+            <column name="modified_at" valueDate="NOW()"/>
+        </insert>
+        <rollback>
+            <delete tableName="settings">
+                <where>key = 'whatsapp.cloud.business_account_id'</where>
+            </delete>
+        </rollback>
+    </changeSet>
+
+    <!-- Meta WhatsApp access token. Do not commit real token here. Add real value in DB/admin settings. -->
+    <changeSet id="0033-05-seed-whatsapp-access-token" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM settings WHERE key = 'whatsapp.cloud.access_token'
+            </sqlCheck>
+        </preConditions>
+        <insert tableName="settings">
+            <column name="key" value="whatsapp.cloud.access_token"/>
+            <column name="value" value=""/>
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+            <column name="created_at" valueDate="NOW()"/>
+            <column name="modified_by" value="liquibase"/>
+            <column name="modified_at" valueDate="NOW()"/>
+        </insert>
+        <rollback>
+            <delete tableName="settings">
+                <where>key = 'whatsapp.cloud.access_token'</where>
+            </delete>
+        </rollback>
+    </changeSet>
+
+    <!-- Webhook verify token. Replace with secure random value before production webhook setup. -->
+    <changeSet id="0033-06-seed-whatsapp-verify-token" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM settings WHERE key = 'whatsapp.cloud.verify_token'
+            </sqlCheck>
+        </preConditions>
+        <insert tableName="settings">
+            <column name="key" value="whatsapp.cloud.verify_token"/>
+            <column name="value" value="CHANGE_ME_RANDOM_VERIFY_TOKEN"/>
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+            <column name="created_at" valueDate="NOW()"/>
+            <column name="modified_by" value="liquibase"/>
+            <column name="modified_at" valueDate="NOW()"/>
+        </insert>
+        <rollback>
+            <delete tableName="settings">
+                <where>key = 'whatsapp.cloud.verify_token'</where>
+            </delete>
+        </rollback>
+    </changeSet>
+
+    <!-- WhatsApp campaign batch size. -->
+    <changeSet id="0033-07-seed-whatsapp-crm-batch-size" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM settings WHERE key = 'whatsapp.crm.batch_size'
+            </sqlCheck>
+        </preConditions>
+        <insert tableName="settings">
+            <column name="key" value="whatsapp.crm.batch_size"/>
+            <column name="value" value="20"/>
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+            <column name="created_at" valueDate="NOW()"/>
+            <column name="modified_by" value="liquibase"/>
+            <column name="modified_at" valueDate="NOW()"/>
+        </insert>
+        <rollback>
+            <delete tableName="settings">
+                <where>key = 'whatsapp.crm.batch_size'</where>
+            </delete>
+        </rollback>
+    </changeSet>
+
+    <!-- Payment reminder WhatsApp/email feature flag. Keep false until tested. -->
+    <changeSet id="0033-08-seed-payment-reminder-enabled" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM settings WHERE key = 'whatsapp.payment_reminder.enabled'
+            </sqlCheck>
+        </preConditions>
+        <insert tableName="settings">
+            <column name="key" value="whatsapp.payment_reminder.enabled"/>
+            <column name="value" value="false"/>
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+            <column name="created_at" valueDate="NOW()"/>
+            <column name="modified_by" value="liquibase"/>
+            <column name="modified_at" valueDate="NOW()"/>
+        </insert>
+        <rollback>
+            <delete tableName="settings">
+                <where>key = 'whatsapp.payment_reminder.enabled'</where>
+            </delete>
+        </rollback>
+    </changeSet>
+
+    <!-- Payment reminder delay in minutes. -->
+    <changeSet id="0033-09-seed-payment-reminder-delay" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM settings WHERE key = 'whatsapp.payment_reminder.delay_minutes'
+            </sqlCheck>
+        </preConditions>
+        <insert tableName="settings">
+            <column name="key" value="whatsapp.payment_reminder.delay_minutes"/>
+            <column name="value" value="30"/>
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+            <column name="created_at" valueDate="NOW()"/>
+            <column name="modified_by" value="liquibase"/>
+            <column name="modified_at" valueDate="NOW()"/>
+        </insert>
+        <rollback>
+            <delete tableName="settings">
+                <where>key = 'whatsapp.payment_reminder.delay_minutes'</where>
+            </delete>
+        </rollback>
+    </changeSet>
+
+    <!-- Seed WhatsApp template: New Arrivals Campaign -->
+    <changeSet id="0033-10-seed-template-new-arrivals-campaign" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM whatsapp_templates
+                WHERE provider_template_name = 'new_arrivals_campaign'
+                AND language_code = 'en'
+            </sqlCheck>
+        </preConditions>
+        <insert tableName="whatsapp_templates">
+            <column name="name" value="New Arrivals Campaign"/>
+            <column name="provider_template_name" value="new_arrivals_campaign"/>
+            <column name="category" value="MARKETING"/>
+            <column name="language_code" value="en"/>
+            <column name="body_preview" value="Hi {{1}}, new floral collections are now available at Blossom Buds. Explore our latest designs here: {{2}}"/>
+            <column name="variable_count" valueNumeric="2"/>
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+            <column name="created_at" valueDate="NOW()"/>
+            <column name="modified_by" value="liquibase"/>
+            <column name="modified_at" valueDate="NOW()"/>
+        </insert>
+        <rollback>
+            <delete tableName="whatsapp_templates">
+                <where>provider_template_name = 'new_arrivals_campaign' AND language_code = 'en'</where>
+            </delete>
+        </rollback>
+    </changeSet>
+
+    <!-- Seed WhatsApp template: Order Dispatched -->
+    <changeSet id="0033-11-seed-template-order-dispatched" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM whatsapp_templates
+                WHERE provider_template_name = 'order_dispatched'
+                AND language_code = 'en'
+            </sqlCheck>
+        </preConditions>
+        <insert tableName="whatsapp_templates">
+            <column name="name" value="Order Dispatched"/>
+            <column name="provider_template_name" value="order_dispatched"/>
+            <column name="category" value="UTILITY"/>
+            <column name="language_code" value="en"/>
+            <column name="body_preview" value="Hi {{1}}, your Blossom Buds order {{2}} has been dispatched. Tracking number: {{3}}. Track your parcel here: {{4}}."/>
+            <column name="variable_count" valueNumeric="4"/>
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+            <column name="created_at" valueDate="NOW()"/>
+            <column name="modified_by" value="liquibase"/>
+            <column name="modified_at" valueDate="NOW()"/>
+        </insert>
+        <rollback>
+            <delete tableName="whatsapp_templates">
+                <where>provider_template_name = 'order_dispatched' AND language_code = 'en'</where>
+            </delete>
+        </rollback>
+    </changeSet>
+
+    <!-- Seed WhatsApp template: Payment Pending Reminder -->
+    <changeSet id="0033-12-seed-template-payment-pending-reminder" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM whatsapp_templates
+                WHERE provider_template_name = 'payment_pending_reminder'
+                AND language_code = 'en'
+            </sqlCheck>
+        </preConditions>
+        <insert tableName="whatsapp_templates">
+            <column name="name" value="Payment Pending Reminder"/>
+            <column name="provider_template_name" value="payment_pending_reminder"/>
+            <column name="category" value="UTILITY"/>
+            <column name="language_code" value="en"/>
+            <column name="body_preview" value="Hi {{1}}, your Blossom Buds payment for order {{2}} is still pending. You can complete your payment securely here: {{3}}. If you already paid, please ignore this message."/>
+            <column name="variable_count" valueNumeric="3"/>
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+            <column name="created_at" valueDate="NOW()"/>
+            <column name="modified_by" value="liquibase"/>
+            <column name="modified_at" valueDate="NOW()"/>
+        </insert>
+        <rollback>
+            <delete tableName="whatsapp_templates">
+                <where>provider_template_name = 'payment_pending_reminder' AND language_code = 'en'</where>
+            </delete>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

@@ -18,7 +18,24 @@ function IconReviews(){ return (<svg width="20" height="20" viewBox="0 0 24 24" 
 function IconSettings(){ return (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0A1.65 1.65 0 0 0 9 3.09V3a2 2 0 1 1 4 0v.09c0 .66.39 1.26 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0c.25.61.85 1 1.51 1H21a2 2 0 1 1 0 4h-.09c-.66 0-1.26.39-1.51 1z"/></svg>); }
 function IconUsers(){ return (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>); }
 function IconLogout(){ return (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>); }
-
+function IconWhatsApp() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M21 11.5a8.38 8.38 0 0 1-1.23 4.38A8.5 8.5 0 0 1 12.5 20a8.38 8.38 0 0 1-4.38-1.23L3 20l1.23-5.12A8.38 8.38 0 0 1 3 10.5 8.5 8.5 0 0 1 11.5 2h1A8.5 8.5 0 0 1 21 10.5v1z" />
+      <path d="M9 8.5c.3 2.1 1.9 4 4.5 5.5" />
+      <path d="M14 14l1.5-1.5" />
+    </svg>
+  );
+}
 export default function AdminLayout() {
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -26,13 +43,14 @@ export default function AdminLayout() {
   const nav = useNavigate();
 
   const items: Item[] = [
-    { to: "/admin",            label: "Analytics",  icon: <IconAnalytics/> },
-    { to: "/admin/products",   label: "Products",   icon: <IconBox/> },
-    { to: "/admin/categories", label: "Categories", icon: <IconTags/> },
-    { to: "/admin/orders",     label: "Orders",     icon: <IconOrders/> },
-    { to: "/admin/reviews",    label: "Reviews",    icon: <IconReviews/> },
-    { to: "/admin/settings",   label: "Settings",   icon: <IconSettings/> },
-    { to: "/admin/customers",  label: "Customers",  icon: <IconUsers/> },
+    { to: "/admin",            label: "Analytics",    icon: <IconAnalytics/> },
+    { to: "/admin/products",   label: "Products",     icon: <IconBox/> },
+    { to: "/admin/categories", label: "Categories",   icon: <IconTags/> },
+    { to: "/admin/orders",     label: "Orders",       icon: <IconOrders/> },
+    { to: "/admin/reviews",    label: "Reviews",      icon: <IconReviews/> },
+    { to: "/admin/customers",  label: "Customers",    icon: <IconUsers/> },
+    { to: "/admin/whatsapp",   label: "WhatsApp CRM", icon: <IconWhatsApp/> },
+    { to: "/admin/settings",   label: "Settings",     icon: <IconSettings/> },
   ];
 
   return (
