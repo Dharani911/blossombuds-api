@@ -392,7 +392,7 @@
         <addForeignKeyConstraint
                 baseTableName="payment_reminders"
                 baseColumnNames="checkout_intent_id"
-                referencedTableName="checkout_intents"
+                referencedTableName="checkout_intent"
                 referencedColumnNames="id"
                 constraintName="fk_payment_reminders_checkout_intent"/>
 
