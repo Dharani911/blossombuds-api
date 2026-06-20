@@ -28,6 +28,7 @@ import {
   updateAddress as apiUpdateAddress,
   setDefaultAddress as apiSetDefaultAddress,
   deleteAddress as apiDeleteAddress,
+  saveCommunicationPreference,
   type Address as AddrModel,
 } from "../api/customers";
 
@@ -188,7 +189,7 @@ function showOrderSuccessPopup(orderId?: number | string) {
     : "Your order is confirmed. Please check your email.";
   showCheckoutPopup({
     title: "Payment received 🎉",
-    message: "We’re confirming your order now. You’ll receive a confirmation shortly.",
+    message: msg,
   });
 }
 
@@ -254,7 +255,9 @@ const css = `
 .addr .meta .lines{ font-size:13px; opacity:.9; }
 .addr .btns{ display:flex; gap:8px; }
 .ghost{ height:32px; padding:0 10px; border-radius:10px; border:1px solid var(--ink); background:#fff; cursor:pointer; }
+.ghost:focus-visible{ outline:3px solid var(--gold); outline-offset:2px; }
 .link{ color: var(--accent); font-weight:800; background:transparent; border:none; cursor:pointer; }
+.link:focus-visible{ outline:3px solid var(--accent); outline-offset:2px; border-radius:4px; }
 .badge{ font-size:11px; font-weight:800; padding:2px 8px; border-radius:999px; background: rgba(246,195,32,.22); }
 .small{ font-size:12px; opacity:.75; }
 
@@ -262,6 +265,15 @@ const css = `
 .sum-inner{ position:sticky; top:16px; padding:12px; display:grid; gap:10px; }
 .row-sum{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .total{ font-size:20px; font-weight:900; }
+.items-wrap{ position:relative; }
+.items-wrap::after{
+  content:"";
+  position:absolute;
+  bottom:0; left:0; right:0;
+  height:28px;
+  background:linear-gradient(to bottom, transparent, rgba(255,255,255,.9));
+  pointer-events:none;
+}
 .items{
   display:grid;
   gap:10px;
@@ -462,6 +474,9 @@ export default function CheckoutPage() {
   const nav = useNavigate();
   const location = useLocation();
   const { items, total, clear, refresh } = useCart();
+  // Ref always tracks the latest items so async handlers don't close over a stale snapshot
+  const itemsRef = useRef(items);
+  useEffect(() => { itemsRef.current = items; }, [items]);
   const [checkingCart, setCheckingCart] = useState(false);
   const { number: waNumber } = useWhatsAppNumber();
 
@@ -522,6 +537,8 @@ useEffect(() => {
 
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [waOptIn, setWaOptIn] = useState(false);
+  const [smsOptIn, setSmsOptIn] = useState(false);
 
   const itemsSubtotalBeforeDiscount = useMemo(() => {
     return (items || []).reduce((sum, it: any) => {
@@ -572,6 +589,9 @@ useEffect(() => {
   // Load initial: countries, states/districts, partners, addresses
   useEffect(() => {
     let alive = true;
+    // Hoisted so the inner label-lookup IIFE can close over the freshly resolved value
+    // rather than reading the stale INDIA_ID state (which is still 0 until setINDIA_ID resolves).
+    let resolvedIndiaId = Number(import.meta.env.VITE_COUNTRY_ID_INDIA) || 0;
     (async () => {
       try {
         const cs = await getCountries().catch(() => [] as Country[]);
@@ -584,11 +604,8 @@ useEffect(() => {
         setCountryMap(cmap);
 
         // Resolve INDIA_ID:
-        // 1) environment override (preferred)
-        const envIndiaId = Number(import.meta.env.VITE_COUNTRY_ID_INDIA) || 0;
-
+        // 1) environment override (preferred — already set above)
         // 2) find by common names if env not provided
-        let resolvedIndiaId = envIndiaId;
         if (!resolvedIndiaId) {
           const india = (cs || []).find(c => /\b(India|Bharat)\b/i.test(c?.name || ""));
           if (india?.id) resolvedIndiaId = india.id;
@@ -597,10 +614,10 @@ useEffect(() => {
         if (resolvedIndiaId) setINDIA_ID(resolvedIndiaId);
       } catch {/* ignore */ }
 
-      // label lookups
+      // label lookups — uses resolvedIndiaId (not the stale INDIA_ID state)
       (async () => {
         try {
-          const sid = (Number(import.meta.env.VITE_COUNTRY_ID_INDIA) || INDIA_ID || 0);
+          const sid = resolvedIndiaId || 0;
           const [states, allDists] = await Promise.all([
             sid ? getStatesByCountry(sid).catch(() => [] as State[]) : Promise.resolve([] as State[]),
             getAllDistricts().catch(() => [] as District[]),
@@ -783,7 +800,7 @@ useEffect(() => {
       } finally {
         setCheckingCart(false);
       }
-        if ((items as any[]).some(it => it?.unavailable === true || it?.inStock === false)) {
+        if ((itemsRef.current as any[]).some(it => it?.unavailable === true || it?.inStock === false)) {
           setErr("Some items are out of stock. Please remove them from cart to continue.");
           return;
         }
@@ -888,7 +905,7 @@ const grandTotal = useMemo(() => {
       } finally {
         setCheckingCart(false);
       }
-    if ((items as any[]).some(it => it?.unavailable === true || it?.inStock === false)) {
+    if ((itemsRef.current as any[]).some(it => it?.unavailable === true || it?.inStock === false)) {
       setErr("Some items are out of stock. Please remove them from cart to continue.");
       return;
     }
@@ -952,6 +969,16 @@ const grandTotal = useMemo(() => {
       }
       const rzpOrder = resp.razorpayOrder; // { id, amount, currency, ... }
       const internalOrderId = (resp as any).orderId || (rzpOrder.notes?.orderId ? Number(rzpOrder.notes.orderId) : undefined);
+
+      // Always persist the user's opt-in/opt-out choice so explicit unchecks are saved too
+      if (user?.id && selectedAddress.phone) {
+        saveCommunicationPreference(Number(user.id), {
+          phone: selectedAddress.phone,
+          whatsappOptedIn: waOptIn,
+          smsOptedIn: smsOptIn,
+          source: "CHECKOUT",
+        }).catch(() => {});
+      }
 
       // 4) Ensure Razorpay script is loaded
       const ok = await loadRazorpay();
@@ -1056,9 +1083,7 @@ const grandTotal = useMemo(() => {
   const [naLine2, setNaLine2] = useState("");
   const [naPincode, setNaPincode] = useState("");
   const [naStateId, setNaStateId] = useState<number | "">("");
-  const [naDistrictId, setNaDistrictId] = useState<number | null>(
-    editAddr ? editAddr.districtId ?? null : null
-  );
+  const [naDistrictId, setNaDistrictId] = useState<number | null>(null);
   const [naCountryId, setNaCountryId] = useState<number | "">("");
   const [naMakeDefault, setNaMakeDefault] = useState(true);
   const [naBusy, setNaBusy] = useState(false);
@@ -1079,7 +1104,7 @@ const grandTotal = useMemo(() => {
     setNaLine2("");
     setNaPincode("");
     setNaStateId("");
-    setNaDistrictId("");
+    setNaDistrictId(null);
     setNaCountryId(ctx === "domestic" ? (INDIA_ID || "") : ""); // domestic defaults to India
     setNaMakeDefault(true);
     setNaErr(null);
@@ -1138,7 +1163,7 @@ const grandTotal = useMemo(() => {
         if (!live) return;
         setModalDistricts(d || []);
         if (!editAddr || editAddr.stateId !== naStateId) {
-          setNaDistrictId("");
+          setNaDistrictId(null);
         }
 
       } finally {
@@ -1157,7 +1182,7 @@ const grandTotal = useMemo(() => {
     setNaLine2(editAddr.line2 || "");
     setNaPincode(editAddr.pincode || "");
     setNaStateId(editAddr.stateId ?? "");
-    setNaDistrictId(editAddr.districtId ?? "");
+    setNaDistrictId(editAddr.districtId != null ? editAddr.districtId : null);
     setNaCountryId(editAddr.countryId ?? "");
     setNaMakeDefault(!!editAddr.isDefault);
     setNaErr(null);
@@ -1546,6 +1571,7 @@ const grandTotal = useMemo(() => {
         <aside className="card sum">
           <div className="section-head">Order Summary</div>
           <div className="sum-inner">
+            <div className="items-wrap">
             <div className="items">
               {items.map(it => {
               const isBad = (it as any)?.unavailable === true || (it as any)?.inStock === false;
@@ -1576,6 +1602,7 @@ const grandTotal = useMemo(() => {
                   <div className="line">{inr(it.price * it.qty)}</div>
                 </div>);
               })}
+            </div>
             </div>
 
            <div className="row-sum">
@@ -1641,6 +1668,34 @@ const grandTotal = useMemo(() => {
                   {500 - (orderNotes?.length || 0)} characters left
                 </div>
               </div>)}
+            {!international && user?.id && (
+              <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 6 }}>
+                <div className="small" style={{ fontWeight: 700, opacity: 0.7 }}>Stay in the loop:</div>
+                <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={waOptIn}
+                    onChange={e => setWaOptIn(e.target.checked)}
+                    style={{ marginTop: 3, accentColor: "#F05D8B", flexShrink: 0 }}
+                  />
+                  <span className="small" style={{ lineHeight: 1.4 }}>
+                    Get offers and festive deals on <strong>WhatsApp</strong>
+                  </span>
+                </label>
+                <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={smsOptIn}
+                    onChange={e => setSmsOptIn(e.target.checked)}
+                    style={{ marginTop: 3, accentColor: "#F05D8B", flexShrink: 0 }}
+                  />
+                  <span className="small" style={{ lineHeight: 1.4 }}>
+                    Get offers and festive deals via <strong>SMS</strong>
+                  </span>
+                </label>
+              </div>
+            )}
+
             {hasUnavailableItems && (
               <div className="small" style={{ color: "#b0003a", fontWeight: 900 }}>
                 Some items are out of stock. Please remove them from cart to continue.
@@ -1840,7 +1895,7 @@ const grandTotal = useMemo(() => {
                       <select
                         className="sel"
                         value={naStateId}
-                        onChange={(e) => { const v = e.target.value ? Number(e.target.value) : ""; setNaStateId(v); setNaDistrictId(""); }}
+                        onChange={(e) => { const v = e.target.value ? Number(e.target.value) : ""; setNaStateId(v); setNaDistrictId(null); }}
                       >
                         <option value="">Select state…</option>
                         {modalStates.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -1850,8 +1905,8 @@ const grandTotal = useMemo(() => {
                       <div className="lbl">District *</div>
                       <select
                         className="sel"
-                        value={naDistrictId}
-                        onChange={(e) => setNaDistrictId(e.target.value ? Number(e.target.value) : "")}
+                        value={naDistrictId ?? ""}
+                        onChange={(e) => setNaDistrictId(e.target.value ? Number(e.target.value) : null)}
                         disabled={typeof naStateId !== "number" || loadingDistricts}
                       >
                         <option value="">{loadingDistricts ? "Loading…" : "Select district…"}</option>
@@ -1878,12 +1933,10 @@ const grandTotal = useMemo(() => {
                   </select>
                 </div>
               )}
-              {editAddr && (
-                <label className="checkbox-line">
-                  <input type="checkbox" checked={naMakeDefault} onChange={e => setNaMakeDefault(e.target.checked)} />
-                  <span>Make this my default {modalContext === "intl" ? "international" : "shipping"} address</span>
-                </label>
-              )}
+              <label className="checkbox-line">
+                <input type="checkbox" checked={naMakeDefault} onChange={e => setNaMakeDefault(e.target.checked)} />
+                <span>Make this my default {modalContext === "intl" ? "international" : "shipping"} address</span>
+              </label>
             </div>
 
             <div className="sheet-ft">

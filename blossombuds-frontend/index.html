@@ -18,9 +18,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#FAF7E7" />
 
-  <!-- heic/heif (as you had) -->
-  <script src="https://cdn.jsdelivr.net/npm/heic2any/dist/heic2any.min.js"></script>
-  <script src="/vendor/libheif/libheif.js"></script>
+  <!-- heic/heif — deferred so they never block initial page paint -->
+  <script defer src="https://cdn.jsdelivr.net/npm/heic2any/dist/heic2any.min.js"></script>
+  <script defer src="/vendor/libheif/libheif.js"></script>
 
   <!-- cropper (as you had) -->
   <link rel="stylesheet" href="https://unpkg.com/cropperjs@1.6.2/dist/cropper.css">
@@ -40,7 +40,22 @@
 </head>
 
 <body>
-  <div id="root"></div>
+  <div id="root">
+    <!-- Inline loading state — visible until React mounts and replaces it -->
+    <div id="bb-init-loader" style="
+      position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;
+      justify-content:center;background:#FAF7E7;gap:18px;z-index:9999;
+    ">
+      <img src="/BB_logo.png" alt="Blossom Buds" width="72" height="72"
+        style="border-radius:50%;box-shadow:0 8px 24px rgba(0,0,0,.12);" />
+      <div style="
+        width:40px;height:40px;border-radius:50%;
+        border:4px solid #f0d8c0;border-top-color:#F05D8B;
+        animation:bbspin .8s linear infinite;
+      "></div>
+      <style>@keyframes bbspin{to{transform:rotate(360deg)}}</style>
+    </div>
+  </div>
   <script type="module" src="/src/main.tsx"></script>
 </body>
 

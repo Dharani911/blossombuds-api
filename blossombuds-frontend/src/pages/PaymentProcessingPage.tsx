@@ -90,6 +90,13 @@ async function verifyWithRetry(payload: {
 
         window.addEventListener("beforeunload", handleBeforeUnload);
 
+        // Abort and show error if verification takes longer than 60 s
+        const timeoutId = setTimeout(() => {
+          setError("Verification is taking longer than expected. Please contact support with your payment details.");
+          setProcessing(false);
+          window.removeEventListener("beforeunload", handleBeforeUnload);
+        }, 60_000);
+
         // Verify payment and create order
         (async () => {
             try {
@@ -99,6 +106,7 @@ async function verifyWithRetry(payload: {
                   razorpaySignature,
                   currency,
                 });
+                clearTimeout(timeoutId);
 
                 // ✅ show success UI state
                 setError(null);
@@ -119,6 +127,7 @@ async function verifyWithRetry(payload: {
                 }, 2000);
 
             } catch (e: any) {
+                clearTimeout(timeoutId);
                 console.error("Payment verification failed:", e);
                 setError(
                     e?.response?.data?.message ||
@@ -130,6 +139,7 @@ async function verifyWithRetry(payload: {
         })();
 
         return () => {
+            clearTimeout(timeoutId);
             window.removeEventListener("beforeunload", handleBeforeUnload);
         };
     }, [searchParams, navigate, clear]);
@@ -153,13 +163,13 @@ async function verifyWithRetry(payload: {
     return (
         <div style={styles.container}>
             <style>{css}</style>
-            <div style={styles.card}>
+            <div className="pp-card" style={styles.card}>
                 {processing ? (
                     <>
                         <div style={styles.spinner}>
                             <div style={styles.spinnerCircle}></div>
                         </div>
-                        <h1 style={styles.title}>Processing Your Payment</h1>
+                        <h1 className="pp-title" style={styles.title}>Processing Your Payment</h1>
                         <div style={styles.warningBox}>
                             <svg
                                 style={styles.warningIcon}
@@ -197,7 +207,7 @@ async function verifyWithRetry(payload: {
                         </div>
                         <h1 style={styles.errorTitle}>Order Creation Failed</h1>
                         <p style={styles.errorMessage}>{error}</p>
-                        <button style={styles.button} onClick={() => navigate("/")}>
+                        <button className="pp-return-btn" style={styles.button} onClick={() => navigate("/")}>
                             Return Home
                         </button>
                     </>
@@ -340,15 +350,18 @@ const styles: Record<string, React.CSSProperties> = {
 
 const css = `
 @keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
-
-button:hover {
+.pp-return-btn:hover {
   background-color: #e04c78 !important;
+}
+.pp-return-btn:focus-visible {
+  outline: 3px solid #f05d8b;
+  outline-offset: 2px;
+}
+@media (max-width: 480px) {
+  .pp-card { padding: 2rem 1.25rem !important; }
+  .pp-title { font-size: 1.5rem !important; }
 }
 `;

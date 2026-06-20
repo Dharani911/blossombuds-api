@@ -25,6 +25,7 @@ import ForgotPasswordPage from "../pages/ForgotPasswordPage";
 import ResetPasswordPage from "../pages/ResetPasswordPage";
 import ContactPage from "../pages/ContactPage";
 import OAuth2RedirectHandler from "../components/auth/OAuth2RedirectHandler";
+import NotFoundPage from "../pages/NotFoundPage";
 
 
 
@@ -75,11 +76,11 @@ export default function AppRoutes() {
           <Route path="/verify-email" element={<VerifyPage />} />
           <Route path="/oauth2/redirect" element={<OAuth2RedirectHandler />} />
 
-          {/* If user directly visits /login or /register (no background), send them home */}
-          <Route path="/login" element={<Navigate to="/" replace />} />
-          <Route path="/register" element={<Navigate to="/" replace />} />
+          {/* Render login/register as full pages on direct visits; as modals when background state is set */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
 
-          <Route path="*" element={<div style={{ padding: 24 }}>Not found</div>} />
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
         {/* ---------- Admin routes (not modal) ---------- */}
         <Route path="/admin/login" element={<AdminLoginPage />} />

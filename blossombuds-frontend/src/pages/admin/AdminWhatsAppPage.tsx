@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import "./AdminWhatsAppPage.css";
 import {
 createManualWhatsAppPreference,
@@ -33,6 +33,8 @@ const [integrationStatus, setIntegrationStatus] = useState<WhatsAppIntegrationSt
   const [recipientPhone, setRecipientPhone] = useState("");
 
   const [link, setLink] = useState("https://www.blossom-buds-floral-artistry.com/categories");
+  const [offerText, setOfferText] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
   const [orderCode, setOrderCode] = useState("");
   const [trackingNumber, setTrackingNumber] = useState("");
   const [trackingLink, setTrackingLink] = useState(
@@ -62,7 +64,10 @@ const [preferenceCustomerId, setPreferenceCustomerId] = useState("");
 
   const providerTemplateName = selectedTemplate?.providerTemplateName || "";
 
-  /** Loads templates and campaigns for the WhatsApp CRM page. */
+  // Ref always points to the current templateId so loadData never closes over a stale value.
+  const templateIdRef = React.useRef<number | "">(templateId);
+  React.useEffect(() => { templateIdRef.current = templateId; }, [templateId]);
+
   /** Loads templates, campaigns, settings status, and opted-in contacts safely. */
   async function loadData() {
     const [templateResult, campaignResult, statusResult, preferenceResult] =
@@ -74,10 +79,16 @@ const [preferenceCustomerId, setPreferenceCustomerId] = useState("");
       ]);
 
     if (templateResult.status === "fulfilled") {
-      setTemplates(templateResult.value);
 
-      if (!templateId && templateResult.value.length > 0) {
-        setTemplateId(templateResult.value[0].id);
+      const marketingTemplates = templateResult.value.filter(
+        (template) => template.category === "MARKETING"
+      );
+
+      setTemplates(marketingTemplates);
+
+      // Use ref to always see the latest templateId — avoids resetting user selection on refresh
+      if (!templateIdRef.current && marketingTemplates.length > 0) {
+        setTemplateId(marketingTemplates[0].id);
       }
     }
 
@@ -136,6 +147,8 @@ const [preferenceCustomerId, setPreferenceCustomerId] = useState("");
       templateId: Number(templateId),
       audienceType,
       link,
+      offerText,
+      imageUrl: imageUrl.trim() || undefined,
       orderCode,
       trackingNumber,
       trackingLink,
@@ -167,8 +180,12 @@ const [preferenceCustomerId, setPreferenceCustomerId] = useState("");
 
   /** Sends a WhatsApp campaign using dry-run or real mode based on backend settings. */
   async function handleSendCampaign(campaignId: number) {
+    const campaign = campaigns.find((c) => c.id === campaignId);
+    const recipientCount = campaign?.totalRecipients ?? "?";
+    const isLive = integrationStatus?.cloudEnabled === true;
+    const modeLabel = isLive ? "LIVE MODE — real WhatsApp messages WILL be sent" : "dry-run mode — no real messages will be sent";
     const confirmed = window.confirm(
-      "Send this campaign now? In dry-run mode no real WhatsApp message will be sent."
+      `Send this campaign to ${recipientCount} recipient(s)?\n\n⚠️  ${modeLabel}.`
     );
 
     if (!confirmed) return;
@@ -244,9 +261,9 @@ async function handleDisablePreference(id: number) {
           <div className="whatsapp-hero-row">
             <div>
               <div className="whatsapp-kicker">WhatsApp Business CRM</div>
-              <h1 className="whatsapp-title">WhatsApp campaigns made simple</h1>
+              <h1 className="whatsapp-title">WhatsApp Marketing Campaigns</h1>
               <p className="whatsapp-subtitle">
-                Create approved template campaigns, test manual recipients safely, and track delivery status from one clean admin workspace.
+                Create and send approved marketing campaigns to opted-in customers. Order and payment updates are handled automatically.
               </p>
             </div>
 
@@ -262,12 +279,12 @@ async function handleDisablePreference(id: number) {
               <button
                 className={
                   integrationStatus?.cloudEnabled
-                    ? "whatsapp-btn whatsapp-btn-primary"
-                    : "whatsapp-btn whatsapp-btn-primary"
+                    ? "whatsapp-btn whatsapp-btn-danger"
+                    : "whatsapp-btn whatsapp-btn-light"
                 }
                 disabled
               >
-                {integrationStatus?.cloudEnabled ? "Live Mode" : "Dry-run Mode"}
+                {integrationStatus?.cloudEnabled ? "🔴 Live Mode" : "🧪 Dry-run Mode"}
               </button>
             </div>
           </div>
@@ -384,7 +401,8 @@ async function handleDisablePreference(id: number) {
               )}
 
               <div className="whatsapp-section-box">
-                {providerTemplateName === "new_arrivals_campaign" && (
+                {(providerTemplateName === "new_arrivals_campaign" ||
+                  providerTemplateName === "festival_offers") && (
                   <Field label="Marketing link">
                     <input
                       className="whatsapp-input"
@@ -394,56 +412,27 @@ async function handleDisablePreference(id: number) {
                   </Field>
                 )}
 
-                {providerTemplateName === "order_dispatched" && (
-                  <div className="whatsapp-form-grid">
-                    <Field label="Order code">
+                {providerTemplateName === "festival_offers" && (
+                  <>
+                    <Field label="Offer / discount text">
                       <input
                         className="whatsapp-input"
-                        placeholder="BB260001"
-                        value={orderCode}
-                        onChange={(e) => setOrderCode(e.target.value)}
+                        placeholder="e.g. 20% off, Flat ₹200 off"
+                        value={offerText}
+                        onChange={(e) => setOfferText(e.target.value)}
                       />
                     </Field>
-
-                    <Field label="Tracking number">
+                    <Field label="Header image URL">
                       <input
                         className="whatsapp-input"
-                        placeholder="AWB123456789"
-                        value={trackingNumber}
-                        onChange={(e) => setTrackingNumber(e.target.value)}
+                        placeholder="https://your-cdn.com/banner.jpg"
+                        value={imageUrl}
+                        onChange={(e) => setImageUrl(e.target.value)}
                       />
                     </Field>
-
-                    <Field label="Tracking link">
-                      <input
-                        className="whatsapp-input"
-                        value={trackingLink}
-                        onChange={(e) => setTrackingLink(e.target.value)}
-                      />
-                    </Field>
-                  </div>
+                  </>
                 )}
 
-                {providerTemplateName === "payment_pending_reminder" && (
-                  <div className="whatsapp-form-grid">
-                    <Field label="Order code">
-                      <input
-                        className="whatsapp-input"
-                        placeholder="BB260001"
-                        value={orderCode}
-                        onChange={(e) => setOrderCode(e.target.value)}
-                      />
-                    </Field>
-
-                    <Field label="Payment link">
-                      <input
-                        className="whatsapp-input"
-                        value={paymentLink}
-                        onChange={(e) => setPaymentLink(e.target.value)}
-                      />
-                    </Field>
-                  </div>
-                )}
 
                 {!providerTemplateName && (
                   <p className="whatsapp-card-subtitle">Select a template to see variables.</p>
@@ -581,7 +570,8 @@ async function handleDisablePreference(id: number) {
                               </button>
                               <button
                                 className="whatsapp-btn whatsapp-btn-primary"
-                                disabled={loading || campaign.status === "COMPLETED"}
+                                disabled={loading || campaign.status === "COMPLETED" || campaign.status === "FAILED" || campaign.status === "SENT"}
+                                title={campaign.status === "FAILED" ? "Campaign failed — create a new one to retry" : undefined}
                                 onClick={() => handleSendCampaign(campaign.id)}
                               >
                                 Send

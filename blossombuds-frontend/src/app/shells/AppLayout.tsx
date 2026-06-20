@@ -44,7 +44,7 @@ export default function AppLayout() {
       {/* Global toast mount (no logic; safe place for 2–3s toasts) */}
       <div id="bb-toaster-root" aria-live="polite" aria-atomic="true"></div>
 
-     {/*  <style>{css}</style> */}
+      <style>{css}</style>
     </div>
   );
 }
@@ -65,6 +65,7 @@ const css = `
   width: 100%;                 /* ✅ ensure root can’t exceed viewport */
   overflow-x: hidden;          /* ✅ hard-stop horizontal leaks */
   display: grid;
+  grid-template-columns: minmax(0, 1fr);       /* constrain column to viewport width */
   grid-template-rows: auto auto auto 1fr auto; /* TopBanner, Header, VerifyBanner, main, footer */
 }
 
@@ -141,8 +142,8 @@ const css = `
 }
 .whatsapp-fab {
   position: fixed;
-  right: 16px;
-  bottom: 24px;
+  right: max(16px, env(safe-area-inset-right, 0px));
+  bottom: max(24px, env(safe-area-inset-bottom, 0px));
   width: 48px;
   height: 48px;
   display: flex;
@@ -160,10 +161,10 @@ const css = `
 }
 .scroll-top-btn {
   position: fixed;
-  right: 16px;
+  right: max(16px, env(safe-area-inset-right, 0px));
   width: 48px;
   height: 48px;
-  bottom: 72px; /* 24 (WhatsApp bottom) + 24 (WhatsApp half height) */
+  bottom: max(72px, calc(env(safe-area-inset-bottom, 0px) + 72px));
   background: var(--bb-accent);
   color: white;
   border: none;
@@ -172,7 +173,7 @@ const css = `
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 999;                          /* ← change this */
+  z-index: 999;
   transition: background 0.2s ease, transform 0.2s ease;
 }
 
@@ -190,7 +191,7 @@ const css = `
 @media (min-width: 768px) {
   .whatsapp-fab,
   .scroll-top-btn {
-    right: 24px !important;
+    right: max(24px, env(safe-area-inset-right, 0px)) !important;
     width: 56px !important;
     height: 56px !important;
     border-radius: 50% !important;
@@ -201,14 +202,13 @@ const css = `
   }
 
   .whatsapp-fab {
-    bottom: 28px !important;
+    bottom: max(28px, env(safe-area-inset-bottom, 0px)) !important;
   }
 
   .scroll-top-btn {
-    bottom: calc(28px + 56px + 10px) !important;
+    bottom: max(calc(28px + 56px + 10px), calc(env(safe-area-inset-bottom, 0px) + 94px)) !important;
     font-size: 22px !important;
     line-height: 1 !important;
-    /* remove margin:2 px; */
   }
 
   /* ensure icons are properly centered */

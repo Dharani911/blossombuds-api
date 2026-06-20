@@ -33,7 +33,7 @@ export function ToastHost({ items }: { items: Toast[] }) {
 }
 
 const styles = `
-.toasts{ position: fixed; z-index: 999; right: 16px; bottom: 16px; display:grid; gap: 8px; }
+.toasts{ position: fixed; z-index: 999; right: 16px; bottom: 16px; max-width: min(340px, calc(100vw - 32px)); display:grid; gap: 8px; }
 .toast{ padding: 10px 12px; border-radius: 12px; background:#fff; border:1px solid rgba(0,0,0,.08);
   box-shadow: 0 18px 40px rgba(0,0,0,.18); font-weight: 800; color: var(--bb-primary);
   animation: toastIn .18s ease both; }

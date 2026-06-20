@@ -1,7 +1,6 @@
 // src/api/reviewUploads.ts
 import adminHttp from "./adminHttp"; // or your public/authed axios; requires user JWT
 import { apiUrl } from "./base";
-import { isHeicLike } from "../utils/imageValidations";
 export type PresignResponse = {
   key: string;         // e.g. uploads/tmp/uuid/file.heic
   url: string;         // presigned PUT url (10 min)
@@ -20,9 +19,6 @@ export async function presignReviewUpload(
   contentType: string,
   authToken: string
 ) {
-if (isHeicLike(filename, contentType)) {
-    throw new Error("HEIC/HEIF images are not supported. Please upload JPG, PNG or WebP.");
-  }
   const res = await fetch(apiUrl(`/api/reviews/images/presign`), {
     method: "POST",
     headers: {

@@ -1,4 +1,4 @@
-// src/pages/ShopCategoriesPage.tsx
+﻿// src/pages/ShopCategoriesPage.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import Seo from "../components/Seo";
@@ -6,10 +6,9 @@ import ProductQuickView from "../components/ProductQuickView";
 import {
   getCategories,
   getCategory,
-  listChildCategories,
   listProductsByCategory,
   listProductImages,
-  listProductsPage, // ✅ NEW: for “All Products” landing
+  listProductsPage,
   type Category,
   type Product,
   type PageResp,
@@ -147,11 +146,12 @@ export default function ShopCategoriesPage() {
   const { id } = useParams();
   const nav = useNavigate();
 
-  // ✅ NEW: allow /categories/all (or no id) to mean “All Products”
+  // ✅ NEW: allow /categories/all (or no id) to mean "All Products"
   const allMode = !id || id === "all";
  const [cats, setCats] = useState<Category[]>([]);
   const [loadingCats, setLoadingCats] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [productErr, setProductErr] = useState<string | null>(null);
   const selectedParentId = useMemo(() => {
     if (allMode) return undefined;
     const n = Number(id);
@@ -264,7 +264,7 @@ useEffect(() => {
   return () => mq.removeEventListener?.("change", onChange);
 }, []);
 
-  // load all categories once
+  // load all categories once, with one silent auto-retry after 3 s
   useEffect(() => {
     let live = true;
     (async () => {
@@ -274,9 +274,19 @@ useEffect(() => {
         const all = await getCategories();
         if (!live) return;
         setCats(all || []);
-      } catch (e: any) {
+      } catch {
         if (!live) return;
-        setErr(e?.response?.data?.message || "Could not load categories.");
+        // auto-retry once after 3 s before showing error
+        await new Promise((r) => setTimeout(r, 3000));
+        if (!live) return;
+        try {
+          const all = await getCategories();
+          if (!live) return;
+          setCats(all || []);
+        } catch (e2: any) {
+          if (!live) return;
+          setErr(e2?.response?.data?.message || "Could not load categories.");
+        }
       } finally {
         if (live) setLoadingCats(false);
       }
@@ -301,9 +311,9 @@ useEffect(() => {
     setQvId(null);
   }
 }, [location.search]);
-  // ✅ NEW: default landing should show ALL products
+  // Redirect bare /categories → /categories/all; only fires when id is absent (not already "all")
   useEffect(() => {
-    if (!loadingCats && allMode && id !== "all") {
+    if (!loadingCats && allMode && !id) {
       nav(`/categories/all`, { replace: true });
     }
   }, [allMode, id, loadingCats, nav]);
@@ -336,20 +346,19 @@ useEffect(() => {
   }, [selectedParentId, cats]);
 
   // helpers
-  const loadChildren = useCallback(async (catId: number): Promise<Category[]> => {
-    const kids = await listChildCategories(catId);
-    const sorted = (kids || [])
-      .filter((c) => c.active !== false)
+  // Synchronous — filters the already-fetched cats state, no extra API call
+  const loadChildren = useCallback((catId: number): Category[] => {
+    return (cats || [])
+      .filter((c) => Number(c.parentId) === Number(catId) && c.active !== false)
       .sort(
         (a, b) =>
           (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
           String(a.name || "").localeCompare(String(b.name || ""))
       );
-    return sorted;
-  }, []);
+  }, [cats]);
 
   const loadProducts = useCallback(async (catId: number): Promise<Product[]> => {
-    const page: PageResp<Product> = await listProductsByCategory(catId, 0, 200);
+    const page: PageResp<Product> = await listProductsByCategory(catId, 0, 40);
     let rows = (page?.content || []).filter((p: any) => {
       const v = p?.visible ?? p?.isVisible ?? null;
       const isVisible = v === true || v == null;
@@ -366,8 +375,10 @@ useEffect(() => {
       return String(a?.name || "").localeCompare(String(b?.name || ""));
     });
 
-      await Promise.all(
-      rows.map(async (p, i) => {
+    // Only fetch images for first 20 products to avoid flooding the backend
+    const toFetch = rows.slice(0, 20);
+    await Promise.all(
+      toFetch.map(async (p, i) => {
         if (!p.primaryImageUrl) {
           try {
             const imgs = await listProductImages(p.id);
@@ -389,17 +400,15 @@ useEffect(() => {
       if (!allMode) return;
 
       setLoadingAll(true);
+      setProductErr(null);
+      // Always start fresh — stale products from a previous session (including
+      // server-deleted items) must not persist across all-mode re-entries.
+      setAllProducts([]);
 
       try {
-        const size = 60;      // ✅ faster first response than 120
-        const maxPages = 20;  // ✅ still enough coverage
+        const size = 60;
+        const maxPages = 20;
         const seen = new Set<number>();
-
-        // keep already loaded items (if user navigates away/back)
-        setAllProducts((prev) => {
-          for (const p of prev) if (p?.id) seen.add(p.id);
-          return prev;
-        });
 
         for (let page = 0; page < maxPages; page++) {
           if (!live) return;
@@ -427,21 +436,26 @@ useEffect(() => {
             setAllProducts((prev) => [...prev, ...batch]);
           }
 
-          // ✅ 2) Backfill images AFTER paint (don’t block UI)
+          // ✅ 2) Backfill images AFTER paint — create new objects to avoid mutating state
           if (batch.length) {
             Promise.all(
               batch.map(async (p) => {
                 if (!p.primaryImageUrl) {
                   try {
                     const imgs = await listProductImages(p.id);
-                    if (imgs?.[0]?.url) p.primaryImageUrl = imgs[0].url as any;
+                    if (imgs?.[0]?.url) return { id: p.id, url: imgs[0].url as string };
                   } catch {}
                 }
+                return null;
               })
-            ).then(() => {
+            ).then((updates) => {
               if (!live) return;
-              // trigger rerender so images appear
-              setAllProducts((prev) => [...prev]);
+              const urlMap = new Map<number, string>();
+              for (const u of updates) if (u) urlMap.set(u.id, u.url);
+              if (!urlMap.size) return;
+              setAllProducts((prev) =>
+                prev.map((p) => urlMap.has(p.id) ? { ...p, primaryImageUrl: urlMap.get(p.id) as any } : p)
+              );
             });
           }
 
@@ -449,7 +463,21 @@ useEffect(() => {
           if (rows.length < size) break;
         }
       } catch {
-        // do not wipe existing products; just stop loading
+        if (!live) return;
+        // silent retry after 3 s
+        await new Promise((r) => setTimeout(r, 3000));
+        if (!live) return;
+        try {
+          const resp2 = await listProductsPage(0, 60);
+          const rows2 = (resp2?.content || []) as Product[];
+          const batch2 = rows2.filter((p: any) => {
+            const v = p?.visible ?? p?.isVisible ?? null;
+            return p?.active !== false && v !== false && p?.id;
+          });
+          if (live && batch2.length) setAllProducts(batch2 as Product[]);
+        } catch {
+          if (live) setProductErr("Could not load products. Check your connection and try again.");
+        }
       } finally {
         if (live) setLoadingAll(false);
       }
@@ -485,10 +513,9 @@ useEffect(() => {
       setOpenNode({ [selectedParentId]: true });
 
       try {
-        const [level1, rootProds] = await Promise.all([
-          loadChildren(selectedParentId),
-          loadProducts(selectedParentId),
-        ]);
+        // loadChildren is now sync (uses local cats state) — no await needed
+        const level1 = loadChildren(selectedParentId);
+        const rootProds = await loadProducts(selectedParentId);
         if (!live) return;
 
         setChildrenMap((prev) => ({ ...prev, [selectedParentId]: level1 }));
@@ -498,7 +525,8 @@ useEffect(() => {
           level1.map(async (c1) => {
             if (!live) return;
 
-            const [c1Prods, level2] = await Promise.all([loadProducts(c1.id), loadChildren(c1.id)]);
+            const level2 = loadChildren(c1.id); // sync
+            const c1Prods = await loadProducts(c1.id);
             if (!live) return;
 
             setProductsMap((prev) => ({ ...prev, [c1.id]: c1Prods }));
@@ -919,7 +947,7 @@ useEffect(() => {
                       {!allMode &&
                         categoryOptions.map((c) => (
                           <option key={c.id} value={c.id}>
-                            {c.id === selectedParentId ? `All in “${c.name}”` : c.name}
+                            {c.id === selectedParentId ? `All in "${c.name}"` : c.name}
                           </option>
                         ))}
                     </select>
@@ -974,7 +1002,29 @@ useEffect(() => {
             ))}
           </div>
 
-          {err && <div className="alert">{err}</div>}
+          {err && !allMode && (
+            <div className="alert" style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span>{err}</span>
+              <button
+                type="button"
+                style={{
+                  padding: "4px 12px", borderRadius: 8, border: "1px solid rgba(176,0,58,.3)",
+                  background: "#fff", cursor: "pointer", fontWeight: 900, fontSize: 12, color: "#b0003a",
+                  whiteSpace: "nowrap",
+                }}
+                onClick={() => {
+                  setErr(null);
+                  setLoadingCats(true);
+                  getCategories()
+                    .then((all) => setCats(all || []))
+                    .catch((e: any) => setErr(e?.response?.data?.message || "Could not load categories."))
+                    .finally(() => setLoadingCats(false));
+                }}
+              >
+                Retry
+              </button>
+            </div>
+          )}
 
           {allMode && (
             <>
@@ -1005,19 +1055,73 @@ useEffect(() => {
                     <SmallProductCard key={p.id} p={p} onOpen={openProduct} />
                   ))}
 
-                  {(loadingAll || loadingCats) &&
+                  {loadingAll &&
                     Array.from({ length: Math.max(6, 12 - filteredProducts.length) }).map((_, i) => (
                       <div className="sk-card" key={`sk-${i}`} />
                     ))}
                 </div>
               </section>
 
-              {!loadingAll && !loadingCats && filteredProducts.length === 0 && (
+              {productErr && !loadingAll && allProducts.length === 0 && (
+                <section className="card pad muted" style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span>{productErr}</span>
+                  <button
+                    type="button"
+                    style={{
+                      padding: "4px 12px", borderRadius: 8, border: "1px solid rgba(176,0,58,.3)",
+                      background: "#fff", cursor: "pointer", fontWeight: 900, fontSize: 12, color: "#b0003a",
+                      whiteSpace: "nowrap", flexShrink: 0,
+                    }}
+                    onClick={() => {
+                      setProductErr(null);
+                      setAllProducts([]);
+                      setLoadingAll(true);
+                      (async () => {
+                        const size = 60;
+                        const seen = new Set<number>();
+                        try {
+                          for (let page = 0; page < 20; page++) {
+                            const resp = await listProductsPage(page, size);
+                            const rows = (resp?.content || []) as Product[];
+                            if (!rows.length) break;
+                            const batch: Product[] = [];
+                            for (const p of rows as any[]) {
+                              const v = p?.visible ?? p?.isVisible ?? null;
+                              if ((p?.active === false) || (v === false)) continue;
+                              if (!p?.id || seen.has(p.id)) continue;
+                              seen.add(p.id);
+                              batch.push(p as Product);
+                            }
+                            if (batch.length) setAllProducts((prev) => [...prev, ...batch]);
+                            if (rows.length < size) break;
+                          }
+                        } catch {
+                          setProductErr("Could not load products. Check your connection and try again.");
+                        } finally {
+                          setLoadingAll(false);
+                        }
+                      })();
+                    }}
+                  >
+                    Retry
+                  </button>
+                </section>
+              )}
+              {!loadingAll && !productErr && filteredProducts.length === 0 && allProducts.length > 0 && (
                 <section className="card pad muted">
                   No products match your search or filters. Try clearing filters or searching a different keyword.
                 </section>
               )}
+              {!loadingAll && !productErr && filteredProducts.length === 0 && allProducts.length === 0 && !loadingCats && (
+                <section className="card pad muted">
+                  No products are currently available. Please check back later.
+                </section>
+              )}
             </>
+          )}
+
+          {!allMode && selectedParentId && !selParent && (
+            <section className="card pad muted">Loading category…</section>
           )}
 
           {!allMode && selectedParentId && selParent && (
@@ -1063,8 +1167,12 @@ useEffect(() => {
           className="cat-aside"
           role="dialog"
           aria-modal="true"
+          aria-label="Category navigation"
           onClick={(e) => {
             if (e.target === e.currentTarget) setDrawerOpen(false);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setDrawerOpen(false);
           }}
         >
           <aside className="aside-panel" role="document">
@@ -1532,7 +1640,9 @@ const css = `
 .pillmini{ font-size:11px; padding:2px 6px; border-radius:999px; background: rgba(246,195,32,.18); }
 
 .sk-card{
-  height: 240px;
+  aspect-ratio: 1 / 1.2;
+  min-height: 180px;
+  max-height: 320px;
   border-radius: 12px;
   border:1px solid rgba(0,0,0,.06);
   background: linear-gradient(90deg, #eee, #f8f8f8, #eee);
@@ -1834,9 +1944,13 @@ const css = `
 }
 
 .cat-card-name{
-  font-size:14px;
+  font-size:clamp(12px, 3.5vw, 14px);
   font-weight:900;
   color:var(--bb-primary);
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
 }
 
 .cat-card-desc{

@@ -22,9 +22,12 @@ export default function HomeCategoryCarousel({
   const xRef = useRef(0);
   const pausedRef = useRef(false);
   const dragActiveRef = useRef(false);
+  const didDragRef = useRef(false);
   const startXRef = useRef(0);
   const startTranslateRef = useRef(0);
   const pauseTimeoutRef = useRef<number | null>(null);
+
+  const DRAG_THRESHOLD = 4;
 
   useEffect(() => {
     let live = true;
@@ -204,19 +207,28 @@ export default function HomeCategoryCarousel({
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     dragActiveRef.current = true;
+    didDragRef.current = false;
     pausedRef.current = true;
     clearPauseTimeout();
 
     startXRef.current = e.clientX;
     startTranslateRef.current = xRef.current;
 
-    e.currentTarget.setPointerCapture?.(e.pointerId);
+    // Do NOT call setPointerCapture — it re-targets mouseup to this element,
+    // which makes the browser fire click here instead of on the child <Link>,
+    // breaking category navigation on desktop.
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragActiveRef.current) return;
 
     const dx = e.clientX - startXRef.current;
+
+    // Don't move the track for micro-movements — only real drags.
+    // This keeps the card under the cursor so the click hit-test fires correctly.
+    if (!didDragRef.current && Math.abs(dx) < DRAG_THRESHOLD) return;
+    didDragRef.current = true;
+
     xRef.current = normalizeX(startTranslateRef.current + dx);
     applyTransform(xRef.current);
   };
@@ -225,6 +237,33 @@ export default function HomeCategoryCarousel({
     dragActiveRef.current = false;
     pauseTemporarily(1800);
   };
+
+  // Suppress Link navigation when the user dragged instead of clicked.
+  const onClickCapture = (e: React.MouseEvent) => {
+    if (didDragRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      didDragRef.current = false;
+    }
+  };
+
+  // Without setPointerCapture, pointerup may fire outside the viewport when
+  // the user drags and releases beyond the carousel bounds. This document-level
+  // listener ensures dragActiveRef always resets so the carousel doesn't freeze.
+  useEffect(() => {
+    const reset = () => {
+      if (dragActiveRef.current) {
+        dragActiveRef.current = false;
+        pauseTemporarily(1800);
+      }
+    };
+    document.addEventListener("pointerup", reset, { capture: true });
+    document.addEventListener("pointercancel", reset, { capture: true });
+    return () => {
+      document.removeEventListener("pointerup", reset, { capture: true });
+      document.removeEventListener("pointercancel", reset, { capture: true });
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -304,6 +343,7 @@ export default function HomeCategoryCarousel({
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
+            onClickCapture={onClickCapture}
           >
             <div className="hcc-ribbonTrack" ref={trackRef}>
               {ribbonItems.map((cat, index) => (
@@ -507,6 +547,7 @@ const styles = `
 .hcc-media{
   position:relative;
   aspect-ratio: 1 / 1;
+  min-height: 120px;
   overflow:hidden;
   background:#f2efea;
 }

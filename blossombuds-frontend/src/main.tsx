@@ -11,6 +11,13 @@ import { AdminAuthProvider } from "./app/AdminAuthProvider";
 const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("Root div #root not found");
 
+// Remove the inline loading spinner once React hydrates
+const initLoader = document.getElementById("bb-init-loader");
+if (initLoader) {
+  // Small delay so the first paint of the app is visible before we remove the loader
+  requestAnimationFrame(() => initLoader.remove());
+}
+
 ReactDOM.createRoot(rootEl).render(
   <React.StrictMode>
   <BrowserRouter>

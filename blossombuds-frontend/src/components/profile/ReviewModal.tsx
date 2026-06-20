@@ -383,7 +383,6 @@ export default function ReviewModal({
     if (!canSubmit) { setErr("Please select a rating (1–5 stars)."); return; }
     if (!token) { setErr("You need to be logged in to submit a review."); return; }
 
-    setErr(null);
     setBusy(true);
     try {
       // 1) Create the review
@@ -405,16 +404,16 @@ export default function ReviewModal({
       const reviewId = created?.id;
       if (!reviewId) throw new Error("Server did not return a review id.");
 
-      // 2) Attach uploaded tempKeys — FIRE-AND-FORGET (do NOT await)
-      // CHANGED: This makes submit return in ms.
+      // 2) Await image attachments so navigating away immediately doesn't lose them.
+      //    allSettled means one failed upload doesn't block the others or the close.
       const attachables = queue.filter((q) => q.tempKey && !q.err).slice(0, 3);
       if (attachables.length > 0) {
-        attachables.forEach((q) => {
-          attachImageFromTempKey(reviewId, q.tempKey!, token).catch(() => {});
-        });
+        await Promise.allSettled(
+          attachables.map((q) => attachImageFromTempKey(reviewId, q.tempKey!, token).catch(() => {}))
+        );
       }
 
-      // 3) Close immediately and show solid toast
+      // 3) Close and show toast
       setQueue([]);
       onClose(true);
       showThankYouPopup();
@@ -527,7 +526,7 @@ export default function ReviewModal({
                   }}
                 />
                 <div className="minihelp">
-                  JPG, JPEG, PNG, WebP only · Max 10&nbsp;MB per image · HEIC / Live Photos are not supported.
+                  JPG, PNG, WebP, HEIC (iPhone) supported · Max 10&nbsp;MB per image
                 </div>
               </div>
 
@@ -598,10 +597,12 @@ function Star({
       className={"star " + (filled ? "filled" : "")}
       onMouseEnter={onMouseEnter}
       onClick={onClick}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
       width="26"
       height="26"
       viewBox="0 0 24 24"
       role="button"
+      tabIndex={0}
       aria-label={filled ? "selected" : "not selected"}
     >
       <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
@@ -708,7 +709,7 @@ const css = `
   border:none; background:#F05D8B; color:#fff; height:44px; padding:0 16px; border-radius:12px; cursor:pointer;
   box-shadow: 0 12px 28px rgba(240,93,139,.3);
 }
-.btn:disabled{ opacity:.7; cursor:not-allowed; }
+.btn:disabled{ opacity:.55; cursor:not-allowed; background:#ccc; box-shadow:none; }
 
 @media (max-width: 640px){
   .rv-veil{ padding: 0; }

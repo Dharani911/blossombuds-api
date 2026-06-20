@@ -24,10 +24,11 @@ export default function HomeCuratedShowcase({
 
   useEffect(() => {
     if (!safeItems.length || paused) return;
+    const delay = Math.max(200, intervalMs); // guard against 0 / negative — would peg CPU
 
     timerRef.current = window.setInterval(() => {
       setIndex((prev) => (prev + 1) % safeItems.length);
-    }, intervalMs);
+    }, delay);
 
     return () => {
       if (timerRef.current) window.clearInterval(timerRef.current);
@@ -81,7 +82,7 @@ export default function HomeCuratedShowcase({
 
                     <div className="hcs-meta">
                       {item.tag && <span className="hcs-tag">{item.tag}</span>}
-                      <h3>{item.title}</h3>
+                      {i === index ? <h3>{item.title}</h3> : <p className="hcs-title-hidden">{item.title}</p>}
                     </div>
                   </Link>
                 </article>
@@ -217,7 +218,7 @@ const styles = `
 
 .hcs-image-wrap{
   width: 100%;
-  height: clamp(380px, 62vw, 760px);
+  height: clamp(260px, 62vw, 760px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -266,7 +267,8 @@ const styles = `
   text-transform: uppercase;
 }
 
-.hcs-meta h3{
+.hcs-meta h3,
+.hcs-title-hidden{
   margin: 0;
   color: var(--bb-primary);
   font-family: "Cinzel","DM Serif Display",Georgia,serif;
@@ -349,7 +351,7 @@ const styles = `
   }
 
   .hcs-image-wrap{
-    height: clamp(320px, 92vw, 520px);
+    height: clamp(240px, 80vw, 520px);
     padding: 12px;
   }
 
@@ -358,22 +360,24 @@ const styles = `
     gap: 6px;
   }
 
-  .hcs-meta h3{
+  .hcs-meta h3,
+  .hcs-title-hidden{
     font-size: clamp(18px, 6vw, 24px);
   }
 
   .hcs-nav{
-    width: 42px;
-    height: 42px;
-    font-size: 24px;
+    width: 36px;
+    height: 36px;
+    font-size: 20px;
+    background: rgba(255,255,255,.85);
   }
 
   .hcs-nav-prev{
-    left: 10px;
+    left: 6px;
   }
 
   .hcs-nav-next{
-    right: 10px;
+    right: 6px;
   }
 
   .hcs-dots{

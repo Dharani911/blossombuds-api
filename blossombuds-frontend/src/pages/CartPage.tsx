@@ -180,13 +180,13 @@ const styles = `
 .primary:disabled{ opacity:.55; cursor:not-allowed; transform:none; box-shadow:none; }
 
 .secondary{
-  height:40px; border:none; border-radius:12px; background: var(--gold); color:#2b2b2b; font-weight:900;
+  height:42px; border:none; border-radius:12px; background: var(--gold); color:#2b2b2b; font-weight:900;
   cursor:pointer; box-shadow:0 10px 20px rgba(246,195,32,.22); transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
 }
 .secondary:hover{ transform: translateY(-1px); box-shadow:0 14px 30px rgba(246,195,32,.30); background:#f5bd07; }
 
 .danger{
-  height:38px; border:1px solid rgba(215,38,61,.25);
+  height:42px; border:1px solid rgba(215,38,61,.25);
   background: linear-gradient(180deg, rgba(215,38,61,.06), #fff);
   color: var(--danger); font-weight:900; border-radius:12px; cursor:pointer;
   transition: transform .12s ease, box-shadow .12s ease, background .12s ease;

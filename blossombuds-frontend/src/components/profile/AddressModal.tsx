@@ -461,6 +461,7 @@ const styles = `
   .modal{
     width: 100%; max-width: none;
     border-radius: 16px 16px 0 0;
+    max-height: 92vh;
     max-height: 92dvh;
   }
 }
