@@ -127,3 +127,42 @@ export async function listOrdersByCustomer(customerId: number): Promise<OrderSum
   const { data } = await http.get<OrderSummary[]>(`/api/orders/by-customer/${customerId}`);
   return data ?? [];
 }
+
+/** ─────────────────── Communication preferences (WhatsApp + SMS) ─────────────────── **/
+
+export type CommunicationPreference = {
+  id: number | null;
+  phone: string | null;
+  whatsappOptedIn: boolean;
+  smsOptedIn: boolean;
+  source: string | null;
+  whatsappOptedInAt: string | null;
+  whatsappOptedOutAt: string | null;
+  smsOptedInAt: string | null;
+  smsOptedOutAt: string | null;
+};
+
+export type SavePreferencePayload = {
+  phone?: string;
+  whatsappOptedIn?: boolean;
+  smsOptedIn?: boolean;
+  source?: string;
+};
+
+// GET /api/customers/{customerId}/communication-preference
+export async function getCommunicationPreference(customerId: number): Promise<CommunicationPreference> {
+  const { data } = await http.get<CommunicationPreference>(`/api/customers/${customerId}/communication-preference`);
+  return data;
+}
+
+// PUT /api/customers/{customerId}/communication-preference
+export async function saveCommunicationPreference(
+  customerId: number,
+  payload: SavePreferencePayload
+): Promise<CommunicationPreference> {
+  const { data } = await http.put<CommunicationPreference>(
+    `/api/customers/${customerId}/communication-preference`,
+    payload
+  );
+  return data;
+}
