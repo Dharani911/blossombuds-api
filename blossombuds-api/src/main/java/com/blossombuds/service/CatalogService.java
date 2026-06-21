@@ -1412,15 +1412,19 @@ public class CatalogService {
         log.info("[PRODUCT][FEATURED][SET][OK] id={} featured={}", id, featured);
         return p; // dirty checking persists
     }
-    /** Maps a Product entity to a cache-safe DTO. */
-    /** Maps a Product entity to a cache-safe DTO (discount-aware). */
+    /** Maps a Product entity to a cache-safe DTO (fetches discount config from DB). */
     private ProductDto toDto(Product p) {
+        return toDto(p, getEffectiveGlobalSaleNow());
+    }
+
+    /** Maps a Product entity to a cache-safe DTO using a pre-fetched discount config (no extra DB call). */
+    private ProductDto toDto(Product p, Optional<GlobalSaleConfig> cfgOpt) {
         ProductDto d = new ProductDto();
         d.setId(p.getId());
         d.setSlug(p.getSlug());
         d.setName(p.getName());
         d.setDescription(p.getDescription());
-        d.setPrice(p.getPrice()); // keep original field
+        d.setPrice(p.getPrice());
 
         d.setVisible(p.getVisible());
         d.setFeatured(p.getFeatured());
@@ -1432,7 +1436,6 @@ public class CatalogService {
         BigDecimal original = p.getPrice() == null ? BigDecimal.ZERO : p.getPrice();
         d.setOriginalPrice(original);
 
-        Optional<GlobalSaleConfig> cfgOpt = getEffectiveGlobalSaleNow();
         if (cfgOpt.isPresent() && isDiscountEligible(p) && isValidPercent(cfgOpt.get().getPercentOff())) {
             GlobalSaleConfig cfg = cfgOpt.get();
             BigDecimal finalPrice = applyPercentOff(original, cfg.getPercentOff());
@@ -1492,7 +1495,15 @@ public class CatalogService {
         if (sort != null && !sort.isBlank()) s = Sort.by(sort);
         s = "ASC".equalsIgnoreCase(dir) ? s.ascending() : s.descending();
 
-        Page<ProductDto> pg = productRepo.findAll(PageRequest.of(page, size, s)).map(this::toDto);
+        Optional<GlobalSaleConfig> discount = getEffectiveGlobalSaleNow();
+        Page<Product> products = productRepo.findAll(PageRequest.of(page, size, s));
+        List<Long> ids = products.getContent().stream().map(Product::getId).toList();
+        Map<Long, String> imageUrls = buildPrimaryImageUrlMap(ids);
+        Page<ProductDto> pg = products.map(p -> {
+            ProductDto dto = toDto(p, discount);
+            dto.setPrimaryImageUrl(imageUrls.get(p.getId()));
+            return dto;
+        });
         return CachedPage.from(pg);
     }
 
@@ -1505,33 +1516,59 @@ public class CatalogService {
         }
     }
 
-    @Cacheable(cacheNames = PRODUCTS_BY_CATEGORY, key = "'cat=' + #categoryId + ':p=' + #page + ':s=' + #size + ':' + #root.target.discountCacheStamp()" )
+    @Cacheable(cacheNames = PRODUCTS_BY_CATEGORY, key = "'cat=' + #categoryId + ':p=' + #page + ':s=' + #size + ':' + #root.target.discountCacheStamp()")
     public CachedPage<ProductDto> listProductsByCategoryDto(Long categoryId, int page, int size) {
-        Page<ProductDto> pg = productRepo.findActiveByCategoryId(categoryId, PageRequest.of(page, size))
-                .map(this::toDto);
+        Optional<GlobalSaleConfig> discount = getEffectiveGlobalSaleNow();
+        Page<Product> products = productRepo.findActiveByCategoryId(categoryId, PageRequest.of(page, size));
+        List<Long> ids = products.getContent().stream().map(Product::getId).toList();
+        Map<Long, String> imageUrls = buildPrimaryImageUrlMap(ids);
+        Page<ProductDto> pg = products.map(p -> {
+            ProductDto dto = toDto(p, discount);
+            dto.setPrimaryImageUrl(imageUrls.get(p.getId()));
+            return dto;
+        });
         return CachedPage.from(pg);
     }
 
     @Cacheable(cacheNames = FEATURED_PAGE, key = "'p=' + #page + ':s=' + #size + ':' + #root.target.discountCacheStamp()")
     public CachedPage<ProductDto> listFeaturedProductsDto(int page, int size) {
-        Page<ProductDto> pg = productRepo.findByFeaturedTrue(PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")))
-                .map(this::toDto);
+        Optional<GlobalSaleConfig> discount = getEffectiveGlobalSaleNow();
+        Page<Product> products = productRepo.findByFeaturedTrue(PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
+        List<Long> ids = products.getContent().stream().map(Product::getId).toList();
+        Map<Long, String> imageUrls = buildPrimaryImageUrlMap(ids);
+        Page<ProductDto> pg = products.map(p -> {
+            ProductDto dto = toDto(p, discount);
+            dto.setPrimaryImageUrl(imageUrls.get(p.getId()));
+            return dto;
+        });
         return CachedPage.from(pg);
     }
-
 
     @Cacheable(cacheNames = FEATURED_TOP, key = "'lim=' + #limit + ':' + #root.target.discountCacheStamp()")
     public List<ProductDto> listFeaturedTopDto(int limit) {
         int lim = Math.max(1, Math.min(100, limit));
-        return productRepo.findByFeaturedTrue(PageRequest.of(0, lim, Sort.by(Sort.Direction.DESC, "createdAt")))
-                .getContent()
-                .stream()
-                .map(this::toDto)
-                .toList();
+        Optional<GlobalSaleConfig> discount = getEffectiveGlobalSaleNow();
+        List<Product> products = productRepo.findByFeaturedTrue(PageRequest.of(0, lim, Sort.by(Sort.Direction.DESC, "createdAt"))).getContent();
+        List<Long> ids = products.stream().map(Product::getId).toList();
+        Map<Long, String> imageUrls = buildPrimaryImageUrlMap(ids);
+        return products.stream().map(p -> {
+            ProductDto dto = toDto(p, discount);
+            dto.setPrimaryImageUrl(imageUrls.get(p.getId()));
+            return dto;
+        }).toList();
     }
+
     @Cacheable(cacheNames = NEW_ARRIVALS, key = "'lim=' + #limit + ':' + #root.target.discountCacheStamp()")
     public List<ProductDto> listNewArrivalsDto(int limit) {
-        return listNewArrivals(limit).stream().map(this::toDto).toList();
+        Optional<GlobalSaleConfig> discount = getEffectiveGlobalSaleNow();
+        List<Product> products = listNewArrivals(limit);
+        List<Long> ids = products.stream().map(Product::getId).toList();
+        Map<Long, String> imageUrls = buildPrimaryImageUrlMap(ids);
+        return products.stream().map(p -> {
+            ProductDto dto = toDto(p, discount);
+            dto.setPrimaryImageUrl(imageUrls.get(p.getId()));
+            return dto;
+        }).toList();
     }
 
     @Cacheable(cacheNames = CATEGORIES, key = "'id=' + #id")
@@ -1541,6 +1578,23 @@ public class CatalogService {
 
     private Optional<GlobalSaleConfig> getEffectiveGlobalSaleNow() {
         return globalSaleRepo.findEffectiveConfig(LocalDateTime.now());
+    }
+
+    private Map<Long, String> buildPrimaryImageUrlMap(List<Long> productIds) {
+        if (productIds == null || productIds.isEmpty()) return Map.of();
+        List<ProductImage> images = imageRepo.findActiveForProductIds(productIds);
+        Map<Long, String> result = new LinkedHashMap<>();
+        for (ProductImage img : images) {
+            Long pid = img.getProduct().getId();
+            if (!result.containsKey(pid) && img.getPublicId() != null) {
+                try {
+                    result.put(pid, signGetUrl(img.getPublicId(), Duration.ofMinutes(30)));
+                } catch (Exception e) {
+                    log.warn("[IMAGE][SIGN][WARN] productId={} key={} err={}", pid, img.getPublicId(), e.toString());
+                }
+            }
+        }
+        return result;
     }
 
     private static boolean isDiscountEligible(Product p) {

@@ -7,7 +7,6 @@ import {
   getCategories,
   getCategory,
   listProductsByCategory,
-  listProductImages,
   listProductsPage,
   type Category,
   type Product,
@@ -276,8 +275,8 @@ useEffect(() => {
         setCats(all || []);
       } catch {
         if (!live) return;
-        // auto-retry once after 3 s before showing error
-        await new Promise((r) => setTimeout(r, 3000));
+        // auto-retry once after 10 s — gives Railway enough time to wake from sleep
+        await new Promise((r) => setTimeout(r, 10000));
         if (!live) return;
         try {
           const all = await getCategories();
@@ -375,19 +374,6 @@ useEffect(() => {
       return String(a?.name || "").localeCompare(String(b?.name || ""));
     });
 
-    // Only fetch images for first 20 products to avoid flooding the backend
-    const toFetch = rows.slice(0, 20);
-    await Promise.all(
-      toFetch.map(async (p, i) => {
-        if (!p.primaryImageUrl) {
-          try {
-            const imgs = await listProductImages(p.id);
-            if (imgs?.[0]?.url) rows[i].primaryImageUrl = imgs[0].url as any;
-          } catch {}
-        }
-      })
-    );
-
     return rows;
   }, []);
 
@@ -430,33 +416,10 @@ useEffect(() => {
             batch.push(p as Product);
           }
 
-          // ✅ 1) Paint IMMEDIATELY (keep arrival order: first loaded shows first)
+          // Paint IMMEDIATELY (keep arrival order: first loaded shows first)
           if (!live) return;
           if (batch.length) {
             setAllProducts((prev) => [...prev, ...batch]);
-          }
-
-          // ✅ 2) Backfill images AFTER paint — create new objects to avoid mutating state
-          if (batch.length) {
-            Promise.all(
-              batch.map(async (p) => {
-                if (!p.primaryImageUrl) {
-                  try {
-                    const imgs = await listProductImages(p.id);
-                    if (imgs?.[0]?.url) return { id: p.id, url: imgs[0].url as string };
-                  } catch {}
-                }
-                return null;
-              })
-            ).then((updates) => {
-              if (!live) return;
-              const urlMap = new Map<number, string>();
-              for (const u of updates) if (u) urlMap.set(u.id, u.url);
-              if (!urlMap.size) return;
-              setAllProducts((prev) =>
-                prev.map((p) => urlMap.has(p.id) ? { ...p, primaryImageUrl: urlMap.get(p.id) as any } : p)
-              );
-            });
           }
 
           // stop if last page
@@ -464,8 +427,8 @@ useEffect(() => {
         }
       } catch {
         if (!live) return;
-        // silent retry after 3 s
-        await new Promise((r) => setTimeout(r, 3000));
+        // Retry after 10 s — gives Railway enough time to wake from sleep
+        await new Promise((r) => setTimeout(r, 10000));
         if (!live) return;
         try {
           const resp2 = await listProductsPage(0, 60);

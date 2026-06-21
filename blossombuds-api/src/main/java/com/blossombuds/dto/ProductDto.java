@@ -34,4 +34,6 @@ public class ProductDto {
     private Boolean discounted;
     /** Read-only: when created (useful for "new arrivals"). */
     private LocalDateTime createdAt;
+    /** Signed URL of the primary (lowest sortOrder) product image. Populated in list endpoints. */
+    private String primaryImageUrl;
 }
