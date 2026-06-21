@@ -1,5 +1,15 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useMemo } from "react";
+import { Swiper, SwiperSlide } from "swiper/react";
+import {
+  Autoplay,
+  EffectCoverflow,
+  Navigation,
+  Pagination,
+} from "swiper/modules";
+import "swiper/css";
+import "swiper/css/effect-coverflow";
+import "swiper/css/pagination";
+import "swiper/css/navigation";
 
 type CuratedItem = {
   title: string;
@@ -15,35 +25,9 @@ type Props = {
 
 export default function HomeCuratedShowcase({
   items,
-  intervalMs = 3600,
+  intervalMs = 2200,
 }: Props) {
   const safeItems = useMemo(() => items ?? [], [items]);
-  const [index, setIndex] = useState(0);
-  const [paused, setPaused] = useState(false);
-  const timerRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (!safeItems.length || paused) return;
-    const delay = Math.max(200, intervalMs); // guard against 0 / negative — would peg CPU
-
-    timerRef.current = window.setInterval(() => {
-      setIndex((prev) => (prev + 1) % safeItems.length);
-    }, delay);
-
-    return () => {
-      if (timerRef.current) window.clearInterval(timerRef.current);
-    };
-  }, [safeItems.length, paused, intervalMs]);
-
-  const goTo = (next: number) => {
-    if (!safeItems.length) return;
-    const normalized =
-      ((next % safeItems.length) + safeItems.length) % safeItems.length;
-    setIndex(normalized);
-  };
-
-  const goPrev = () => goTo(index - 1);
-  const goNext = () => goTo(index + 1);
 
   if (!safeItems.length) return null;
 
@@ -51,348 +35,291 @@ export default function HomeCuratedShowcase({
     <section className="hcs-wrap" aria-labelledby="hcs-title">
       <style>{styles}</style>
 
-      <div className="hcs-shell">
-        <div className="hcs-head">
-          <span className="hcs-eyebrow">Customer moments</span>
-          <h2 id="hcs-title">
-            Our flowers in real celebrations and beautiful occasions
-          </h2>
-        </div>
+      <div className="hcs-head">
+        <span className="hcs-eyebrow">Customer moments</span>
+        <h2 id="hcs-title">
+          Our flowers in real celebrations and beautiful occasions
+        </h2>
+        <p>Real customers, real moments — and the florals that made them memorable.</p>
+      </div>
 
-        <div
-          className="hcs-stage"
-          onMouseEnter={() => setPaused(true)}
-          onMouseLeave={() => setPaused(false)}
+      <div className="hcs-stage">
+        <Swiper
+          spaceBetween={30}
+          effect="coverflow"
+          grabCursor
+          centeredSlides
+          loop
+          slidesPerView="auto"
+          coverflowEffect={{
+            rotate: 0,
+            stretch: 0,
+            depth: 100,
+            modifier: 2.5,
+          }}
+          autoplay={{ delay: intervalMs, disableOnInteraction: false }}
+          pagination={{ clickable: true }}
+          navigation={{
+            nextEl: ".hcs-btn-next",
+            prevEl: ".hcs-btn-prev",
+          }}
+          modules={[EffectCoverflow, Autoplay, Pagination, Navigation]}
         >
-          <div className="hcs-viewport" role="region" aria-label="Customer occasion carousel">
-            <div
-              className="hcs-track"
-              style={{ transform: `translateX(-${index * 100}%)` }}
-            >
-              {safeItems.map((item, i) => (
-                <article
-                  key={`${item.title}-${i}`}
-                  className={`hcs-slide ${i === index ? "is-active" : ""}`}
-                  aria-hidden={i !== index}
-                >
-                  <Link to={item.to} className="hcs-card">
-                    <div className="hcs-image-wrap">
-                      <img src={item.image} alt={item.title} loading="lazy" />
-                    </div>
+          {safeItems.map((item, i) => (
+            <SwiperSlide key={`a-${i}`} className="hcs-slide">
+              <div className="hcs-card">
+                <img
+                  src={item.image}
+                  alt={item.title}
+                  loading={i === 0 ? "eager" : "lazy"}
+                  decoding="async"
+                  draggable={false}
+                />
+                <div className="hcs-card-meta" aria-hidden="true">
+                  {item.tag && <span className="hcs-tag">{item.tag}</span>}
+                  <p className="hcs-card-title">{item.title}</p>
+                </div>
+              </div>
+            </SwiperSlide>
+          ))}
+          {/* Duplicate pass keeps loop seamless with slidesPerView="auto" */}
+          {safeItems.map((item, i) => (
+            <SwiperSlide key={`b-${i}`} className="hcs-slide" aria-hidden>
+              <div className="hcs-card">
+                <img
+                  src={item.image}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  draggable={false}
+                />
+                <div className="hcs-card-meta" aria-hidden="true">
+                  {item.tag && <span className="hcs-tag">{item.tag}</span>}
+                  <p className="hcs-card-title">{item.title}</p>
+                </div>
+              </div>
+            </SwiperSlide>
+          ))}
+        </Swiper>
 
-                    <div className="hcs-meta">
-                      {item.tag && <span className="hcs-tag">{item.tag}</span>}
-                      {i === index ? <h3>{item.title}</h3> : <p className="hcs-title-hidden">{item.title}</p>}
-                    </div>
-                  </Link>
-                </article>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              className="hcs-nav hcs-nav-prev"
-              aria-label="Previous item"
-              onClick={goPrev}
-            >
-              ‹
-            </button>
-
-            <button
-              type="button"
-              className="hcs-nav hcs-nav-next"
-              aria-label="Next item"
-              onClick={goNext}
-            >
-              ›
-            </button>
-          </div>
-
-          <div className="hcs-dots" role="tablist" aria-label="Customer occasion navigation">
-            {safeItems.map((item, i) => (
-              <button
-                key={`${item.title}-dot-${i}`}
-                type="button"
-                role="tab"
-                aria-selected={i === index}
-                aria-label={`Go to item ${i + 1}`}
-                className={`hcs-dot ${i === index ? "is-active" : ""}`}
-                onClick={() => goTo(i)}
-              />
-            ))}
-          </div>
-        </div>
+        {/* Custom nav buttons */}
+        <button className="hcs-nav hcs-btn-prev" aria-label="Previous">‹</button>
+        <button className="hcs-nav hcs-btn-next" aria-label="Next">›</button>
       </div>
     </section>
   );
 }
 
 const styles = `
+/* ── Section ── */
 .hcs-wrap{
-  width: min(var(--bb-page-max, 1180px), calc(100% - (var(--bb-page-pad, 14px) * 2)));
-  margin: 0 auto;
-  padding: clamp(34px, 5vw, 72px) 0;
+  width:100%;
+  padding:clamp(48px,7vw,88px) 0 clamp(44px,6vw,72px);
+  background:linear-gradient(160deg,#FFF8F0 0%,#F5EDE0 100%);
+  overflow:hidden;
+  position:relative;
 }
 
-.hcs-shell{
-  position: relative;
-}
-
+/* ── Header ── */
 .hcs-head{
-  max-width: 760px;
-  margin: 0 auto 26px;
-  text-align: center;
+  max-width:680px;
+  margin:0 auto clamp(28px,4vw,48px);
+  text-align:center;
+  padding:0 clamp(16px,5vw,32px);
 }
 
 .hcs-eyebrow{
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 28px;
-  padding: 0 12px;
-  margin-bottom: 10px;
-  border-radius: 999px;
-  background: rgba(240,93,139,.08);
-  border: 1px solid rgba(240,93,139,.14);
-  color: var(--bb-accent);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .14em;
-  text-transform: uppercase;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:28px;
+  padding:0 12px;
+  margin-bottom:10px;
+  border-radius:999px;
+  background:rgba(240,93,139,.08);
+  border:1px solid rgba(240,93,139,.14);
+  color:var(--bb-accent,#F05D8B);
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.14em;
+  text-transform:uppercase;
 }
 
 .hcs-head h2{
-  margin: 0;
-  font-family: "Cinzel","DM Serif Display",Georgia,serif;
-  color: var(--bb-primary);
-  font-size: clamp(26px, 4vw, 40px);
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -.02em;
+  margin:0 0 6px;
+  font-family:'DM Serif Display',Georgia,serif;
+  color:var(--bb-primary,#4A4F41);
+  font-size:clamp(22px,3.2vw,36px);
+  font-weight:400;
+  line-height:1.12;
 }
 
+.hcs-head p{
+  margin:0;
+  color:#7a8277;
+  font-size:14px;
+  line-height:1.65;
+}
+
+/* ── Swiper stage ── */
 .hcs-stage{
-  position: relative;
+  position:relative;
 }
 
-.hcs-viewport{
-  position: relative;
-  overflow: hidden;
-  border-radius: 30px;
+/* Override Swiper defaults */
+.hcs-stage .swiper{
+  width:100%;
+  padding-bottom:52px;
 }
 
-.hcs-track{
-  display: flex;
-  transition: transform .85s cubic-bezier(.22,.61,.36,1);
-  will-change: transform;
+.hcs-stage .swiper-slide{
+  width:300px;
+  background-position:center;
+  background-size:cover;
 }
 
-.hcs-slide{
-  min-width: 100%;
+@media (min-width:900px){
+  .hcs-stage .swiper-slide{ width:380px; }
 }
 
+@media (min-width:1200px){
+  .hcs-stage .swiper-slide{ width:440px; }
+}
+
+.hcs-stage .swiper-slide img{
+  display:block;
+  width:100%;
+}
+
+/* Kill default Swiper 3D side shadows */
+.hcs-stage .swiper-3d .swiper-slide-shadow-left,
+.hcs-stage .swiper-3d .swiper-slide-shadow-right{
+  background-image:none;
+  background:none;
+}
+
+/* ── Card ── */
 .hcs-card{
-  display: flex;
-  flex-direction: column;
-  text-decoration: none;
-  border-radius: 30px;
-  overflow: hidden;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.82), rgba(255,255,255,.66)),
-    #f8f4ee;
-  border: 1px solid rgba(74,79,65,.08);
-  box-shadow:
-    0 22px 54px rgba(26,28,24,.09),
-    inset 0 1px 0 rgba(255,255,255,.68);
-  transition:
-    transform .28s ease,
-    box-shadow .28s ease;
+  position:relative;
+  border-radius:20px;
+  overflow:hidden;
+  background:#E8DDD0;
+  cursor:grab;
 }
 
-.hcs-card:hover{
-  transform: translateY(-4px);
-  box-shadow:
-    0 28px 60px rgba(26,28,24,.12),
-    inset 0 1px 0 rgba(255,255,255,.72);
+.hcs-card:active{ cursor:grabbing; }
+
+.hcs-card img{
+  display:block;
+  width:100%;
+  aspect-ratio:3/4;
+  object-fit:cover;
+  object-position:center top;
+  border-radius:20px;
+  pointer-events:none;
 }
 
-.hcs-image-wrap{
-  width: 100%;
-  height: clamp(260px, 62vw, 760px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background:
-    radial-gradient(circle at top, rgba(255,255,255,.45), rgba(255,255,255,0) 35%),
-    linear-gradient(180deg, #f5efe7 0%, #f1ebe3 100%);
-  padding: clamp(14px, 2vw, 22px);
-}
-
-.hcs-image-wrap img{
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  object-position: center;
-  display: block;
-  transition: transform .65s cubic-bezier(.22,.61,.36,1);
-}
-
-.hcs-slide.is-active .hcs-image-wrap img{
-  transform: scale(1.01);
-}
-
-.hcs-meta{
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 18px 18px 20px;
-  text-align: center;
+/* Gradient overlay + text */
+.hcs-card-meta{
+  position:absolute;
+  bottom:0;
+  left:0;
+  right:0;
+  padding:12px 14px 18px;
+  background:linear-gradient(to top,rgba(26,22,16,.80) 0%,rgba(26,22,16,.18) 55%,transparent 80%);
+  border-radius:0 0 20px 20px;
+  display:flex;
+  flex-direction:column;
+  gap:5px;
 }
 
 .hcs-tag{
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: rgba(240,93,139,.08);
-  border: 1px solid rgba(240,93,139,.14);
-  color: var(--bb-accent);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: .14em;
-  text-transform: uppercase;
+  display:inline-flex;
+  align-items:center;
+  align-self:flex-start;
+  height:22px;
+  padding:0 10px;
+  border-radius:999px;
+  background:rgba(255,255,255,.16);
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
+  border:1px solid rgba(255,255,255,.22);
+  color:#fff;
+  font-size:9px;
+  font-weight:700;
+  letter-spacing:.12em;
+  text-transform:uppercase;
 }
 
-.hcs-meta h3,
-.hcs-title-hidden{
-  margin: 0;
-  color: var(--bb-primary);
-  font-family: "Cinzel","DM Serif Display",Georgia,serif;
-  font-size: clamp(20px, 2.6vw, 30px);
-  line-height: 1.15;
-  letter-spacing: -.02em;
+.hcs-card-title{
+  margin:0;
+  font-family:'DM Serif Display',Georgia,serif;
+  color:#fff;
+  font-size:15px;
+  font-weight:400;
+  line-height:1.2;
 }
 
+/* ── Pagination dots ── */
+.hcs-stage .swiper-pagination-bullet{
+  background:rgba(74,79,65,.22);
+  opacity:1;
+  transition:background .2s, width .25s;
+}
+
+.hcs-stage .swiper-pagination-bullet-active{
+  background:var(--bb-accent,#F05D8B);
+  width:28px;
+  border-radius:999px;
+}
+
+/* ── Custom nav buttons ── */
 .hcs-nav{
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 4;
-  width: 52px;
-  height: 52px;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(255,255,255,.92);
-  color: var(--bb-primary);
-  font-size: 30px;
-  line-height: 1;
-  cursor: pointer;
-  box-shadow:
-    0 16px 34px rgba(26,28,24,.14),
-    inset 0 1px 0 rgba(255,255,255,.85);
-  transition:
-    transform .2s ease,
-    box-shadow .2s ease;
+  position:absolute;
+  top:50%;
+  transform:translateY(calc(-50% - 26px)); /* shift up by half pagination height */
+  z-index:10;
+  width:44px;
+  height:44px;
+  display:grid;
+  place-items:center;
+  border-radius:50%;
+  border:1px solid rgba(0,0,0,.10);
+  background:rgba(255,255,255,.82);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+  color:var(--bb-primary,#4A4F41);
+  font-size:22px;
+  line-height:1;
+  cursor:pointer;
+  box-shadow:0 4px 16px rgba(0,0,0,.10);
+  transition:background .18s ease, transform .18s ease, box-shadow .18s ease;
 }
 
 .hcs-nav:hover{
-  transform: translateY(-50%) scale(1.04);
-  box-shadow:
-    0 18px 40px rgba(26,28,24,.18),
-    inset 0 1px 0 rgba(255,255,255,.88);
+  background:#F05D8B;
+  color:#fff;
+  border-color:#F05D8B;
+  box-shadow:0 8px 24px rgba(240,93,139,.28);
+  transform:translateY(calc(-50% - 26px)) scale(1.06);
 }
 
-.hcs-nav-prev{
-  left: 16px;
+/* Hide the built-in Swiper arrows since we use custom ones */
+.hcs-stage .swiper-button-prev,
+.hcs-stage .swiper-button-next{
+  display:none;
 }
 
-.hcs-nav-next{
-  right: 16px;
+.hcs-btn-prev{ left:clamp(8px,2vw,20px); }
+.hcs-btn-next{ right:clamp(8px,2vw,20px); }
+
+@media (max-width:480px){
+  .hcs-stage .swiper-slide{ width:220px; }
+  .hcs-nav{ width:36px; height:36px; font-size:18px; }
 }
 
-.hcs-dots{
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding-top: 16px;
-}
-
-.hcs-dot{
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  background: rgba(74,79,65,.18);
-  transition:
-    width .25s ease,
-    background .25s ease;
-}
-
-.hcs-dot.is-active{
-  width: 30px;
-  background: var(--bb-accent);
-}
-
-@media (max-width: 640px){
-  .hcs-wrap{
-    padding: 26px 0;
-  }
-
-  .hcs-viewport,
-  .hcs-card{
-    border-radius: 22px;
-  }
-
-  .hcs-image-wrap{
-    height: clamp(240px, 80vw, 520px);
-    padding: 12px;
-  }
-
-  .hcs-meta{
-    padding: 14px 14px 16px;
-    gap: 6px;
-  }
-
-  .hcs-meta h3,
-  .hcs-title-hidden{
-    font-size: clamp(18px, 6vw, 24px);
-  }
-
-  .hcs-nav{
-    width: 36px;
-    height: 36px;
-    font-size: 20px;
-    background: rgba(255,255,255,.85);
-  }
-
-  .hcs-nav-prev{
-    left: 6px;
-  }
-
-  .hcs-nav-next{
-    right: 6px;
-  }
-
-  .hcs-dots{
-    gap: 8px;
-    padding-top: 14px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce){
-  .hcs-track,
-  .hcs-card,
-  .hcs-image-wrap img,
-  .hcs-nav,
-  .hcs-dot{
-    transition: none !important;
-  }
+@media (prefers-reduced-motion:reduce){
+  .hcs-stage .swiper-pagination-bullet,
+  .hcs-nav{ transition:none; }
 }
 `;

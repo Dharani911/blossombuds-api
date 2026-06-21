@@ -1,0 +1,801 @@
+         Customer cust = customerRepository.findById(order.getCustomerId()).orElse(null);
+-        if (cust != null && cust.getEmail() != null && !cust.getEmail().isBlank()) {
+-            // PASS BARE YYNNNN to email templates (they add the 'BB' themselves)
++        if (cust != null) {
+             String bareCode = order.getPublicCode();
+-            log.info("[EMAIL][STATUS_UPDATE] Sending status update to customer {} for order {}", cust.getId(), bareCode);
+-            emailService.sendOrderStatusChanged(
+-                    cust.getEmail(), cust.getName(), bareCode, updateStatusRequest.getStatus().name(), eventNote, order.getTrackingUrl()
++            String statusName = updateStatusRequest.getStatus().name();
++            log.info("[ORDER][STATUS_UPDATE] Sending status update to customerId={} for order {}", cust.getId(), bareCode);
++            if (!isBlank(cust.getEmail())) {
++                emailService.sendOrderStatusChanged(
++                        cust.getEmail(), cust.getName(), bareCode, statusName, eventNote, order.getTrackingUrl()
++                );
++            }
++            if (!isBlank(cust.getPhone())) {
++                if (updateStatusRequest.getStatus() == OrderStatus.DISPATCHED
++                        && !isBlank(order.getTrackingUrl())) {
++                    smsService.sendOrderDispatched(cust.getPhone(), cust.getName(),
++                            bareCode, order.getTrackingUrl());
++                } else {
++                    smsService.sendOrderStatusChanged(cust.getPhone(), cust.getName(),
++                            bareCode, statusName);
++                }
++            }
++        }
++        if (cust != null && updateStatusRequest.getStatus() == OrderStatus.DISPATCHED) {
++            whatsAppService.sendOrderDispatched(
++                    cust.getPhone(), cust.getName(), order.getPublicCode(),
++                    order.getTrackingUrl()
++            );
++        }
++        if (cust != null && updateStatusRequest.getStatus() == OrderStatus.DELIVERED) {
++            String reviewUrl = buildReviewUrl(order.getPublicCode());
++            whatsAppService.sendOrderDelivered(
++                    cust.getPhone(), cust.getName(), order.getPublicCode(), reviewUrl
+             );
+         }
+         return order;
+@@ -1288,4 +1317,16 @@ public class OrderService {
+         private String message;
+         private LocalDateTime createdAt;
+     }
++
++    private String buildReviewUrl(String publicCode) {
++        String base = (frontendBase == null) ? "" : frontendBase.trim();
++        String rel = "/profile?code=" + java.net.URLEncoder.encode(
++                publicCode == null ? "" : publicCode, java.nio.charset.StandardCharsets.UTF_8);
++        if (base.isEmpty()) return rel;
++        if (!base.startsWith("http")) base = "https://" + base;
++        if (base.endsWith("/")) base = base.substring(0, base.length() - 1);
++        return base + rel;
++    }
++
++    private static boolean isBlank(String s) { return s == null || s.isBlank(); }
+ }
+diff --git a/blossombuds-api/src/main/java/com/blossombuds/service/ReviewService.java b/blossombuds-api/src/main/java/com/blossombuds/service/ReviewService.java
+index 8a13be2..2e3c162 100644
+--- a/blossombuds-api/src/main/java/com/blossombuds/service/ReviewService.java
++++ b/blossombuds-api/src/main/java/com/blossombuds/service/ReviewService.java
+@@ -10,7 +10,9 @@ import com.blossombuds.dto.*;
+ import com.blossombuds.repository.CustomerRepository;
+ import com.blossombuds.repository.ProductReviewImageRepository;
+ import com.blossombuds.repository.ProductReviewRepository;
++import com.blossombuds.util.ImageMagickUtil;
+ import com.blossombuds.util.ImageUtil;
++import com.blossombuds.util.MagickBridge;
+ import jakarta.persistence.criteria.Subquery;
+ import jakarta.validation.Valid;
+ import lombok.Data;
+@@ -51,8 +53,9 @@ public class ReviewService {
+ 
+     // R2 / S3 (reuse your existing config)
+     private final AmazonS3 r2Client;
+-    @Value("${cloudflare.r2.bucket}")   private String bucketName;
+-    @Value("${cloudflare.r2.endpoint}") private String r2Endpoint;
++    @Value("${cloudflare.r2.bucket}")        private String bucketName;
++    @Value("${cloudflare.r2.endpoint}")      private String r2Endpoint;
++    @Value("${app.imagemagick.cmd:convert}") private String magickCmd;
+ 
+ 
+ 
+@@ -200,17 +203,34 @@ public class ReviewService {
+             throw new IllegalStateException("Maximum 3 images per review");
+         }
+ 
+-        // Validate type/size (no HEIC)
++        // Validate type/size
+         validateFile(file);
+ 
+-        // Decode using pure Java
++        // Read all bytes so we can convert HEIC if needed
++        byte[] rawBytes;
++        try (InputStream tmp = file.getInputStream()) {
++            rawBytes = tmp.readAllBytes();
++        }
++
++        // For HEIC/HEIF: convert to JPEG via ImageMagick before passing to ImageIO
++        byte[] processedBytes = rawBytes;
++        if (ImageMagickUtil.isHeicLike(file.getOriginalFilename(), file.getContentType())) {
++            log.info("[REVIEW][UPLOAD] Detected HEIC/HEIF, converting via ImageMagick");
++            try {
++                processedBytes = MagickBridge.heicToJpeg(rawBytes, magickCmd);
++            } catch (Exception e) {
++                log.warn("[REVIEW][UPLOAD] HEIC conversion failed: {}", e.toString());
++                throw new IllegalArgumentException("Could not convert HEIC image. Please try exporting as JPG first.");
++            }
++        }
++
+         BufferedImage original;
+-        try (InputStream in = file.getInputStream()) {
++        try (InputStream in = new ByteArrayInputStream(processedBytes)) {
+             original = ImageIO.read(in);
+         }
+         if (original == null) {
+             throw new IllegalArgumentException(
+-                    "Uploaded file is not a supported image (JPG, PNG, WebP, GIF, BMP, TIFF).");
++                    "Uploaded file is not a supported image (JPG, PNG, WebP, GIF, BMP, TIFF, HEIC).");
+         }
+ 
+         // Resize + compress using your ImageUtil
+@@ -288,12 +308,21 @@ public class ReviewService {
+             raw = baos.toByteArray();
+         }
+ 
+-        // Decode & validate as image
++        // Decode image; fall back to ImageMagick for HEIC/HEIF (not supported by ImageIO natively)
+         BufferedImage original = ImageIO.read(new ByteArrayInputStream(raw));
++        if (original == null && ImageMagickUtil.isHeicLike(tempKey, null)) {
++            log.info("[REVIEW][ATTACH] HEIC detected at tempKey={}, converting via ImageMagick", tempKey);
++            try {
++                byte[] converted = MagickBridge.heicToJpeg(raw, magickCmd);
++                original = ImageIO.read(new ByteArrayInputStream(converted));
++            } catch (Exception e) {
++                log.warn("[REVIEW][ATTACH] HEIC conversion failed for tempKey={}: {}", tempKey, e.toString());
++            }
++        }
+         if (original == null) {
+             log.warn("[REVIEW][ATTACH][FAIL] Unsupported image tempKey={}", tempKey);
+             throw new IllegalArgumentException(
+-                    "Uploaded file is not a supported image (JPG, PNG, WebP, GIF, BMP, TIFF).");
++                    "Uploaded file is not a supported image (JPG, PNG, WebP, GIF, BMP, TIFF, HEIC).");
+         }
+ 
+         // Resize + compress to JPEG
+@@ -594,13 +623,15 @@ public class ReviewService {
+                 name.endsWith(".jpg")  || name.endsWith(".jpeg") ||
+                         name.endsWith(".png")  || name.endsWith(".webp") ||
+                         name.endsWith(".gif")  || name.endsWith(".bmp")  ||
+-                        name.endsWith(".tif")  || name.endsWith(".tiff");
++                        name.endsWith(".tif")  || name.endsWith(".tiff") ||
++                        name.endsWith(".heic") || name.endsWith(".heif");
+ 
+-        boolean mimeOk = ct.startsWith("image/");
++        // HEIC files may arrive with blank or "application/octet-stream" content type from some browsers
++        boolean mimeOk = ct.isBlank() || ct.startsWith("image/") || ct.equals("application/octet-stream");
+ 
+         if (!(extOk && mimeOk)) {
+             throw new IllegalArgumentException(
+-                    "Only JPG, PNG, WebP, GIF, BMP, TIFF images are supported (no HEIC). You uploaded: " + name);
++                    "Only JPG, PNG, WebP, GIF, BMP, TIFF, HEIC images are supported. You uploaded: " + name);
+         }
+     }
+ 
+diff --git a/blossombuds-api/src/main/java/com/blossombuds/service/SmtpEmailService.java b/blossombuds-api/src/main/java/com/blossombuds/service/SmtpEmailService.java
+index fe039f7..b3160c1 100644
+--- a/blossombuds-api/src/main/java/com/blossombuds/service/SmtpEmailService.java
++++ b/blossombuds-api/src/main/java/com/blossombuds/service/SmtpEmailService.java
+@@ -279,6 +279,44 @@ public class SmtpEmailService implements EmailService {
+         sendRichMasked(toEmail, subject, b.toString());
+     }
+ 
++    /** Sends a "complete your payment" reminder for an abandoned Razorpay checkout. */
++    @Override
++    public void sendPaymentPendingReminder(String toEmail, String toName,
++                                           String orderRef, java.math.BigDecimal grandTotal,
++                                           String currency, String paymentLink) {
++        log.info("[EMAIL][PAYMENT_PENDING_REMINDER] to='{}' orderRef='{}'", toEmail, orderRef);
++
++        String subject = "You left something behind — complete your Blossom Buds order";
++        String amountLine = (grandTotal != null)
++                ? "\nOrder total: " + formatMoney(grandTotal, currency) + "\n"
++                : "";
++
++        String body = """
++            Hi %s,
++
++            It looks like you started placing an order with %s but didn't complete the payment.%s
++            Your items are still waiting! Complete your purchase securely here:
++
++            {{A|Complete My Payment|%s}}
++
++            If you've already paid or changed your mind, please ignore this message.
++
++            %s
++
++            Warm regards,
++            %s
++            """.formatted(
++                safeName(toName),
++                brandName(),
++                amountLine,
++                paymentLink,
++                contactLineText(),
++                brandName()
++        );
++
++        sendRichMasked(toEmail, subject, body);
++    }
++
+     /** Sends a short request asking the customer to leave a review for the order. */
+     @Override
+     public void sendReviewRequest(String toEmail, String toName,
+diff --git a/blossombuds-api/src/main/java/com/blossombuds/service/WhatsAppCampaignService.java b/blossombuds-api/src/main/java/com/blossombuds/service/WhatsAppCampaignService.java
+index 8f26ec9..763b28d 100644
+--- a/blossombuds-api/src/main/java/com/blossombuds/service/WhatsAppCampaignService.java
++++ b/blossombuds-api/src/main/java/com/blossombuds/service/WhatsAppCampaignService.java
+@@ -98,8 +98,11 @@ public class WhatsAppCampaignService {
+         return campaign;
+     }
+ 
+-    /** Sends all pending recipients for a campaign. */
+-    @Transactional
++    /**
++     * Sends all pending recipients for a campaign.
++     * Not @Transactional at the outer level — each DB write commits independently
++     * so no single connection is held open across N blocking HTTP calls to Meta.
++     */
+     public WhatsAppCampaign sendCampaign(Long campaignId) {
+         if (campaignId == null) {
+             throw new IllegalArgumentException("campaignId is required");
+@@ -135,12 +138,15 @@ public class WhatsAppCampaignService {
+             recipient.setStatus("QUEUED");
+ 
+             List<String> variables = buildTemplateVariables(recipient, template);
++            String imageUrl = getVariableValue(recipient.getVariablesJson(), "imageUrl");
+ 
++            // HTTP call outside any transaction — each recipient save commits on its own
+             WhatsAppCloudClient.SendResult result = whatsAppCloudClient.sendTemplateMessage(
+                     recipient.getPhone(),
+                     template.getProviderTemplateName(),
+                     template.getLanguageCode(),
+-                    variables
++                    variables,
++                    isBlank(imageUrl) ? null : imageUrl
+             );
+ 
+             if (result.isSuccess()) {
+@@ -163,14 +169,23 @@ public class WhatsAppCampaignService {
+ 
+         campaign.setSentCount(campaign.getSentCount() + sent);
+         campaign.setFailedCount(campaign.getFailedCount() + failed);
+-        campaign.setStatus("COMPLETED");
++
++        // Reflect true outcome: FAILED if all failed, PARTIAL if some failed, COMPLETED if all sent
++        if (sent == 0) {
++            campaign.setStatus("FAILED");
++        } else if (failed > 0) {
++            campaign.setStatus("PARTIAL");
++        } else {
++            campaign.setStatus("COMPLETED");
++        }
++
+         campaign.setCompletedAt(OffsetDateTime.now());
+         campaign.setModifiedAt(OffsetDateTime.now());
+ 
+         WhatsAppCampaign saved = campaignRepository.save(campaign);
+ 
+-        log.info("[WHATSAPP][CAMPAIGN][SEND] Completed campaignId={}, sent={}, failed={}",
+-                campaignId, sent, failed);
++        log.info("[WHATSAPP][CAMPAIGN][SEND] Finished campaignId={}, sent={}, failed={}, status={}",
++                campaignId, sent, failed, saved.getStatus());
+ 
+         return saved;
+     }
+@@ -259,6 +274,7 @@ public class WhatsAppCampaignService {
+         String trackingNumber = getVariableValue(recipient.getVariablesJson(), "trackingNumber");
+         String trackingLink = getVariableValue(recipient.getVariablesJson(), "trackingLink");
+         String paymentLink = getVariableValue(recipient.getVariablesJson(), "paymentLink");
++        String offerText = getVariableValue(recipient.getVariablesJson(), "offerText");
+ 
+         if (isBlank(name)) {
+             name = isBlank(recipient.getRecipientName()) ? "Customer" : recipient.getRecipientName();
+@@ -272,6 +288,13 @@ public class WhatsAppCampaignService {
+             return variables;
+         }
+ 
++        if ("festival_offers".equalsIgnoreCase(templateName)) {
++            variables.add(name);
++            variables.add(isBlank(offerText) ? "exclusive discounts" : offerText);
++            variables.add(isBlank(link) ? "https://www.blossom-buds-floral-artistry.com/categories" : link);
++            return variables;
++        }
++
+         if ("order_dispatched".equalsIgnoreCase(templateName)) {
+             variables.add(name);
+             variables.add(isBlank(orderCode) ? "your order" : orderCode);
+@@ -302,7 +325,9 @@ public class WhatsAppCampaignService {
+                 + ";orderCode=" + safe(request.getOrderCode())
+                 + ";trackingNumber=" + safe(request.getTrackingNumber())
+                 + ";trackingLink=" + safe(request.getTrackingLink())
+-                + ";paymentLink=" + safe(request.getPaymentLink());
++                + ";paymentLink=" + safe(request.getPaymentLink())
++                + ";offerText=" + safe(request.getOfferText())
++                + ";imageUrl=" + safe(request.getImageUrl());
+     }
+ 
+     /** Extracts link variable from the simple variables text. */
+@@ -365,6 +390,12 @@ public class WhatsAppCampaignService {
+         /** Payment link variable used by payment reminder templates. */
+         private String paymentLink;
+ 
++        /** Offer or discount text used by festival/promotional templates (e.g. "20% off"). */
++        private String offerText;
++
++        /** Public image URL attached as a header image (for templates with image header). */
++        private String imageUrl;
++
+         /** Internal campaign notes. */
+         private String notes;
+ 
+diff --git a/blossombuds-api/src/main/java/com/blossombuds/service/WhatsAppCloudClient.java b/blossombuds-api/src/main/java/com/blossombuds/service/WhatsAppCloudClient.java
+index afeef9e..8f43f02 100644
+--- a/blossombuds-api/src/main/java/com/blossombuds/service/WhatsAppCloudClient.java
++++ b/blossombuds-api/src/main/java/com/blossombuds/service/WhatsAppCloudClient.java
+@@ -22,12 +22,23 @@ public class WhatsAppCloudClient {
+ 
+     private final RestTemplate restTemplate = new RestTemplate();
+ 
+-    /** Sends a WhatsApp template message using Meta Cloud API or dry-run mode. */
++    /** Sends a WhatsApp template message without a header image. */
+     public SendResult sendTemplateMessage(
+             String phone,
+             String templateName,
+             String languageCode,
+             List<String> variables
++    ) {
++        return sendTemplateMessage(phone, templateName, languageCode, variables, null);
++    }
++
++    /** Sends a WhatsApp template message, optionally with a header image URL. */
++    public SendResult sendTemplateMessage(
++            String phone,
++            String templateName,
++            String languageCode,
++            List<String> variables,
++            String headerImageUrl
+     ) {
+         if (isBlank(phone)) {
+             return SendResult.failed("Phone number is required");
+@@ -45,8 +56,8 @@ public class WhatsAppCloudClient {
+         if (!enabled) {
+             String dryRunId = "DRY_RUN_" + OffsetDateTime.now()
+                     .format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
+-            log.info("[WHATSAPP][DRY_RUN] Template '{}' prepared for phone={}, variablesCount={}, dryRunId={}",
+-                    templateName, maskPhone(normalizedPhone), variables == null ? 0 : variables.size(), dryRunId);
++            log.info("[WHATSAPP][DRY_RUN] Template '{}' prepared for phone={}, variablesCount={}, hasImage={}, dryRunId={}",
++                    templateName, maskPhone(normalizedPhone), variables == null ? 0 : variables.size(), !isBlank(headerImageUrl), dryRunId);
+             return SendResult.success(dryRunId, true);
+         }
+ 
+@@ -66,7 +77,7 @@ public class WhatsAppCloudClient {
+ 
+         String url = "https://graph.facebook.com/" + apiVersion + "/" + phoneNumberId + "/messages";
+ 
+-        Map<String, Object> body = buildTemplatePayload(normalizedPhone, templateName, lang, variables);
++        Map<String, Object> body = buildTemplatePayload(normalizedPhone, templateName, lang, variables, headerImageUrl);
+ 
+         HttpHeaders headers = new HttpHeaders();
+         headers.setContentType(MediaType.APPLICATION_JSON);
+@@ -104,12 +115,61 @@ public class WhatsAppCloudClient {
+         }
+     }
+ 
+-    /** Builds Meta Cloud API template message payload. */
++    /** Sends a free-form text message (only valid within 24h of customer-initiated conversation). */
++    public SendResult sendTextMessage(String phone, String text) {
++        if (isBlank(phone)) return SendResult.failed("Phone number is required");
++        if (isBlank(text))  return SendResult.failed("Message text is required");
++
++        String normalizedPhone = normalizePhone(phone);
++        boolean enabled = boolSetting("whatsapp.cloud.enabled", false);
++
++        if (!enabled) {
++            log.info("[WHATSAPP][DRY_RUN] Text to phone={}: {}", maskPhone(normalizedPhone), text);
++            return SendResult.success("DRY_RUN_TEXT_" + System.currentTimeMillis(), true);
++        }
++
++        String apiVersion   = setting("whatsapp.cloud.api_version", "v25.0");
++        String phoneNumberId = setting("whatsapp.cloud.phone_number_id", "");
++        String accessToken  = setting("whatsapp.cloud.access_token", "");
++
++        if (isBlank(phoneNumberId)) return SendResult.failed("WhatsApp phone number id is not configured");
++        if (isBlank(accessToken))   return SendResult.failed("WhatsApp access token is not configured");
++
++        String url = "https://graph.facebook.com/" + apiVersion + "/" + phoneNumberId + "/messages";
++
++        Map<String, Object> body = new LinkedHashMap<>();
++        body.put("messaging_product", "whatsapp");
++        body.put("to", normalizedPhone);
++        body.put("type", "text");
++        Map<String, Object> textObj = new LinkedHashMap<>();
++        textObj.put("body", text);
++        body.put("text", textObj);
++
++        HttpHeaders headers = new HttpHeaders();
++        headers.setContentType(MediaType.APPLICATION_JSON);
++        headers.setBearerAuth(accessToken);
++
++        try {
++            log.info("[WHATSAPP][SEND] Sending text message to phone={}", maskPhone(normalizedPhone));
++            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
++                    url, HttpMethod.POST, new HttpEntity<>(body, headers),
++                    new org.springframework.core.ParameterizedTypeReference<>() {});
++            String providerMessageId = extractMessageId(response.getBody());
++            log.info("[WHATSAPP][SEND] Text message sent. providerMessageId={}", providerMessageId);
++            return SendResult.success(isBlank(providerMessageId) ? "UNKNOWN" : providerMessageId, false);
++        } catch (Exception e) {
++            log.error("[WHATSAPP][SEND] Failed to send text to phone={}: {}", maskPhone(normalizedPhone), e.getMessage(), e);
++            return SendResult.failed(e.getMessage());
++        }
++    }
++
++    /** Builds Meta Cloud API template message payload, with optional image header. */
+     private Map<String, Object> buildTemplatePayload(
+             String phone,
+             String templateName,
+             String languageCode,
+-            List<String> variables
++            List<String> variables,
++            String headerImageUrl
+     ) {
+         Map<String, Object> payload = new LinkedHashMap<>();
+         payload.put("messaging_product", "whatsapp");
+@@ -125,6 +185,21 @@ public class WhatsAppCloudClient {
+ 
+         List<Map<String, Object>> components = new ArrayList<>();
+ 
++        if (!isBlank(headerImageUrl)) {
++            Map<String, Object> headerComponent = new LinkedHashMap<>();
++            headerComponent.put("type", "header");
++
++            Map<String, Object> imageParam = new LinkedHashMap<>();
++            imageParam.put("type", "image");
++
++            Map<String, Object> imageObj = new LinkedHashMap<>();
++            imageObj.put("link", headerImageUrl);
++            imageParam.put("image", imageObj);
++
++            headerComponent.put("parameters", List.of(imageParam));
++            components.add(headerComponent);
++        }
++
+         if (variables != null && !variables.isEmpty()) {
+             Map<String, Object> bodyComponent = new LinkedHashMap<>();
+             bodyComponent.put("type", "body");
+diff --git a/blossombuds-api/src/main/java/com/blossombuds/service/WhatsAppWebhookService.java b/blossombuds-api/src/main/java/com/blossombuds/service/WhatsAppWebhookService.java
+index 7d634f0..51c21a5 100644
+--- a/blossombuds-api/src/main/java/com/blossombuds/service/WhatsAppWebhookService.java
++++ b/blossombuds-api/src/main/java/com/blossombuds/service/WhatsAppWebhookService.java
+@@ -1,7 +1,6 @@
+ package com.blossombuds.service;
+ 
+-import com.blossombuds.domain.WhatsAppCampaign;
+-import com.blossombuds.domain.WhatsAppCampaignRecipient;
++import com.blossombuds.domain.Setting;
+ import com.blossombuds.domain.WhatsAppMessageEvent;
+ import com.blossombuds.repository.WhatsAppCampaignRecipientRepository;
+ import com.blossombuds.repository.WhatsAppCampaignRepository;
+@@ -13,6 +12,9 @@ import lombok.extern.slf4j.Slf4j;
+ import org.springframework.stereotype.Service;
+ import org.springframework.transaction.annotation.Transactional;
+ 
++import org.springframework.transaction.support.TransactionSynchronization;
++import org.springframework.transaction.support.TransactionSynchronizationManager;
++
+ import java.time.OffsetDateTime;
+ 
+ /** Service for processing Meta WhatsApp Cloud API webhook payloads. */
+@@ -25,10 +27,17 @@ public class WhatsAppWebhookService {
+     private final WhatsAppMessageEventRepository messageEventRepository;
+     private final WhatsAppCampaignRecipientRepository recipientRepository;
+     private final WhatsAppCampaignRepository campaignRepository;
++    private final WhatsAppCloudClient whatsAppCloudClient;
++    private final SettingsService settingsService;
+ 
+     /** Stores and processes a raw WhatsApp webhook payload. */
+     @Transactional
+     public void processWebhookPayload(String rawPayload) {
++        if (rawPayload == null || rawPayload.isBlank()) {
++            log.warn("[WHATSAPP][WEBHOOK] Empty payload received");
++            return;
++        }
++
+         WhatsAppMessageEvent rawEvent = new WhatsAppMessageEvent();
+         rawEvent.setEventType("RAW_WEBHOOK");
+         rawEvent.setRawPayload(rawPayload);
+@@ -36,11 +45,6 @@ public class WhatsAppWebhookService {
+         rawEvent.setCreatedAt(OffsetDateTime.now());
+         messageEventRepository.save(rawEvent);
+ 
+-        if (rawPayload == null || rawPayload.isBlank()) {
+-            log.warn("[WHATSAPP][WEBHOOK] Empty payload received");
+-            return;
+-        }
+-
+         try {
+             JsonNode root = objectMapper.readTree(rawPayload);
+             JsonNode entries = root.path("entry");
+@@ -132,6 +136,68 @@ public class WhatsAppWebhookService {
+ 
+             log.info("[WHATSAPP][WEBHOOK][MESSAGE] Incoming message received from phone={}, type={}",
+                     maskPhone(phone), messageType);
++
++            sendAutoReply(phone);
++        }
++    }
++
++    /**
++     * Schedules an auto-reply to fire AFTER the enclosing transaction commits,
++     * so the HTTP call to Meta API does not hold the DB connection open.
++     */
++    private void sendAutoReply(String phone) {
++        String mainNumber = mainWhatsAppNumber();
++        if (mainNumber.isBlank()) {
++            log.debug("[WHATSAPP][AUTO_REPLY] brand.whatsapp not configured, skipping");
++            return;
++        }
++        String ownDigits = ownPhoneDigits();
++        String incomingDigits = phone == null ? "" : phone.replaceAll("[^0-9]", "");
++        if (!ownDigits.isBlank() && incomingDigits.endsWith(ownDigits)) {
++            log.debug("[WHATSAPP][AUTO_REPLY] Skipping auto-reply to own number");
++            return;
++        }
++        String waLink = "https://wa.me/" + mainNumber;
++        String message = "Hi! This number is used only for sending order updates and offers. "
++                + "For queries or support, please reach us directly here: " + waLink;
++
++        // Defer the outbound HTTP call until after the transaction commits so the
++        // DB connection is released before the network round-trip to Meta begins.
++        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
++            @Override
++            public void afterCommit() {
++                WhatsAppCloudClient.SendResult result = whatsAppCloudClient.sendTextMessage(phone, message);
++                if (result.isSuccess()) {
++                    log.info("[WHATSAPP][AUTO_REPLY] Sent to phone={}", maskPhone(phone));
++                } else {
++                    log.warn("[WHATSAPP][AUTO_REPLY] Failed for phone={}: {}", maskPhone(phone), result.getErrorMessage());
++                }
++            }
++        });
++    }
++
++    /** Reads brand.whatsapp from settings and strips it to digits only for wa.me link. */
++    private String mainWhatsAppNumber() {
++        try {
++            Setting s = settingsService.get("brand.whatsapp");
++            if (s == null || s.getValue() == null || s.getValue().isBlank()) return "";
++            return s.getValue().replaceAll("[^0-9]", "");
++        } catch (Exception e) {
++            return "";
++        }
++    }
++
++    /** Returns last 10 digits of the Cloud API sending number to guard against echo loops. */
++    private String ownPhoneDigits() {
++        try {
++            Setting s = settingsService.get("whatsapp.cloud.own_phone_number");
++            if (s != null && s.getValue() != null && !s.getValue().isBlank()) {
++                String digits = s.getValue().replaceAll("[^0-9]", "");
++                return digits.length() >= 10 ? digits.substring(digits.length() - 10) : digits;
++            }
++            return "";
++        } catch (Exception e) {
++            return "";
+         }
+     }
+ 
+diff --git a/blossombuds-api/src/main/java/com/blossombuds/util/MagickBridge.java b/blossombuds-api/src/main/java/com/blossombuds/util/MagickBridge.java
+index 6e548f1..55b1982 100644
+--- a/blossombuds-api/src/main/java/com/blossombuds/util/MagickBridge.java
++++ b/blossombuds-api/src/main/java/com/blossombuds/util/MagickBridge.java
+@@ -64,13 +64,18 @@ public final class MagickBridge {
+     private static boolean tryImageMagick(File input, File output, String cmd)
+             throws IOException, InterruptedException {
+ 
++        // Append [0] to select only the first frame — HEIC files often contain multiple images
++        // (thumbnail + full) and without [0] ImageMagick creates numbered outputs (file-0.jpg, file-1.jpg)
++        // instead of the expected single output path, causing the exists() check to fail.
++        String inputWithFrame = input.getAbsolutePath() + "[0]";
++
+         ProcessBuilder pb;
+         if ("magick".equals(cmd)) {
+             pb = new ProcessBuilder("magick", "convert",
+-                    input.getAbsolutePath(), "-quality", "85", output.getAbsolutePath());
++                    inputWithFrame, "-quality", "85", output.getAbsolutePath());
+         } else {
+             pb = new ProcessBuilder(cmd,
+-                    input.getAbsolutePath(), "-quality", "85", output.getAbsolutePath());
++                    inputWithFrame, "-quality", "85", output.getAbsolutePath());
+         }
+ 
+         pb.redirectErrorStream(true);
+diff --git a/blossombuds-api/src/main/java/com/blossombuds/web/AdminWhatsAppController.java b/blossombuds-api/src/main/java/com/blossombuds/web/AdminWhatsAppController.java
+index f9a68fc..d15ca8b 100644
+--- a/blossombuds-api/src/main/java/com/blossombuds/web/AdminWhatsAppController.java
++++ b/blossombuds-api/src/main/java/com/blossombuds/web/AdminWhatsAppController.java
+@@ -3,6 +3,7 @@ package com.blossombuds.web;
+ import com.blossombuds.dto.WhatsAppDtos;
+ import com.blossombuds.service.WhatsAppCampaignService;
+ import lombok.RequiredArgsConstructor;
++import org.springframework.security.access.prepost.PreAuthorize;
+ import org.springframework.web.bind.annotation.*;
+ 
+ import java.util.List;
+@@ -11,6 +12,7 @@ import java.util.List;
+ @RestController
+ @RequiredArgsConstructor
+ @RequestMapping("/api/admin/whatsapp")
++@PreAuthorize("hasRole('ADMIN')")
+ public class AdminWhatsAppController {
+ 
+     private final WhatsAppCampaignService whatsAppCampaignService;
+diff --git a/blossombuds-api/src/main/java/com/blossombuds/web/CustomerAuthController.java b/blossombuds-api/src/main/java/com/blossombuds/web/CustomerAuthController.java
+index 0f01141..79d8bd2 100644
+--- a/blossombuds-api/src/main/java/com/blossombuds/web/CustomerAuthController.java
++++ b/blossombuds-api/src/main/java/com/blossombuds/web/CustomerAuthController.java
+@@ -89,6 +89,42 @@ public class CustomerAuthController {
+         auth.completePasswordReset(req.getEmail(), req.getCode(), req.getNewPassword());
+     }
+ 
++    /**
++     * Verify phone number using the OTP sent via SMS during registration.
++     * Returns a JWT token for auto-login on success.
++     */
++    @PostMapping("/verify-phone-otp")
++    public CustomerTokenResponse verifyPhoneAndLogin(@Valid @RequestBody VerifyPhoneOtpRequest req) {
++        return new CustomerTokenResponse(auth.verifyPhoneOtpAndLogin(req.getPhone(), req.getCode()));
++    }
++
++    /**
++     * Resend phone verification OTP via SMS.
++     * Frontend: "Resend code" on phone-verify screen.
++     */
++    @PostMapping("/resend-phone-otp")
++    @ResponseStatus(HttpStatus.NO_CONTENT)
++    public void resendPhoneOtp(@Valid @RequestBody ResendPhoneOtpRequest req) {
++        auth.resendPhoneOtp(req.getPhone());
++    }
++
++    /**
++     * Sends a login OTP via SMS to an existing phone-registered account.
++     */
++    @PostMapping("/phone-login/request")
++    @ResponseStatus(HttpStatus.NO_CONTENT)
++    public void requestPhoneLoginOtp(@Valid @RequestBody ResendPhoneOtpRequest req) {
++        auth.requestPhoneLoginOtp(req.getPhone());
++    }
++
++    /**
++     * Verifies phone login OTP and returns a JWT.
++     */
++    @PostMapping("/phone-login/verify")
++    public CustomerTokenResponse verifyPhoneLogin(@Valid @RequestBody VerifyPhoneOtpRequest req) {
++        return new CustomerTokenResponse(auth.verifyPhoneLoginOtp(req.getPhone(), req.getCode()));
++    }
++
+     @PostMapping("/google-login")
+     public CustomerTokenResponse googleLogin(@Valid @RequestBody GoogleLoginRequest req) {
+         String jwtToken = auth.loginWithGoogle(req.getIdToken());
+@@ -142,4 +178,20 @@ public class CustomerAuthController {
+         @Size(min = 8, message = "Password must be at least 8 characters")
+         private String newPassword;
+     }
++
++    @Data
++    public static class VerifyPhoneOtpRequest {
++        @NotBlank
++        private String phone;
++
++        @NotBlank
++        @Size(min = 4, max = 10)
++        private String code;
++    }
++
++    @Data
++    public static class ResendPhoneOtpRequest {
++        @NotBlank
++        private String phone;
++    }
+ }
+diff --git a/blossombuds-api/src/main/java/com/blossombuds/web/WhatsAppWebhookController.java b/blossombuds-api/src/main/java/com/blossombuds/web/WhatsAppWebhookController.java
+index 85bdd71..0c613e2 100644
+--- a/blossombuds-api/src/main/java/com/blossombuds/web/WhatsAppWebhookController.java
++++ b/blossombuds-api/src/main/java/com/blossombuds/web/WhatsAppWebhookController.java
+@@ -10,6 +10,10 @@ import lombok.extern.slf4j.Slf4j;
+ import org.springframework.http.ResponseEntity;
+ import org.springframework.web.bind.annotation.*;
+ 
++import javax.crypto.Mac;
++import javax.crypto.spec.SecretKeySpec;
++import java.nio.charset.StandardCharsets;
++import java.security.MessageDigest;
+ import java.time.OffsetDateTime;
+ 
+ /** Public webhook APIs for Meta WhatsApp Cloud API verification and events. */
+@@ -41,15 +45,50 @@ public class WhatsAppWebhookController {
+         return ResponseEntity.status(403).body("Verification failed");
+     }
+ 
+-    /** Receives WhatsApp webhook events from Meta. */
+-    /** Receives WhatsApp webhook events from Meta. */
++    /** Receives WhatsApp webhook events from Meta — validates X-Hub-Signature-256 before processing. */
+     @PostMapping
+-    public ResponseEntity<String> receiveWebhook(@RequestBody String rawPayload) {
++    public ResponseEntity<String> receiveWebhook(
++            @RequestHeader(value = "X-Hub-Signature-256", required = false) String signature,
++            @RequestBody String rawPayload) {
++
++        String appSecret = setting("whatsapp.cloud.app_secret", "");
++        if (!appSecret.isBlank()) {
++            if (!isValidSignature(rawPayload, signature, appSecret)) {
++                log.warn("[WHATSAPP][WEBHOOK][SECURITY] Invalid or missing X-Hub-Signature-256 — request rejected");
++                return ResponseEntity.status(403).body("Invalid signature");
++            }
++        } else {
++            log.warn("[WHATSAPP][WEBHOOK][SECURITY] whatsapp.cloud.app_secret not configured — skipping signature check");
++        }
++
+         log.info("[WHATSAPP][WEBHOOK][EVENT] Received WhatsApp webhook payload");
+         whatsAppWebhookService.processWebhookPayload(rawPayload);
+         return ResponseEntity.ok("EVENT_RECEIVED");
+     }
+ 
++    /** Verifies Meta's HMAC-SHA256 signature using constant-time comparison. */
++    private boolean isValidSignature(String payload, String signature, String appSecret) {
++        if (signature == null || !signature.startsWith("sha256=")) return false;
++        try {
++            Mac mac = Mac.getInstance("HmacSHA256");
++            mac.init(new SecretKeySpec(appSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
++            byte[] expected = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
++            byte[] actual = hexToBytes(signature.substring(7));
++            return MessageDigest.isEqual(expected, actual);
++        } catch (Exception e) {
++            log.error("[WHATSAPP][WEBHOOK][SECURITY] Signature verification error: {}", e.getMessage());
++            return false;
++        }
++    }
++
++    private static byte[] hexToBytes(String hex) {
++        int len = hex.length();
++        byte[] out = new byte[len / 2];
++        for (int i = 0; i < len; i += 2)
++            out[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) << 4) | Character.digit(hex.charAt(i + 1), 16));
++        return out;
++    }
++
+     /** Reads a setting value or returns default when missing. */
+     private String setting(String key, String defaultValue) {
+         try {
+diff --git a/blossombuds-api/src/main/resources/application-staging.properties b/blossombuds-api/src/main/resources/application-staging.properties
+index 30b9d51..b2256ce 100644
+--- a/blossombuds-api/src/main/resources/application-staging.properties
++++ b/blossombuds-api/src/main/resources/application-staging.properties
+@@ -18,7 +18,7 @@ spring.jpa.properties.hibernate.format_sql=true
+ spring.jpa.open-in-view=false
+ 
+ # Optional: tame Hikari logs by being explicit
+-spring.datasource.hikari.maximum-pool-size=10
++spring.datasource.hikari.maximum-pool-size=15
+ spring.datasource.hikari.minimum-idle=2
+ spring.datasource.hikari.schema=blossombuds_stg
+ 
+@@ -79,6 +79,8 @@ app.mail.apiKey=${APP_MAIL_APIKEY}
+ # Optional: URL of your logo image (S3, CloudFront, etc.)
+ app.mail.logoUrl=https://blossombuds-api-production.up.railway.app/BB_logo.png
+ 
++app.category.default-image-url=https://blossombuds-api-production.up.railway.app/category-default.jpg
++
+ # Frontend base URL used in verification links
+ app.frontend.baseUrl=${FRONTEND_BASE_STG}
+ 
+@@ -150,4 +152,9 @@ spring.data.redis.port=${REDISPORT:6379}
+ spring.data.redis.password=${REDISPASSWORD:}
+ spring.data.redis.username=${REDISUSER:default}
+ spring.data.redis.ssl.enabled=${REDIS_SSL:false}
+-spring.data.redis.timeout=60000
+\ No newline at end of file
++spring.data.redis.connect-timeout=5s
++spring.data.redis.timeout=3s
++spring.data.redis.lettuce.pool.max-active=8
++spring.data.redis.lettuce.pool.max-idle=4
++spring.data.redis.lettuce.pool.min-idle=1
++spring.data.redis.lettuce.pool.max-wait=2000ms
+\ No newline at end of file
+diff --git a/blossombuds-api/src/main/resources/application.properties b/blossombuds-api/src/main/resources/application.properties
+index 48af078..3f68395 100644
+--- a/blossombuds-api/src/main/resources/application.properties
++++ b/blossombuds-api/src/main/resources/application.properties
+@@ -1,13 +1,157 @@
+-# --- Datasource (local Docker Postgres) ---

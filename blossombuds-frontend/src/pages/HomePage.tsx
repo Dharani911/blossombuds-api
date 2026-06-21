@@ -14,8 +14,6 @@ import customer4 from "../assets/home/customer4.jpeg";
 import customer3 from "../assets/home/customer3.jpeg";
 import customer1 from "../assets/home/customer_1.jpeg";
 import customer2 from "../assets/home/customer_2.jpeg";
-import customizationFlowers from "../assets/home/customization_flowers.jpeg";
-import customizationGarland from "../assets/home/customization_garland.jpeg";
 import marriage from "../assets/home/marriage.jpeg";
 import product1 from "../assets/home/product1.jpeg";
 import product2 from "../assets/home/product2.jpeg";
@@ -26,15 +24,13 @@ import product6 from "../assets/home/product6.jpeg";
 import product7 from "../assets/home/product7.jpeg";
 import product8 from "../assets/home/product8.jpeg";
 
-
 const curatedItems = [
-{
+  {
     title: "Wedding celebration look",
     image: marriage,
     to: "/categories/2",
     tag: "Wedding moment",
   },
-
   {
     title: "Daily Look",
     image: customer2,
@@ -59,14 +55,13 @@ const curatedItems = [
     to: "/categories/1",
     tag: "Bridal detail",
   },
-{
+  {
     title: "Style it in your way",
     image: customer1,
     to: "/categories",
     tag: "Customer look",
   },
 ];
-
 
 function RevealSection({
   children,
@@ -89,20 +84,41 @@ export default function HomePage() {
     <main className="home-root" role="main">
       <style>{styles}</style>
 
+      {/* Announcement bar — marquee ticker */}
+      <div className="home-announcement" aria-label="Store announcements">
+        {/* Two copies so the loop is seamless (animate -50%) */}
+        <div className="home-ann-track" aria-hidden="true">
+          <span>Handcrafted with love</span>
+          <span className="home-ann-dot">·</span>
+          <span>Made to order</span>
+          <span className="home-ann-dot">·</span>
+          <span>Floral accessories</span>
+          <span className="home-ann-dot">·</span>
+          <span>Designed to last</span>
+          <span className="home-ann-dot">·</span>
+          <span>Handcrafted with love</span>
+          <span className="home-ann-dot">·</span>
+          <span>Made to order</span>
+          <span className="home-ann-dot">·</span>
+          <span>Floral accessories</span>
+          <span className="home-ann-dot">·</span>
+          <span>Designed to last</span>
+          <span className="home-ann-dot">·</span>
+        </div>
+      </div>
+
       <Hero />
 
       <div className="home-flow">
-        <RevealSection className="home-block reveal-delay-1">
+        <RevealSection className="home-block">
           <HomeCategoryCarousel />
         </RevealSection>
 
-        <div className="bb-divider" />
-
-        <RevealSection className="home-block reveal-delay-1">
+        <RevealSection className="home-block">
           <FeatureTiles />
         </RevealSection>
 
-        <RevealSection className="home-block reveal-delay-1">
+        <RevealSection className="home-block">
           <HomeStoryEditorial
             items={[
               {
@@ -173,23 +189,19 @@ export default function HomePage() {
           />
         </RevealSection>
 
-        <div className="bb-divider" />
-
-        <RevealSection className="home-block reveal-delay-2">
+        <RevealSection className="home-block">
           <HomeCuratedShowcase items={curatedItems} />
         </RevealSection>
 
-        <RevealSection className="home-block reveal-delay-1">
+        <RevealSection className="home-block">
           <ProductShowcase title="New Arrivals" viewAllTo="/featured" />
         </RevealSection>
 
-        <div className="bb-divider" />
-
-        <RevealSection className="home-block reveal-delay-2">
+        <RevealSection className="home-block">
           <Testimonials />
         </RevealSection>
 
-        <RevealSection className="home-block reveal-delay-3">
+        <RevealSection className="home-block">
           <CustomOrderCTA />
         </RevealSection>
       </div>
@@ -199,171 +211,96 @@ export default function HomePage() {
 
 const styles = `
 .home-root{
-  background:
-    radial-gradient(circle at top, rgba(255,255,255,.68), rgba(255,255,255,0) 24%),
-    linear-gradient(180deg, #fdfbf7 0%, var(--bb-bg) 22%, var(--bb-bg) 100%);
-  min-height: 100dvh;
-  overflow-x: hidden;
+  background:var(--bb-bg,#FAF7E7);
+  min-height:100dvh;
+  /* escape app-main's 12px/16px side padding so sections can bleed to viewport edges */
+  margin:-12px -12px 0;
+}
+
+@media (min-width:920px){
+  .home-root{
+    margin:-16px -16px 0;
+  }
+}
+
+/* Announcement bar — marquee ticker */
+.home-announcement{
+  background:var(--bb-accent,#F05D8B);
+  color:#fff;
+  height:36px;
+  overflow:hidden;
+  position:relative; /* contains absolutely-positioned track */
+}
+
+/* position:absolute keeps this OUT of normal flow so it never
+   inflates the parent's scrollWidth — this prevents the forced
+   overflow-y:auto on ancestor scroll containers from breaking page scroll */
+.home-ann-track{
+  position:absolute;
+  top:50%;
+  left:0;
+  transform:translateY(-50%);
+  display:inline-flex;
+  align-items:center;
+  gap:20px;
+  white-space:nowrap;
+  font-size:11px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  font-weight:600;
+  animation:annMarquee 26s linear infinite;
+}
+
+.home-ann-dot{
+  opacity:.55;
+  font-size:14px;
+}
+
+@keyframes annMarquee{
+  from{ transform:translateY(-50%) translateX(0); }
+  to{ transform:translateY(-50%) translateX(-50%); }
+}
+
+@media (prefers-reduced-motion:reduce){
+  .home-ann-track{
+    position:static;
+    transform:none;
+    animation:none;
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:center;
+    white-space:normal;
+    padding:8px 16px;
+  }
+  .home-announcement{
+    height:auto;
+  }
 }
 
 .home-flow{
-  position: relative;
+  position:relative;
 }
 
 .home-block{
-  position: relative;
+  position:relative;
 }
 
-.bb-divider{
-  width: min(var(--bb-page-max, 1180px), calc(100% - (var(--bb-page-pad, 14px) * 2)));
-  height: 1px;
-  margin: 0 auto;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(74,79,65,.06) 12%,
-    rgba(74,79,65,.11) 50%,
-    rgba(74,79,65,.06) 88%,
-    transparent
-  );
-}
-
-/* section heading shared */
-.bb-section-head{
-  max-width: 620px;
-  margin: 0 auto 22px;
-  text-align: center;
-}
-
-.bb-eyebrow{
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 28px;
-  padding: 0 12px;
-  margin-bottom: 10px;
-  border-radius: 999px;
-  background: rgba(240,93,139,.08);
-  border: 1px solid rgba(240,93,139,.14);
-  color: var(--bb-accent);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-}
-
-.bb-section-head h2{
-  margin: 0 0 8px;
-  font-family: "Cinzel","DM Serif Display",Georgia,serif;
-  color: var(--bb-primary);
-  font-size: clamp(26px, 4vw, 40px);
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -.02em;
-}
-
-.bb-section-head p{
-  margin: 0;
-  color: #7a8277;
-  font-size: 15px;
-  line-height: 1.72;
-}
-
-/* reveal rhythm */
+/* Scroll reveal: fade only — no Y shift so it never mimics reverse-scroll */
 .reveal{
-  opacity: 1;
-  transform: none;
-  transition:
-    opacity .7s ease,
-    transform .7s cubic-bezier(.22,.61,.36,1);
-  will-change: opacity, transform;
+  opacity:0;
+  transition:opacity .55s ease;
+  will-change:opacity;
 }
 
-.reveal:not(.is-visible){
-  opacity: 1;
-  transform: none;
+.reveal.in-view{
+  opacity:1;
 }
 
-.reveal.is-visible{
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.reveal-delay-1{
-  transition-delay: .04s;
-}
-.reveal-delay-2{
-  transition-delay: .10s;
-}
-.reveal-delay-3{
-  transition-delay: .16s;
-}
-
-
-/* tablet */
-@media (max-width: 900px){
-  .gallery-grid{
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-auto-rows: 170px;
-  }
-}
-
-/* mobile */
-@media (max-width: 560px){
-  .bb-section-head{
-    margin-bottom: 18px;
-  }
-
-  .bb-section-head h2{
-    font-size: clamp(24px, 7.5vw, 32px);
-  }
-
-  .bb-section-head p{
-    font-size: 14px;
-    line-height: 1.64;
-  }
-
-  .gallery-wrap{
-    padding: 26px 0;
-  }
-
-  .gallery-grid{
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-auto-rows: 140px;
-    gap: 10px;
-  }
-
-  .gallery-cell{
-    border-radius: 18px;
-  }
-}
-
-/* 360px focus */
-@media (max-width: 390px){
-  .bb-section-head h2{
-    font-size: 24px;
-  }
-
-  .bb-section-head p{
-    font-size: 13px;
-  }
-
-  .gallery-grid{
-    grid-auto-rows: 128px;
-    gap: 9px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce){
+@media (prefers-reduced-motion:reduce){
   .reveal,
-  .reveal.is-visible{
-    opacity: 1;
-    transform: none;
-    transition: none;
-  }
-
-  .gallery-cell img{
-    transition: none;
+  .reveal.in-view{
+    opacity:1;
+    transition:none;
   }
 }
 `;

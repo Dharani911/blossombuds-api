@@ -1,0 +1,866 @@
+             )}
+ 
+-            {/* STEP: Email form */}
++            {/* ── EMAIL FORM ──────────────────────────────────────────── */}
+             {step === "email-form" && (
+               <>
+                 <div className="hero">
+                   <h3>Sign up with Email</h3>
+                   <p>We'll send you a verification code.</p>
+                 </div>
+-
+-                <form className="form email-form" onSubmit={onSubmit}>
++                <form className="form slide-in" onSubmit={submitEmailForm}>
+                   <label className="label">
+                     <span>Name</span>
+                     <div className="field">
+-                      <input
+-                        className="input"
+-                        placeholder="Your full name"
+-                        value={name}
+-                        onChange={(e) => setName(e.target.value)}
+-                        required
+-                        autoComplete="name"
+-                        autoFocus
+-                      />
++                      <input className="input" placeholder="Your full name" value={name}
++                        onChange={(e) => setName(e.target.value)} required autoComplete="name" autoFocus />
+                     </div>
+-                    <small className={`hint ${nameOk ? "ok" : ""}`}>
+-                      {nameOk ? "Looks good." : "At least 2 characters."}
+-                    </small>
++                    <small className={`hint ${nameOk ? "ok" : ""}`}>{nameOk ? "Looks good." : "At least 2 characters."}</small>
+                   </label>
+ 
+                   <label className="label">
+                     <span>Email</span>
+                     <div className="field">
+-                      <input
+-                        className="input"
+-                        type="email"
+-                        placeholder="you@example.com"
+-                        value={email}
+-                        onChange={(e) => setEmail(e.target.value)}
+-                        required
+-                        autoComplete="email"
+-                        inputMode="email"
+-                      />
++                      <input className="input" type="email" placeholder="you@example.com" value={email}
++                        onChange={(e) => setEmail(e.target.value)} required autoComplete="email" inputMode="email" />
+                     </div>
+-                    <small className={`hint ${emailOk ? "ok" : ""}`}>
+-                      {emailOk ? "Valid email." : "Enter a valid email address."}
+-                    </small>
++                    <small className={`hint ${emailOk ? "ok" : ""}`}>{emailOk ? "Valid email." : "Enter a valid email address."}</small>
+                   </label>
+ 
+                   <label className="label">
+                     <span>Password</span>
+                     <div className="field">
+-                      <input
+-                        className="input"
+-                        type={showPw ? "text" : "password"}
+-                        placeholder="At least 8 characters"
+-                        value={password}
+-                        onChange={(e) => setPassword(e.target.value)}
+-                        required
+-                        autoComplete="new-password"
+-                      />
+-                      <button
+-                        type="button"
+-                        className="icon-btn eye"
+-                        onClick={() => setShowPw(s => !s)}
+-                        aria-label={showPw ? "Hide password" : "Show password"}
+-                      >
++                      <input className="input" type={showPw ? "text" : "password"} placeholder="At least 8 characters"
++                        value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="new-password" />
++                      <button type="button" className="icon-btn eye" onClick={() => setShowPw(s => !s)}>
+                         <EyeIcon open={showPw} />
+                       </button>
+                     </div>
+-                    <small className={`hint ${pwOk ? "ok" : ""}`}>
+-                      {pwOk ? "Strong enough." : "Minimum 8 characters."}
+-                    </small>
++                    <small className={`hint ${pwOk ? "ok" : ""}`}>{pwOk ? "Strong enough." : "Minimum 8 characters."}</small>
+                   </label>
+ 
+                   <label className="label">
+                     <span>Confirm password</span>
+                     <div className="field">
+-                      <input
+-                        className="input"
+-                        type={showPw2 ? "text" : "password"}
+-                        placeholder="Re-enter password"
+-                        value={confirm}
+-                        onChange={(e) => setConfirm(e.target.value)}
+-                        required
+-                        autoComplete="new-password"
+-                      />
+-                      <button
+-                        type="button"
+-                        className="icon-btn eye"
+-                        onClick={() => setShowPw2(s => !s)}
+-                        aria-label={showPw2 ? "Hide password" : "Show password"}
+-                      >
++                      <input className="input" type={showPw2 ? "text" : "password"} placeholder="Re-enter password"
++                        value={confirm} onChange={(e) => setConfirm(e.target.value)} required autoComplete="new-password" />
++                      <button type="button" className="icon-btn eye" onClick={() => setShowPw2(s => !s)}>
+                         <EyeIcon open={showPw2} />
+                       </button>
+                     </div>
+                     <small className={`hint ${confirmOk ? "ok" : ""}`}>
+-                      {confirm.length === 0 ? "Please confirm password." : (confirmOk ? "Passwords match." : "Passwords don't match.")}
++                      {confirm.length === 0 ? "Please confirm password." : confirmOk ? "Passwords match." : "Passwords don't match."}
+                     </small>
+                   </label>
+ 
+                   {err && <div className="error" role="alert">{err}</div>}
+ 
+-                  <button className="cta" type="submit" disabled={!canSubmit || busy}>
++                  <button className="cta" type="submit" disabled={!canEmailSubmit || busy}>
+                     {busy ? "Creating account…" : "Continue"}
+                   </button>
+-
+-                  <button type="button" className="back-btn" onClick={() => setStep("choose")}>
+-                    ← Back
+-                  </button>
++                  <button type="button" className="back-btn" onClick={() => setStep("choose")}>← Back</button>
+                 </form>
+               </>
+             )}
+ 
+-            {/* STEP: OTP Verification */}
++            {/* ── EMAIL OTP ────────────────────────────────────────────── */}
+             {step === "otp-verify" && (
+               <>
+                 <div className="hero">
+                   <h3>Verify your email</h3>
+                   <p>We sent a 6-digit code to <strong>{email}</strong></p>
+                 </div>
+-
+-                <form className="form otp-form" onSubmit={verifyOtp}>
++                <form className="form slide-in" onSubmit={verifyEmailOtp}>
+                   <label className="label">
+-                    <span>Verification Code</span>
++                    <span>Verification code</span>
+                     <div className="field otp-field">
+-                      <input
+-                        className="input otp-input"
+-                        type="text"
+-                        inputMode="numeric"
+-                        maxLength={6}
+-                        placeholder="000000"
+-                        value={otp}
+-                        onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+-                        autoFocus
+-                        autoComplete="one-time-code"
+-                      />
++                      <input className="input otp-input" type="text" inputMode="numeric" maxLength={6}
++                        placeholder="000000" value={emailOtp}
++                        onChange={(e) => setEmailOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
++                        autoFocus autoComplete="one-time-code" />
++                    </div>
++                  </label>
++                  {emailOtpErr && <div className="error" role="alert">{emailOtpErr}</div>}
++                  <button className="cta" type="submit" disabled={emailOtp.length < 6 || emailOtpBusy}>
++                    {emailOtpBusy ? "Verifying…" : "Verify & Login"}
++                  </button>
++                  <div className="resend-row">
++                    <span className="muted">Didn't receive the code?</span>
++                    <button type="button" className="textlink" onClick={resendEmailOtp} disabled={emailResendBusy}>
++                      {emailResendBusy ? "Sending…" : "Resend"}
++                    </button>
++                  </div>
++                  {emailResendMsg && <div className="resend-msg">{emailResendMsg}</div>}
++                  <button type="button" className="back-btn" onClick={() => setStep("email-form")}>← Change email</button>
++                </form>
++              </>
++            )}
++
++            {/* ── PHONE FORM ──────────────────────────────────────────── */}
++            {step === "phone-form" && (
++              <>
++                <div className="hero">
++                  <h3>Sign up with Mobile</h3>
++                  <p>We'll send you a verification code via SMS.</p>
++                </div>
++                <form className="form slide-in" onSubmit={submitPhoneForm}>
++                  <label className="label">
++                    <span>Name</span>
++                    <div className="field">
++                      <input className="input" placeholder="Your full name" value={name}
++                        onChange={(e) => setName(e.target.value)} required autoComplete="name" autoFocus />
++                    </div>
++                    <small className={`hint ${nameOk ? "ok" : ""}`}>{nameOk ? "Looks good." : "At least 2 characters."}</small>
++                  </label>
++
++                  <label className="label">
++                    <span>Mobile number</span>
++                    <div className="field">
++                      <span className="phone-prefix">+91</span>
++                      <input className="input" type="tel" inputMode="numeric" placeholder="10-digit mobile number"
++                        value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
++                        autoComplete="tel" maxLength={10} />
++                    </div>
++                    <small className={`hint ${phoneOk ? "ok" : ""}`}>
++                      {rawPhone.length === 0 ? "Enter your 10-digit Indian mobile number." : phoneOk ? "Valid number." : "Enter a valid 10-digit Indian mobile number."}
++                    </small>
++                  </label>
++
++                  <label className="label">
++                    <span>Password</span>
++                    <div className="field">
++                      <input className="input" type={showPw ? "text" : "password"} placeholder="At least 8 characters"
++                        value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="new-password" />
++                      <button type="button" className="icon-btn eye" onClick={() => setShowPw(s => !s)}>
++                        <EyeIcon open={showPw} />
++                      </button>
++                    </div>
++                    <small className={`hint ${pwOk ? "ok" : ""}`}>{pwOk ? "Strong enough." : "Minimum 8 characters."}</small>
++                  </label>
++
++                  <label className="label">
++                    <span>Confirm password</span>
++                    <div className="field">
++                      <input className="input" type={showPw2 ? "text" : "password"} placeholder="Re-enter password"
++                        value={confirm} onChange={(e) => setConfirm(e.target.value)} required autoComplete="new-password" />
++                      <button type="button" className="icon-btn eye" onClick={() => setShowPw2(s => !s)}>
++                        <EyeIcon open={showPw2} />
++                      </button>
+                     </div>
++                    <small className={`hint ${confirmOk ? "ok" : ""}`}>
++                      {confirm.length === 0 ? "Please confirm password." : confirmOk ? "Passwords match." : "Passwords don't match."}
++                    </small>
+                   </label>
+ 
+-                  {otpErr && <div className="error" role="alert">{otpErr}</div>}
++                  <div className="consent-block">
++                    <p className="consent-title">Stay updated (optional)</p>
++                    <label className="consent-row">
++                      <input type="checkbox" className="consent-check" checked={whatsAppOptIn}
++                        onChange={(e) => setWhatsAppOptIn(e.target.checked)} />
++                      <span>Receive order updates & offers on <strong>WhatsApp</strong></span>
++                    </label>
++                    <label className="consent-row">
++                      <input type="checkbox" className="consent-check" checked={smsOptIn}
++                        onChange={(e) => setSmsOptIn(e.target.checked)} />
++                      <span>Receive order updates & offers via <strong>SMS</strong></span>
++                    </label>
++                  </div>
+ 
+-                  <button className="cta" type="submit" disabled={otp.length < 6 || otpBusy}>
+-                    {otpBusy ? "Verifying…" : "Verify & Continue"}
++                  {err && <div className="error" role="alert">{err}</div>}
++
++                  <button className="cta" type="submit" disabled={!canPhoneSubmit || busy}>
++                    {busy ? "Creating account…" : "Continue"}
+                   </button>
++                  <button type="button" className="back-btn" onClick={() => setStep("choose")}>← Back</button>
++                </form>
++              </>
++            )}
+ 
++            {/* ── PHONE OTP ────────────────────────────────────────────── */}
++            {step === "phone-otp-verify" && (
++              <>
++                <div className="hero">
++                  <h3>Verify your mobile</h3>
++                  <p>We sent a 6-digit code to <strong>+91 {rawPhone}</strong> via SMS.</p>
++                </div>
++                <form className="form slide-in" onSubmit={verifyPhoneOtpStep}>
++                  <label className="label">
++                    <span>Verification code</span>
++                    <div className="field otp-field">
++                      <input className="input otp-input" type="text" inputMode="numeric" maxLength={6}
++                        placeholder="000000" value={phoneOtp}
++                        onChange={(e) => setPhoneOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
++                        autoFocus autoComplete="one-time-code" />
++                    </div>
++                  </label>
++                  {phoneOtpErr && <div className="error" role="alert">{phoneOtpErr}</div>}
++                  <button className="cta" type="submit" disabled={phoneOtp.length < 6 || phoneOtpBusy}>
++                    {phoneOtpBusy ? "Verifying…" : "Verify & Login"}
++                  </button>
+                   <div className="resend-row">
+                     <span className="muted">Didn't receive the code?</span>
+-                    <button
+-                      type="button"
+-                      className="textlink"
+-                      onClick={resendOtp}
+-                      disabled={resendBusy}
+-                    >
+-                      {resendBusy ? "Sending…" : "Resend"}
++                    <button type="button" className="textlink" onClick={resendPhoneOtpStep} disabled={phoneResendBusy}>
++                      {phoneResendBusy ? "Sending…" : "Resend"}
+                     </button>
+                   </div>
+-                  {resendMsg && <div className="resend-msg">{resendMsg}</div>}
+-
+-                  <button type="button" className="back-btn" onClick={() => setStep("email-form")}>
+-                    ← Change email
+-                  </button>
++                  {phoneResendMsg && <div className="resend-msg">{phoneResendMsg}</div>}
++                  <button type="button" className="back-btn" onClick={() => setStep("phone-form")}>← Change number</button>
+                 </form>
+               </>
+             )}
++
+           </div>
+         </div>
+       </div>
+@@ -361,6 +458,8 @@ export default function RegisterModal() {
+   return createPortal(modal, document.body);
+ }
+ 
++// ── Icons ──────────────────────────────────────────────────────────────────
++
+ function EyeIcon({ open }: { open: boolean }) {
+   return open ? (
+     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+@@ -376,6 +475,26 @@ function EyeIcon({ open }: { open: boolean }) {
+   );
+ }
+ 
++function IconMail() {
++  return (
++    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden style={{ flexShrink: 0 }}>
++      <path d="M4 6l8 5 8-5" fill="none" stroke="currentColor" strokeWidth="1.6" />
++      <rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" strokeWidth="1.6" />
++    </svg>
++  );
++}
++
++function IconPhone() {
++  return (
++    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden style={{ flexShrink: 0 }}>
++      <rect x="7" y="2" width="10" height="20" rx="2" fill="none" stroke="currentColor" strokeWidth="1.6" />
++      <circle cx="12" cy="18" r="1" fill="currentColor" />
++    </svg>
++  );
++}
++
++// ── Styles ─────────────────────────────────────────────────────────────────
++
+ const styles = `
+ :root{
+   --bb-primary: #4A4F41;
+@@ -383,390 +502,187 @@ const styles = `
+   --bb-accent-2: #F6C320;
+   --bb-bg: #FAF7E7;
+ }
+-
+-/* Overlay */
+ .auth-scrim{
+   position:fixed; inset:0; z-index:9998;
+-  background: rgba(0,0,0,.28);
+-  backdrop-filter: blur(6px);
+-  animation: fadeIn .18s ease both;
++  background:rgba(0,0,0,.28); backdrop-filter:blur(6px);
++  animation:fadeIn .18s ease both;
+ }
+-@keyframes fadeIn{ from{ opacity:0 } to{ opacity:1 } }
+-
+-/* Centered container */
++@keyframes fadeIn{ from{opacity:0} to{opacity:1} }
+ .auth-modal{
+   position:fixed; inset:0; z-index:9999;
+-  display:grid; place-items:center;
+-  padding:16px;
++  display:grid; place-items:center; padding:16px;
+ }
+-
+-/* Sheet card */
+ .sheet{
+-  display: flex;
+-  flex-direction: column;
+-  width: min(440px, 96vw);
+-  max-height: min(88vh, 680px);
+-  background: var(--bb-bg);
+-  border-radius: 22px;
+-  box-shadow: 0 24px 80px rgba(0,0,0,.22);
+-  animation: popUp .22s cubic-bezier(.2,.8,.2,1) both;
+-  overflow: hidden;
++  display:flex; flex-direction:column;
++  width:min(440px,96vw); max-height:min(88vh,760px);
++  background:var(--bb-bg); border-radius:22px;
++  box-shadow:0 24px 80px rgba(0,0,0,.22);
++  animation:popUp .22s cubic-bezier(.2,.8,.2,1) both;
++  overflow:hidden;
+ }
+ @keyframes popUp{
+-  from{ opacity:0; transform: scale(.96) translateY(12px); }
+-  to{ opacity:1; transform:none; }
++  from{opacity:0;transform:scale(.96) translateY(12px)}
++  to{opacity:1;transform:none}
+ }
+-
+-/* Header – shared for login + register */
+ .am-head{
+-  display:flex; align-items:center; justify-content:space-between; gap: 10px;
+-  padding: 12px 18px;
+-  border-bottom: 1px solid rgba(0,0,0,.06);
+-  flex-shrink: 0;
+-  background: linear-gradient(
+-    135deg,
+-    rgba(240,93,139,.22),
+-    rgba(246,195,32,.18)
+-  );
+-  box-shadow:
+-    0 3px 10px rgba(0,0,0,.06),
+-    0 1px 0 rgba(255,255,255,.55) inset;
++  display:flex; align-items:center; justify-content:space-between; gap:10px;
++  padding:12px 18px; border-bottom:1px solid rgba(0,0,0,.06); flex-shrink:0;
++  background:linear-gradient(135deg,rgba(240,93,139,.22),rgba(246,195,32,.18));
++  box-shadow:0 3px 10px rgba(0,0,0,.06),0 1px 0 rgba(255,255,255,.55) inset;
+ }
+-.brand{ display:flex; align-items:center; gap: 10px; }
+-.brand img{ height: 40px; }
++.brand{ display:flex; align-items:center; gap:10px; }
++.brand img{ height:40px; }
+ .brand-name{ display:flex; flex-direction:column; }
+ .brand-name .big{
+-  font-family: "DM Serif Display", Georgia, serif;
+-  font-size: 16px;
+-  color: #2f332a;
+-}
+-.brand-name .small{
+-  font-size: 11px;
+-  color: #4A4F41;
+-  opacity:.9;
++  font-family:"DM Serif Display",Georgia,serif; font-size:16px; color:#2f332a;
+ }
++.brand-name .small{ font-size:11px; color:#4A4F41; opacity:.9; }
+ .x{
+-  width:34px; height:34px;
+-  border-radius:10px;
+-  border:1px solid rgba(0,0,0,.1);
+-  background:rgba(255,255,255,.9);
+-  cursor:pointer;
+-  display:inline-flex;
+-  align-items:center;
+-  justify-content:center;
++  width:34px; height:34px; border-radius:10px;
++  border:1px solid rgba(0,0,0,.1); background:rgba(255,255,255,.9);
++  cursor:pointer; display:inline-flex; align-items:center; justify-content:center;
+ }
+-
+-/* Scrollable body – mild ivory, not pure white */
+ .sheet-scroll{
+-  flex: 1 1 auto;
+-  min-height: 0;
+-  overflow: auto;
+-  overscroll-behavior: contain;
+-  -webkit-overflow-scrolling: touch;
+-  padding: 12px 16px 16px;
+-  background:#FFFBF3;            /* 🌼 ivory instead of white */
+-  border-radius: 0 0 22px 22px;
+-}
+-
+-/* Hero */
+-.hero{
+-  padding: 6px 2px 10px;
+-  text-align:left;
++  flex:1 1 auto; min-height:0; overflow:auto; overscroll-behavior:contain;
++  -webkit-overflow-scrolling:touch; padding:12px 16px 16px;
++  background:#FFFBF3; border-radius:0 0 22px 22px;
+ }
++.hero{ padding:6px 2px 10px; }
+ .hero h3{
+-  margin:0;
+-  font-family: "DM Serif Display", Georgia, serif;
+-  color: var(--bb-primary);
+-  font-size: 24px;
+-}
+-.hero p{
+-  margin: 6px 0 0;
+-  color: var(--bb-primary);
+-  opacity:.92;
+-}
+-
+-/* Form */
+-.form{
+-  display:flex;
+-  flex-direction:column;
+-  gap:12px;
+-  width:100%;
+-}
+-.label{
+-  display:flex;
+-  flex-direction:column;
+-  gap:6px;
+-  width:100%;
++  margin:0; font-family:"DM Serif Display",Georgia,serif;
++  color:var(--bb-primary); font-size:24px;
+ }
+-.label > span{
+-  font-weight:800;
+-  color: var(--bb-primary);
+-  font-size: 13px;
+-}
+-
+-/* Inputs */
++.hero p{ margin:6px 0 0; color:var(--bb-primary); opacity:.92; }
++.form{ display:flex; flex-direction:column; gap:12px; width:100%; }
++.label{ display:flex; flex-direction:column; gap:6px; width:100%; }
++.label > span{ font-weight:800; color:var(--bb-primary); font-size:13px; }
+ .field{
+   display:flex; align-items:center; gap:8px;
+-  border:1px solid rgba(0,0,0,.12);
+-  background:#fff;
+-  border-radius: 14px;
+-  padding: 0 10px;
+-  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
++  border:1px solid rgba(0,0,0,.12); background:#fff;
++  border-radius:14px; padding:0 10px;
++  transition:border-color .16s,box-shadow .16s,background .16s;
+ }
+ .field:focus-within{
+-  border-color: rgba(246,195,32,.95);
+-  box-shadow: 0 0 0 6px rgba(246,195,32,.16);
+-  background: #FFFEF8;
++  border-color:rgba(246,195,32,.95);
++  box-shadow:0 0 0 6px rgba(246,195,32,.16); background:#FFFEF8;
+ }
+ .input{
+-  height: 48px; min-height:48px;
+-  border:none; outline:none;
+-  flex:1;
+-  color: var(--bb-primary);
+-  background: transparent;
+-  font-weight: 600;
+-  font-size:16px;
++  height:48px; min-height:48px; border:none; outline:none;
++  flex:1; color:var(--bb-primary); background:transparent;
++  font-weight:600; font-size:16px;
+ }
+-
+-/* Hints */
+-.hint{
+-  font-size: 12px;
+-  color: var(--bb-primary);
+-  opacity:.8;
+-  margin-top: 4px;
+-  display:block;
++.phone-prefix{
++  font-size:15px; font-weight:700; color:var(--bb-primary); opacity:.7;
++  padding-right:6px; border-right:1px solid rgba(0,0,0,.1); margin-right:2px; white-space:nowrap;
+ }
+-.hint.ok{
+-  color:#0c6e3c;
+-  opacity:1;
+-}
+-
+-/* Error */
++.hint{ font-size:12px; color:var(--bb-primary); opacity:.8; margin-top:4px; display:block; }
++.hint.ok{ color:#0c6e3c; opacity:1; }
+ .error{
+-  background:#fff3f5;
+-  border:1px solid rgba(240,93,139,.25);
+-  color:#b0003a;
+-  padding:8px 10px;
+-  border-radius:12px;
+-  font-size:13px;
++  background:#fff3f5; border:1px solid rgba(240,93,139,.25);
++  color:#b0003a; padding:8px 10px; border-radius:12px; font-size:13px;
+ }
+-
+-/* CTA */
+-.cta{
+-  width: 100%;
+-  height: 48px;
+-  border-radius: 12px;
+-  border: none;
+-  cursor: pointer;
+-  padding: 0 16px;
+-  background: linear-gradient(135deg, var(--bb-accent), #ff7aa6);
+-  color:#fff;
+-  font-weight:900;
+-  letter-spacing:.2px;
+-  box-shadow: 0 10px 28px rgba(240,93,139,.35);
+-  transition: transform .16s ease, box-shadow .16s ease, opacity .16s ease;
+-  margin-top: 6px;
+-}
+-.cta:hover{
+-  transform: translateY(-1px);
+-  box-shadow: 0 12px 34px rgba(240,93,139,.45);
+-}
+-.cta[disabled]{
+-  opacity:.65;
+-  cursor:not-allowed;
+-  transform:none;
+-  box-shadow:none;
+-}
+-
+-/* Links */
+-.links{
+-  display:flex;
+-  justify-content:center;
+-  gap: 8px;
+-  align-items:center;
+-  margin-top: 8px;
+-}
+-.muted{
+-  color: var(--bb-primary);
+-  opacity:.8;
+-  font-size: 13px;
++.consent-block{
++  background:rgba(246,195,32,.08); border:1px solid rgba(246,195,32,.3);
++  border-radius:14px; padding:12px 14px;
++  display:flex; flex-direction:column; gap:10px;
++}
++.consent-title{
++  margin:0; font-size:12px; font-weight:700; color:var(--bb-primary);
++  opacity:.7; text-transform:uppercase; letter-spacing:.4px;
++}
++.consent-row{
++  display:flex; align-items:flex-start; gap:10px; cursor:pointer;
++  font-size:13px; color:var(--bb-primary); line-height:1.4;
++}
++.consent-check{
++  width:18px; height:18px; min-width:18px; margin-top:2px;
++  cursor:pointer; accent-color:var(--bb-accent);
+ }
++.cta{
++  width:100%; height:48px; border-radius:12px; border:none; cursor:pointer;
++  background:linear-gradient(135deg,var(--bb-accent),#ff7aa6); color:#fff;
++  font-weight:900; letter-spacing:.2px;
++  box-shadow:0 10px 28px rgba(240,93,139,.35);
++  transition:transform .16s,box-shadow .16s,opacity .16s; margin-top:6px;
++}
++.cta:hover{ transform:translateY(-1px); box-shadow:0 12px 34px rgba(240,93,139,.45); }
++.cta[disabled]{ opacity:.65; cursor:not-allowed; transform:none; box-shadow:none; }
++.links{ display:flex; justify-content:center; gap:8px; align-items:center; margin-top:8px; }
++.single{ justify-content:center; }
++.muted{ color:var(--bb-primary); opacity:.8; font-size:13px; }
+ .textlink{
+-  background: transparent;
+-  border: none;
+-  padding: 0;
+-  color: var(--bb-accent);
+-  font-size: 14px;
+-  font-weight: 700;
+-  text-decoration: underline;
+-  cursor: pointer;
+-  opacity: .92;
+-  transition: color .15s ease, opacity .15s ease;
+-}
+-.textlink:hover{
+-  color: #d94676;
+-  opacity:1;
+-}
+-.textlink[disabled]{
+-  opacity:.5;
+-  cursor:not-allowed;
+-}
+-
+-/* Eye toggles */
++  background:transparent; border:none; padding:0; color:var(--bb-accent);
++  font-size:14px; font-weight:700; text-decoration:underline; cursor:pointer;
++  opacity:.92; transition:color .15s,opacity .15s;
++}
++.textlink:hover{ color:#d94676; opacity:1; }
++.textlink[disabled]{ opacity:.5; cursor:not-allowed; }
+ .icon-btn.eye{
+   display:inline-flex; align-items:center; justify-content:center;
+-  width: 36px; height: 36px;
+-  border: none;
+-  background: transparent;
+-  border-radius: 10px;
+-  cursor: pointer;
+-}
+-.icon-btn.eye:hover{
+-  background: rgba(0,0,0,.04);
++  width:36px; height:36px; border:none; background:transparent;
++  border-radius:10px; cursor:pointer;
+ }
+-
+-/* Divider */
++.icon-btn.eye:hover{ background:rgba(0,0,0,.04); }
+ .divider{
+-  display:flex;
+-  align-items:center;
+-  gap:12px;
+-  margin: 16px 0 12px;
+-}
+-.divider::before,
+-.divider::after{
+-  content:"";
+-  flex:1;
+-  height:1px;
+-  background: rgba(0,0,0,.08);
+-}
+-.divider span{
+-  font-size:13px;
+-  color: var(--bb-primary);
+-  opacity:.7;
+-  font-weight:600;
+-}
+-
+-/* Google button base */
++  display:flex; align-items:center; gap:12px; margin:14px 0 10px;
++}
++.divider::before,.divider::after{
++  content:""; flex:1; height:1px; background:rgba(0,0,0,.08);
++}
++.divider span{ font-size:13px; color:var(--bb-primary); opacity:.7; font-weight:600; }
+ .google-btn{
+   display:flex; align-items:center; justify-content:center; gap:10px;
+-  width:100%; height:48px;
+-  border-radius:12px;
+-  background:#fff;
+-  border:1px solid rgba(0,0,0,.08);
+-  color: #3c4043;
+-  font-weight:600;
+-  font-size:15px;
+-  cursor:pointer;
+-  transition: background .15s ease, box-shadow .15s ease, transform .15s ease;
+-}
+-.google-btn img{
+-  width:20px; height:20px;
++  width:100%; height:48px; border-radius:12px; background:#fff;
++  border:1px solid rgba(0,0,0,.08); color:#3c4043;
++  font-weight:600; font-size:15px; cursor:pointer;
++  transition:background .15s,box-shadow .15s,transform .15s;
+ }
+-
+-/* Pink-theme Google button */
++.google-btn img{ width:20px; height:20px; }
+ .primary-google{
+-  background: linear-gradient(135deg, #F05D8B, #ff8fb0) !important;
+-  border: none !important;
+-  color: #fff !important;
+-  font-weight: 700 !important;
+-  box-shadow: 0 8px 24px rgba(240,93,139,.35);
++  background:linear-gradient(135deg,#F05D8B,#ff8fb0) !important;
++  border:none !important; color:#fff !important; font-weight:700 !important;
++  box-shadow:0 8px 24px rgba(240,93,139,.35);
+ }
+ .primary-google:hover{
+-  background: linear-gradient(135deg, #e44a7b, #ff7aa2) !important;
+-  box-shadow: 0 10px 28px rgba(240,93,139,.45);
+-}
+-.primary-google img{
+-  filter: brightness(0) invert(1);
+-}
+-
+-/* Email toggle button */
+-.email-toggle-btn{
+-  display:flex; align-items:center; justify-content:center;
+-  width:100%; height:48px;
+-  border-radius:12px;
+-  background:#fff;
+-  border:1px solid rgba(0,0,0,.12);
+-  color: var(--bb-primary);
+-  font-weight:600;
+-  font-size:15px;
+-  cursor:pointer;
+-  transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
+-}
+-.email-toggle-btn:hover{
+-  background:#FFFEF8;
+-  border-color: var(--bb-accent);
+-  box-shadow: 0 6px 18px rgba(0,0,0,.06);
++  background:linear-gradient(135deg,#e44a7b,#ff7aa2) !important;
++  box-shadow:0 10px 28px rgba(240,93,139,.45);
+ }
+-
+-/* Email / OTP form animation */
+-.email-form,
+-.otp-form{
+-  animation: slideIn .2s ease-out both;
++.primary-google img{ filter:brightness(0) invert(1); }
++.method-btn{
++  display:flex; align-items:center; justify-content:center; gap:10px;
++  width:100%; height:48px; border-radius:12px; background:#fff;
++  border:1px solid rgba(0,0,0,.12); color:var(--bb-primary);
++  font-weight:600; font-size:15px; cursor:pointer;
++  transition:background .15s,border-color .15s,box-shadow .15s;
+ }
+-@keyframes slideIn{
+-  from{ opacity:0; transform: translateY(10px); }
+-  to{ opacity:1; transform:none; }
++.method-btn:hover{
++  background:#FFFEF8; border-color:var(--bb-accent);
++  box-shadow:0 6px 18px rgba(0,0,0,.06);
+ }
+-
+-/* Back button */
++.slide-in{ animation:slideIn .2s ease-out both; }
++@keyframes slideIn{ from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
+ .back-btn{
+   display:inline-flex; align-items:center; justify-content:center;
+-  width:100%; height:40px;
+-  border-radius:10px;
+-  background:transparent;
+-  border:1px dashed rgba(0,0,0,.15);
+-  color: var(--bb-primary);
+-  font-weight:600;
+-  font-size:14px;
+-  cursor:pointer;
+-  opacity:.8;
+-  transition: opacity .15s ease, background .15s ease, border-color .15s ease;
+-}
+-.back-btn:hover{
+-  opacity:1;
+-  background:rgba(250,247,231,.9);
+-  border-color: rgba(246,195,32,.6);
+-}
+-
+-/* OTP field specific */
++  width:100%; height:40px; border-radius:10px; background:transparent;
++  border:1px dashed rgba(0,0,0,.15); color:var(--bb-primary);
++  font-weight:600; font-size:14px; cursor:pointer; opacity:.8;
++  transition:opacity .15s,background .15s,border-color .15s;
++}
++.back-btn:hover{ opacity:1; background:rgba(250,247,231,.9); border-color:rgba(246,195,32,.6); }
+ .otp-field{ justify-content:center; }
+ .otp-input{
+-  text-align:center;
+-  font-size:28px !important;
+-  letter-spacing:8px;
+-  font-weight:700;
+-  max-width: 200px;
++  text-align:center; font-size:28px !important;
++  letter-spacing:8px; font-weight:700; max-width:200px;
+ }
+ .resend-row{
+-  display:flex;
+-  align-items:center;
+-  justify-content:center;
+-  gap:8px;
+-  margin-top:6px;
+-}
+-.resend-msg{
+-  text-align:center;
+-  font-size:13px;
+-  color: var(--bb-primary);
+-  opacity:.9;
+-}
+-
+-/* Small screens */
+-@media (max-width: 560px){
+-  .auth-modal{ padding: 12px; }
+-  .sheet{
+-    width: min(96vw, 440px);
+-    max-height: min(90vh, 680px);
+-    border-radius: 18px;
+-  }
+-  .sheet-scroll{
+-    border-radius: 0 0 18px 18px;
+-  }
++  display:flex; align-items:center; justify-content:center; gap:8px; margin-top:6px;
++}
++.resend-msg{ text-align:center; font-size:13px; color:var(--bb-primary); opacity:.9; }
++@media (max-width:560px){
++  .auth-modal{ padding:12px; }
++  .sheet{ width:min(96vw,440px); max-height:min(90vh,760px); border-radius:18px; }
++  .sheet-scroll{ border-radius:0 0 18px 18px; }
+ }
+ `;
+ 
+-
+-
+-const iosFontFix = `
+-html { -webkit-text-size-adjust: 100%; }
+-`;
++const iosFontFix = `html { -webkit-text-size-adjust: 100%; }`;

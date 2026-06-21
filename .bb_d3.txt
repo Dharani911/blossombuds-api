@@ -1,0 +1,901 @@
+-# --- Datasource (local Docker Postgres) ---
+-spring.datasource.url=jdbc:postgresql://localhost:5432/blossombuds_dev
+-spring.datasource.username=postgres
+-spring.datasource.password=postgres
++spring.config.import=classpath:.env.local.properties
++
++# --- DataSource (local Docker Postgres on 127.0.0.1:5544) ---
++spring.datasource.url=jdbc:postgresql://127.0.0.1:5544/bb
++spring.datasource.username=app_user
++spring.datasource.password=app_password
+ 
+ # --- JPA ---
+ spring.jpa.hibernate.ddl-auto=none
+-spring.jpa.show-sql=true
++spring.jpa.show-sql=false
+ spring.jpa.properties.hibernate.format_sql=true
+ 
+-# --- Liquibase ---
++# Remove Open-Session-In-View warning
++spring.jpa.open-in-view=false
++
++# Optional: tame Hikari logs by being explicit
++spring.datasource.hikari.maximum-pool-size=25
++spring.datasource.hikari.minimum-idle=5
++spring.datasource.hikari.connection-timeout=20000
++spring.datasource.hikari.idle-timeout=300000
++spring.datasource.hikari.max-lifetime=1200000
++
++springdoc.api-docs.enabled=true
++springdoc.swagger-ui.enabled=true
++
++management.endpoint.health.show-details=always
++management.endpoints.web.exposure.include=health,info,mappings
++#management.health.mail.enabled=false
++
++
++# --- Liquibase (ON) ---
+ spring.liquibase.enabled=true
+-spring.liquibase.change-log=classpath:db/liquibase/changelog-master.xml
++spring.liquibase.change-log=classpath:db/changelog/liquibase/changelog-master.xml
++spring.liquibase.default-schema=bb_app
++# local only, one run
++spring.liquibase.clear-checksums=true
++spring.jpa.properties.hibernate.default_schema=bb_app
++spring.datasource.hikari.schema=bb_app
++
++# CORS for local dev frontends
++spring.mvc.cors.mappings.[/**].allowed-origins=http://localhost:5173,http://localhost:3000
++spring.mvc.cors.mappings.[/**].allowed-origin-patterns=http://*.local:5173,http://*.lan:5173,http://10.*.*.*:5173,http://172.16.*.*:5173,http://172.17.*.*:5173,http://172.18.*.*:5173,http://172.19.*.*:5173,http://172.20.*.*:5173,http://172.21.*.*:5173,http://172.22.*.*:5173,http://172.23.*.*:5173,http://172.24.*.*:5173,http://172.25.*.*:5173,http://172.26.*.*:5173,http://172.27.*.*:5173,http://172.28.*.*:5173,http://172.29.*.*:5173,http://172.30.*.*:5173,http://172.31.*.*:5173,http://192.168.*.*:5173
++spring.mvc.cors.mappings.[/**].allowed-methods=GET,POST,PUT,PATCH,DELETE,OPTIONS
++spring.mvc.cors.mappings.[/**].allowed-headers=*
++spring.mvc.cors.mappings.[/**].allow-credentials=true
++spring.mvc.cors.mappings.[/**].max-age=3600
++
++server.address=0.0.0.0
++
++app.jwt.secret=${APP_JWT_SECRET}
++app.jwt.ttl-seconds=7200
++app.jwt.customer-ttl-seconds=157680000
++
++
++# Mail (for now you can point to a dummy/local SMTP; we?ll swap later)
++spring.mail.host=smtp.zoho.eu
++spring.mail.port=587
++spring.mail.username=no-reply@blossom-buds-floral-artistry.com
++spring.mail.password=${MAIL_SMTP_PASSWORD:}
++spring.mail.properties.mail.smtp.auth=true
++spring.mail.properties.mail.smtp.starttls.enable=true
++spring.mail.properties.mail.debug=true
++app.mail.from=no-reply@blossom-buds-floral-artistry.com
++
++#http mail
++# From address (keep whatever you used before with Zoho)
++
++
++# HTTP email provider (example: Resend)
++app.mail.apiUrl=https://api.resend.com/emails
++app.mail.apiKey=${MAIL_API_KEY:}
++
++# Optional: URL of your logo image (S3, CloudFront, etc.)
++app.mail.logoUrl=http://localhost:8080/BB_logo.png
++
++# Frontend base URL used in verification links
++app.frontend.baseUrl=http://localhost:5173
++
++#CloudFlare R2
++cloudflare.r2.access-key=${R2_ACCESS_KEY:}
++cloudflare.r2.secret-key=${R2_SECRET_KEY:}
++cloudflare.r2.bucket=product-images
++cloudflare.r2.region=auto
++cloudflare.r2.endpoint=https://44df320f0940989c39a311ab3ce6dac1.r2.cloudflarestorage.com
++
++app.imagemagick.cmd=C:\\Program Files\\ImageMagick-7.1.2-Q16-HDRI\\magick.exe
++
++# let Spring accept up to ~10 MB files
++# multipart limits
++spring.servlet.multipart.max-file-size=10MB
++spring.servlet.multipart.max-request-size=12MB
++
++# Tomcat: remove swallowing/post size limits
++server.tomcat.max-swallow-size=-1
++server.tomcat.max-http-form-post-size=-1
++
++# timeouts (helpful if ImageMagick takes a moment)
++server.connection-timeout=120s
++spring.mvc.async.request-timeout=120s
++
++# Multipart + servlet noise
++logging.level.org.springframework.web.multipart=DEBUG
++logging.level.org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor=INFO
++logging.level.org.springframework.http.converter=DEBUG
++
++# Your app
++logging.level.com.blossombuds.web=INFO
++logging.level.com.blossombuds.service=INFO
++
++
++
++# Razorpay
++
++app.razorpay.webhook-secret-test=${RAZORPAY_WEBHOOK_SECRET:}
++app.razorpay.base-url=https://api.razorpay.com/v1
++app.razorpay.key-id=${RAZORPAY_KEY_ID:}
++app.razorpay.key-secret=${RAZORPAY_KEY_SECRET:}
++
++spring.jpa.properties.hibernate.jdbc.lob.non_contextual_creation=true
++
++reviews.images.alwaysNormalize=false
++
++# (optional) extra visibility while first run
++# logging.level.org.springframework.boot.autoconfigure.liquibase=DEBUG
++# logging.level.liquibase=DEBUG
++logging.level.root=INFO
++
++# === Google OAuth2 login ===
++
++spring.security.oauth2.client.registration.google.client-id=${GOOGLE_CLIENT_ID:}
++spring.security.oauth2.client.registration.google.client-secret=${GOOGLE_CLIENT_SECRET:}
++
++# Scopes: basic sign-in via OIDC
++spring.security.oauth2.client.registration.google.scope=openid,profile,email
++
++# Default redirect URI pattern Spring expects:
++# {baseUrl} is your backend base URL (e.g. https://api.blossombuds.in)
++spring.security.oauth2.client.registration.google.redirect-uri=http://localhost:5173/login/oauth2/code/google
++
++# Optional display name
++spring.security.oauth2.client.registration.google.client-name=Google
++
++
++
++# --- Redis Configuration ---
++spring.cache.type=redis
++spring.data.redis.host=${REDISHOST:localhost}
++spring.data.redis.port=${REDISPORT:6379}
++spring.data.redis.password=${REDISPASSWORD:}
++spring.data.redis.username=${REDISUSER:default}
++spring.data.redis.ssl.enabled=${REDIS_SSL:false}
++spring.data.redis.timeout=3000
++spring.data.redis.lettuce.pool.max-active=16
++spring.data.redis.lettuce.pool.max-idle=8
++spring.data.redis.lettuce.pool.min-idle=2
++spring.data.redis.lettuce.pool.max-wait=2000ms
++
+diff --git a/blossombuds-api/src/main/resources/db/changelog/liquibase/changelog-master.xml b/blossombuds-api/src/main/resources/db/changelog/liquibase/changelog-master.xml
+index 93622ed..5a65b2c 100644
+--- a/blossombuds-api/src/main/resources/db/changelog/liquibase/changelog-master.xml
++++ b/blossombuds-api/src/main/resources/db/changelog/liquibase/changelog-master.xml
+@@ -43,4 +43,8 @@
+     <include file="db/changelog/liquibase/changes/0031-add-gst-fields-to-orders.xml"/>
+     <include file="db/changelog/liquibase/changes/0032-whatsapp-crm-and-payment-reminders.xml"/>
+     <include file="db/changelog/liquibase/changes/0033-seed-whatsapp-settings-and-templates.xml"/>
++    <include file="db/changelog/liquibase/changes/0034-whatsapp-transactional.xml"/>
++    <include file="db/changelog/liquibase/changes/0035-seed-festival-offers-template.xml"/>
++    <include file="db/changelog/liquibase/changes/0036-add-sms-preference-columns.xml"/>
++    <include file="db/changelog/liquibase/changes/0037-checkout-intent-reminder-fields.xml"/>
+ </databaseChangeLog>
+diff --git a/blossombuds-frontend/package-lock.json b/blossombuds-frontend/package-lock.json
+index d09e26f..30aedca 100644
+--- a/blossombuds-frontend/package-lock.json
++++ b/blossombuds-frontend/package-lock.json
+@@ -44,6 +44,7 @@
+         "eslint-plugin-react-hooks": "^5.2.0",
+         "eslint-plugin-react-refresh": "^0.4.20",
+         "globals": "^16.4.0",
++        "playwright": "^1.60.0",
+         "postcss": "^8.5.6",
+         "prettier": "^3.6.2",
+         "prettier-plugin-tailwindcss": "^0.6.14",
+@@ -4451,6 +4452,53 @@
+         "node": ">= 6"
+       }
+     },
++    "node_modules/playwright": {
++      "version": "1.60.0",
++      "resolved": "https://registry.npmjs.org/playwright/-/playwright-1.60.0.tgz",
++      "integrity": "sha512-hheHdokM8cdqCb0lcE3s+zT4t4W+vvjpGxsZlDnikarzx8tSzMebh3UiFtgqwFwnTnjYQcsyMF8ei2mCO/tpeA==",
++      "dev": true,
++      "license": "Apache-2.0",
++      "dependencies": {
++        "playwright-core": "1.60.0"
++      },
++      "bin": {
++        "playwright": "cli.js"
++      },
++      "engines": {
++        "node": ">=18"
++      },
++      "optionalDependencies": {
++        "fsevents": "2.3.2"
++      }
++    },
++    "node_modules/playwright-core": {
++      "version": "1.60.0",
++      "resolved": "https://registry.npmjs.org/playwright-core/-/playwright-core-1.60.0.tgz",
++      "integrity": "sha512-9bW6zvX/m0lEbgTKJ6YppOKx8H3VOPBMOCFh2irXFOT4BbHgrx5hPjwJYLT40Lu+4qtD36qKc/Hn56StUW57IA==",
++      "dev": true,
++      "license": "Apache-2.0",
++      "bin": {
++        "playwright-core": "cli.js"
++      },
++      "engines": {
++        "node": ">=18"
++      }
++    },
++    "node_modules/playwright/node_modules/fsevents": {
++      "version": "2.3.2",
++      "resolved": "https://registry.npmjs.org/fsevents/-/fsevents-2.3.2.tgz",
++      "integrity": "sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==",
++      "dev": true,
++      "hasInstallScript": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "darwin"
++      ],
++      "engines": {
++        "node": "^8.16.0 || ^10.6.0 || >=11.0.0"
++      }
++    },
+     "node_modules/postcss": {
+       "version": "8.5.6",
+       "resolved": "https://registry.npmjs.org/postcss/-/postcss-8.5.6.tgz",
+diff --git a/blossombuds-frontend/package.json b/blossombuds-frontend/package.json
+index 43e9e96..d9d00d3 100644
+--- a/blossombuds-frontend/package.json
++++ b/blossombuds-frontend/package.json
+@@ -48,6 +48,7 @@
+     "eslint-plugin-react-hooks": "^5.2.0",
+     "eslint-plugin-react-refresh": "^0.4.20",
+     "globals": "^16.4.0",
++    "playwright": "^1.60.0",
+     "postcss": "^8.5.6",
+     "prettier": "^3.6.2",
+     "prettier-plugin-tailwindcss": "^0.6.14",
+diff --git a/blossombuds-frontend/src/api/adminWhatsapp.ts b/blossombuds-frontend/src/api/adminWhatsapp.ts
+index 3c0d2d2..2cf9c1e 100644
+--- a/blossombuds-frontend/src/api/adminWhatsapp.ts
++++ b/blossombuds-frontend/src/api/adminWhatsapp.ts
+@@ -56,6 +56,8 @@ export type CreateWhatsAppCampaignRequest = {
+   templateId: number;
+   audienceType: "MANUAL" | "ALL_OPTED_IN";
+   link?: string;
++  offerText?: string;
++  imageUrl?: string;
+   orderCode?: string;
+   trackingNumber?: string;
+   trackingLink?: string;
+diff --git a/blossombuds-frontend/src/api/auth.ts b/blossombuds-frontend/src/api/auth.ts
+index da075d1..85810c6 100644
+--- a/blossombuds-frontend/src/api/auth.ts
++++ b/blossombuds-frontend/src/api/auth.ts
+@@ -7,8 +7,37 @@ export async function customerLogin(payload: { identifier: string; password: str
+   return data as { token: string };
+ }
+ 
+-/** POST /api/customers/auth/register -> { token } */
+-export async function customerRegister(payload: { name: string; email: string; password: string; phone: string; }) {
++/** POST /api/customers/auth/register */
++export async function customerRegister(payload: {
++  name: string;
++  email: string;
++  password: string;
++  phone?: string;
++  whatsAppOptIn?: boolean;
++  smsOptIn?: boolean;
++}) {
+   const { data } = await http.post("/api/customers/auth/register", payload);
++  return data;
++}
++
++/** POST /api/customers/auth/verify-phone-otp -> { token } (signup verification) */
++export async function verifyPhoneOtp(payload: { phone: string; code: string }) {
++  const { data } = await http.post("/api/customers/auth/verify-phone-otp", payload);
++  return data as { token: string };
++}
++
++/** POST /api/customers/auth/resend-phone-otp (signup verification resend) */
++export async function resendPhoneOtp(payload: { phone: string }) {
++  await http.post("/api/customers/auth/resend-phone-otp", payload);
++}
++
++/** POST /api/customers/auth/phone-login/request — sends login OTP to existing phone */
++export async function requestPhoneLoginOtp(payload: { phone: string }) {
++  await http.post("/api/customers/auth/phone-login/request", payload);
++}
++
++/** POST /api/customers/auth/phone-login/verify -> { token } */
++export async function verifyPhoneLoginOtp(payload: { phone: string; code: string }) {
++  const { data } = await http.post("/api/customers/auth/phone-login/verify", payload);
+   return data as { token: string };
+ }
+diff --git a/blossombuds-frontend/src/components/auth/LoginModal.tsx b/blossombuds-frontend/src/components/auth/LoginModal.tsx
+index bdac9dc..f34b062 100644
+--- a/blossombuds-frontend/src/components/auth/LoginModal.tsx
++++ b/blossombuds-frontend/src/components/auth/LoginModal.tsx
+@@ -1,13 +1,12 @@
+ import React, { useEffect, useRef, useState } from "react";
+ import { createPortal } from "react-dom";
+-import { customerLogin } from "../../api/auth";
++import { customerLogin, requestPhoneLoginOtp, verifyPhoneLoginOtp } from "../../api/auth";
+ import { useAuth } from "../../app/AuthProvider";
+ import { useNavigate, useLocation, Link } from "react-router-dom";
+ import logo from "../../assets/BB_logo.svg";
+ import { apiUrl } from "../../api/base";
+ 
+-type Step = "choose" | "email-form" | "forgot-password" | "forgot-password-reset";
+-
++type Step = "choose" | "email-form" | "phone-form" | "phone-otp" | "forgot-password" | "forgot-password-reset";
+ 
+ export default function LoginModal() {
+   const nav = useNavigate();
+@@ -18,6 +17,8 @@ export default function LoginModal() {
+   const cameFromBackground = Boolean((location.state as any)?.background);
+ 
+   const [step, setStep] = useState<Step>("choose");
++
++  // Email login
+   const [email, setEmail] = useState("");
+   const [password, setPassword] = useState("");
+   const [showPw, setShowPw] = useState(false);
+@@ -27,29 +28,43 @@ export default function LoginModal() {
+   const [resendBusy, setResendBusy] = useState(false);
+   const [resendMsg, setResendMsg] = useState<string | null>(null);
+ 
++  // Phone login
++  const [phone, setPhone] = useState("");
++  const [phoneBusy, setPhoneBusy] = useState(false);
++  const [phoneErr, setPhoneErr] = useState<string | null>(null);
++
++  // Phone OTP step
++  const [phoneOtp, setPhoneOtp] = useState("");
++  const [phoneOtpBusy, setPhoneOtpBusy] = useState(false);
++  const [phoneOtpErr, setPhoneOtpErr] = useState<string | null>(null);
++  const [phoneResendBusy, setPhoneResendBusy] = useState(false);
++  const [phoneResendMsg, setPhoneResendMsg] = useState<string | null>(null);
++
+   // Forgot password
+   const [fpEmail, setFpEmail] = useState("");
++  const [fpCode, setFpCode] = useState("");
++  const [fpNewPw, setFpNewPw] = useState("");
++  const [fpConfirm, setFpConfirm] = useState("");
+   const [fpBusy, setFpBusy] = useState(false);
+   const [fpMsg, setFpMsg] = useState<string | null>(null);
+ 
+-    const [fpCode, setFpCode] = useState("");
+-    const [fpNewPw, setFpNewPw] = useState("");
+-    const [fpConfirm, setFpConfirm] = useState("");
+-
+-
+   const sheetRef = useRef<HTMLDivElement>(null);
+ 
+-  // Validation
++  // Validations
+   const emailOk = /^\S+@\S+\.\S+$/.test(email);
+-  const canSubmit = emailOk && password.length >= 1;
++  const canEmailLogin = emailOk && password.length >= 1;
+ 
+-  const onSubmit = async (e: React.FormEvent) => {
++  const rawPhone = phone.replace(/\D/g, "");
++  const phoneOk = /^[6-9]\d{9}$/.test(rawPhone);
++
++  // ── Email login ────────────────────────────────────────────────────────────
++
++  const submitEmailLogin = async (e: React.FormEvent) => {
+     e.preventDefault();
+-    if (!canSubmit) return;
++    if (!canEmailLogin) return;
+     setBusy(true);
+     setErr(null);
+     setNeedsVerify(false);
+-
+     try {
+       const { token } = await customerLogin({ identifier: email, password });
+       loginWithToken(token);
+@@ -83,78 +98,107 @@ export default function LoginModal() {
+     }
+   };
+ 
+-  const requestPasswordReset = async (e: React.FormEvent) => {
++  // ── Phone login ────────────────────────────────────────────────────────────
++
++  const submitPhoneForm = async (e: React.FormEvent) => {
+     e.preventDefault();
+-    if (!/^\S+@\S+\.\S+$/.test(fpEmail)) {
+-      setFpMsg("Please enter a valid email.");
+-      return;
++    if (!phoneOk) return;
++    setPhoneBusy(true);
++    setPhoneErr(null);
++    try {
++      await requestPhoneLoginOtp({ phone: rawPhone });
++      setStep("phone-otp");
++    } catch (e: any) {
++      setPhoneErr(e?.response?.data?.message || "Could not send code. Check your number and try again.");
++    } finally {
++      setPhoneBusy(false);
+     }
++  };
++
++  const submitPhoneOtp = async (e: React.FormEvent) => {
++    e.preventDefault();
++    if (phoneOtp.length < 6) return;
++    setPhoneOtpBusy(true);
++    setPhoneOtpErr(null);
++    try {
++      const { token } = await verifyPhoneLoginOtp({ phone: rawPhone, code: phoneOtp });
++      loginWithToken(token);
++      nav("/profile", { replace: true });
++    } catch (e: any) {
++      setPhoneOtpErr(e?.response?.data?.message || "Invalid or expired code. Please try again.");
++    } finally {
++      setPhoneOtpBusy(false);
++    }
++  };
++
++  const resendPhoneLoginOtp = async () => {
++    setPhoneResendBusy(true);
++    setPhoneResendMsg(null);
++    try {
++      await requestPhoneLoginOtp({ phone: rawPhone });
++      setPhoneResendMsg("New code sent to your phone!");
++    } catch {
++      setPhoneResendMsg("Could not resend. Please try again.");
++    } finally {
++      setPhoneResendBusy(false);
++    }
++  };
++
++  // ── Forgot password ────────────────────────────────────────────────────────
++
++  const requestPasswordReset = async (e: React.FormEvent) => {
++    e.preventDefault();
++    if (!/^\S+@\S+\.\S+$/.test(fpEmail)) { setFpMsg("Please enter a valid email."); return; }
+     setFpBusy(true);
+     setFpMsg(null);
+-        try {
+-          await fetch(apiUrl("/api/customers/auth/password-reset/request"), {
+-            method: "POST",
+-            headers: { "Content-Type": "application/json" },
+-            body: JSON.stringify({ email: fpEmail }),
+-          });
+-          setFpMsg("If that email exists, a reset code has been sent.");
+-          setStep("forgot-password-reset"); // 👈 go to code + new password step
+-        } catch {
+-
++    try {
++      await fetch(apiUrl("/api/customers/auth/password-reset/request"), {
++        method: "POST",
++        headers: { "Content-Type": "application/json" },
++        body: JSON.stringify({ email: fpEmail }),
++      });
++      setFpMsg("If that email exists, a reset code has been sent.");
++      setStep("forgot-password-reset");
++    } catch {
+       setFpMsg("Could not send reset email. Try again.");
+     } finally {
+       setFpBusy(false);
+     }
+   };
+ 
+-    const completePasswordReset = async (e: React.FormEvent) => {
+-      e.preventDefault();
+-      if (fpCode.length < 6 || fpNewPw.length < 8 || fpNewPw !== fpConfirm) return;
+-
+-      setFpBusy(true);
+-      setFpMsg(null);
+-
++  const completePasswordReset = async (e: React.FormEvent) => {
++    e.preventDefault();
++    if (fpCode.length < 6 || fpNewPw.length < 8 || fpNewPw !== fpConfirm) return;
++    setFpBusy(true);
++    setFpMsg(null);
++    try {
++      await fetch(apiUrl("/api/customers/auth/password-reset/confirm"), {
++        method: "POST",
++        headers: { "Content-Type": "application/json" },
++        body: JSON.stringify({ email: fpEmail, code: fpCode, newPassword: fpNewPw }),
++      });
+       try {
+-        // 1) Tell backend to verify code + change password
+-        await fetch(apiUrl("/api/customers/auth/password-reset/confirm"), {
+-          method: "POST",
+-          headers: { "Content-Type": "application/json" },
+-          body: JSON.stringify({
+-            email: fpEmail,
+-            code: fpCode,
+-            newPassword: fpNewPw,
+-          }),
+-        });
+-
+-        // 2) Try auto-login with the new password
+-        try {
+-          const { token } = await customerLogin({
+-            identifier: fpEmail,
+-            password: fpNewPw,
+-          });
+-          loginWithToken(token);
+-          nav("/profile", { replace: true });
+-        } catch {
+-          // 3) Fallback: go back to normal login form
+-          setEmail(fpEmail);
+-          setPassword("");
+-          setFpMsg("Password updated. Please sign in with your new password.");
+-          setStep("email-form");
+-        }
++        const { token } = await customerLogin({ identifier: fpEmail, password: fpNewPw });
++        loginWithToken(token);
++        nav("/profile", { replace: true });
+       } catch {
+-        setFpMsg("Invalid code or error updating password. Please check and try again.");
+-      } finally {
+-        setFpBusy(false);
++        setEmail(fpEmail);
++        setPassword("");
++        setFpMsg("Password updated. Please sign in.");
++        setStep("email-form");
+       }
+-    };
+-
++    } catch {
++      setFpMsg("Invalid code or error. Please check and try again.");
++    } finally {
++      setFpBusy(false);
++    }
++  };
+ 
+   const close = () => {
+     if (cameFromBackground && from) nav(from, { replace: true });
+     else nav("/", { replace: true });
+   };
+ 
+-  // ESC to close
+   useEffect(() => {
+     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+     window.addEventListener("keydown", onKey);
+@@ -190,7 +234,7 @@ export default function LoginModal() {
+     <>
+       <style>{styles}</style>
+       <div className="auth-scrim" onClick={close} />
+-      <div className="auth-modal" role="dialog" aria-modal="true" aria-label="Login form" onClick={close}>
++      <div className="auth-modal" role="dialog" aria-modal="true" aria-label="Login" onClick={close}>
+         <div ref={sheetRef} className="sheet" onClick={(e) => e.stopPropagation()}>
+           <header className="am-head">
+             <div className="brand">
+@@ -204,14 +248,14 @@ export default function LoginModal() {
+           </header>
+ 
+           <div className="sheet-scroll">
+-            {/* STEP: Choose method */}
++
++            {/* ── CHOOSE ──────────────────────────────────────────────── */}
+             {step === "choose" && (
+               <>
+                 <div className="hero">
+                   <h3>Welcome back</h3>
+                   <p>Sign in to your account.</p>
+                 </div>
+-
+                 <div className="form">
+                   <button
+                     type="button"
+@@ -221,17 +265,13 @@ export default function LoginModal() {
+                     <img src="https://fonts.gstatic.com/s/i/productlogos/googleg/v6/24px.svg" alt="" />
+                     <span>Continue with Google</span>
+                   </button>
+-
+                   <div className="divider"><span>or</span></div>
+-
+-                  <button
+-                    type="button"
+-                    className="email-toggle-btn"
+-                    onClick={() => setStep("email-form")}
+-                  >
+-                    Continue with Email
++                  <button type="button" className="method-btn" onClick={() => { setErr(null); setStep("email-form"); }}>
++                    <IconMail /> Login with Email
++                  </button>
++                  <button type="button" className="method-btn" onClick={() => { setPhoneErr(null); setStep("phone-form"); }}>
++                    <IconPhone /> Login with Mobile
+                   </button>
+-
+                   <div className="links single">
+                     <span className="muted">Don't have an account?</span>
+                     <Link
+@@ -246,216 +286,186 @@ export default function LoginModal() {
+               </>
+             )}
+ 
+-            {/* STEP: Email login form */}
++            {/* ── EMAIL LOGIN ──────────────────────────────────────────── */}
+             {step === "email-form" && (
+               <>
+                 <div className="hero">
+                   <h3>Login with Email</h3>
+                   <p>Enter your email and password.</p>
+                 </div>
+-
+-                <form className="form email-form" onSubmit={onSubmit}>
++                <form className="form slide-in" onSubmit={submitEmailLogin}>
+                   <label className="label">
+                     <span>Email</span>
+                     <div className="field">
+                       <IconMail />
+-                      <input
+-                        className="input"
+-                        type="email"
+-                        placeholder="you@example.com"
+-                        value={email}
+-                        onChange={(e) => setEmail(e.target.value)}
+-                        required
+-                        autoComplete="email"
+-                        autoFocus
+-                      />
++                      <input className="input" type="email" placeholder="you@example.com" value={email}
++                        onChange={(e) => setEmail(e.target.value)} required autoComplete="email" autoFocus />
+                     </div>
+                   </label>
+-
+                   <label className="label">
+                     <span>Password</span>
+                     <div className="field">
+                       <IconLock />
+-                      <input
+-                        className="input"
+-                        type={showPw ? "text" : "password"}
+-                        placeholder="Your password"
+-                        value={password}
+-                        onChange={(e) => setPassword(e.target.value)}
+-                        required
+-                        autoComplete="current-password"
+-                      />
+-                      <button
+-                        type="button"
+-                        className="icon-btn eye"
+-                        onClick={() => setShowPw(s => !s)}
+-                        aria-label={showPw ? "Hide password" : "Show password"}
+-                      >
++                      <input className="input" type={showPw ? "text" : "password"} placeholder="Your password"
++                        value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
++                      <button type="button" className="icon-btn eye" onClick={() => setShowPw(s => !s)}>
+                         <EyeIcon open={showPw} />
+                       </button>
+                     </div>
+                   </label>
+-
+-                  <button
+-                    type="button"
+-                    className="forgot-link"
+-                    onClick={() => { setFpEmail(email); setStep("forgot-password"); }}
+-                  >
++                  <button type="button" className="forgot-link"
++                    onClick={() => { setFpEmail(email); setStep("forgot-password"); }}>
+                     Forgot password?
+                   </button>
+-
+                   {err && (
+                     <div className="error" role="alert">
+                       {err}
+                       {needsVerify && (
+-                        <button
+-                          type="button"
+-                          className="resend-btn"
+-                          onClick={resendVerification}
+-                          disabled={resendBusy}
+-                        >
++                        <button type="button" className="resend-btn" onClick={resendVerification} disabled={resendBusy}>
+                           {resendBusy ? "Sending…" : "Resend verification email"}
+                         </button>
+                       )}
+                     </div>
+                   )}
+                   {resendMsg && <div className="resend-msg success">{resendMsg}</div>}
+-
+-                  <button className="cta" type="submit" disabled={!canSubmit || busy}>
++                  <button className="cta" type="submit" disabled={!canEmailLogin || busy}>
+                     {busy ? "Signing in…" : "Sign in"}
+                   </button>
++                  <button type="button" className="back-btn" onClick={() => setStep("choose")}>← Back</button>
++                </form>
++              </>
++            )}
+ 
+-                  <button type="button" className="back-btn" onClick={() => setStep("choose")}>
+-                    ← Back
++            {/* ── PHONE LOGIN ──────────────────────────────────────────── */}
++            {step === "phone-form" && (
++              <>
++                <div className="hero">
++                  <h3>Login with Mobile</h3>
++                  <p>We'll send a 6-digit code to your number.</p>
++                </div>
++                <form className="form slide-in" onSubmit={submitPhoneForm}>
++                  <label className="label">
++                    <span>Mobile number</span>
++                    <div className="field">
++                      <span className="phone-prefix">+91</span>
++                      <input className="input" type="tel" inputMode="numeric" placeholder="10-digit mobile number"
++                        value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
++                        autoComplete="tel" maxLength={10} autoFocus />
++                    </div>
++                    {rawPhone.length > 0 && (
++                      <small className={`hint ${phoneOk ? "ok" : ""}`}>
++                        {phoneOk ? "Valid number." : "Enter a valid 10-digit Indian mobile number."}
++                      </small>
++                    )}
++                  </label>
++                  {phoneErr && <div className="error" role="alert">{phoneErr}</div>}
++                  <button className="cta" type="submit" disabled={!phoneOk || phoneBusy}>
++                    {phoneBusy ? "Sending code…" : "Send code"}
+                   </button>
++                  <button type="button" className="back-btn" onClick={() => setStep("choose")}>← Back</button>
+                 </form>
+               </>
+             )}
+ 
+-            {/* STEP: Forgot password */}
++            {/* ── PHONE OTP ────────────────────────────────────────────── */}
++            {step === "phone-otp" && (
++              <>
++                <div className="hero">
++                  <h3>Enter your code</h3>
++                  <p>We sent a 6-digit code to <strong>+91 {rawPhone}</strong> via SMS.</p>
++                </div>
++                <form className="form slide-in" onSubmit={submitPhoneOtp}>
++                  <label className="label">
++                    <span>Verification code</span>
++                    <div className="field otp-field">
++                      <input className="input otp-input" type="text" inputMode="numeric" maxLength={6}
++                        placeholder="000000" value={phoneOtp}
++                        onChange={(e) => setPhoneOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
++                        autoFocus autoComplete="one-time-code" />
++                    </div>
++                  </label>
++                  {phoneOtpErr && <div className="error" role="alert">{phoneOtpErr}</div>}
++                  <button className="cta" type="submit" disabled={phoneOtp.length < 6 || phoneOtpBusy}>
++                    {phoneOtpBusy ? "Verifying…" : "Sign in"}
++                  </button>
++                  <div className="resend-row">
++                    <span className="muted">Didn't receive the code?</span>
++                    <button type="button" className="textlink" onClick={resendPhoneLoginOtp} disabled={phoneResendBusy}>
++                      {phoneResendBusy ? "Sending…" : "Resend"}
++                    </button>
++                  </div>
++                  {phoneResendMsg && <div className="resend-msg">{phoneResendMsg}</div>}
++                  <button type="button" className="back-btn" onClick={() => setStep("phone-form")}>← Change number</button>
++                </form>
++              </>
++            )}
++
++            {/* ── FORGOT PASSWORD ──────────────────────────────────────── */}
+             {step === "forgot-password" && (
+               <>
+                 <div className="hero">
+                   <h3>Reset password</h3>
+-                  <p>We'll send you a reset code.</p>
++                  <p>We'll send a reset code to your email.</p>
+                 </div>
+-
+-                <form className="form email-form" onSubmit={requestPasswordReset}>
++                <form className="form slide-in" onSubmit={requestPasswordReset}>
+                   <label className="label">
+                     <span>Email</span>
+                     <div className="field">
+                       <IconMail />
+-                      <input
+-                        className="input"
+-                        type="email"
+-                        placeholder="you@example.com"
+-                        value={fpEmail}
+-                        onChange={(e) => setFpEmail(e.target.value)}
+-                        required
+-                        autoComplete="email"
+-                        autoFocus
+-                      />
++                      <input className="input" type="email" placeholder="you@example.com" value={fpEmail}
++                        onChange={(e) => setFpEmail(e.target.value)} required autoComplete="email" autoFocus />
+                     </div>
+                   </label>
+-
+                   {fpMsg && <div className="resend-msg">{fpMsg}</div>}
+-
+                   <button className="cta" type="submit" disabled={fpBusy}>
+                     {fpBusy ? "Sending…" : "Send reset code"}
+                   </button>
++                  <button type="button" className="back-btn" onClick={() => setStep("email-form")}>← Back to login</button>
++                </form>
++              </>
++            )}
+ 
+-                  <button type="button" className="back-btn" onClick={() => setStep("email-form")}>
+-                    ← Back to login
++            {/* ── FORGOT PASSWORD RESET ────────────────────────────────── */}
++            {step === "forgot-password-reset" && (
++              <>
++                <div className="hero">
++                  <h3>Enter code & new password</h3>
++                  <p>Check your email for the 6-digit code sent to <strong>{fpEmail}</strong>.</p>
++                </div>
++                <form className="form slide-in" onSubmit={completePasswordReset}>
++                  <label className="label">
++                    <span>Reset code</span>
++                    <div className="field otp-field">
++                      <input className="input otp-input" type="text" inputMode="numeric" maxLength={6}
++                        placeholder="000000" value={fpCode}
++                        onChange={(e) => setFpCode(e.target.value.replace(/\D/g, "").slice(0, 6))} autoFocus />
++                    </div>
++                  </label>
++                  <label className="label">
++                    <span>New password</span>
++                    <div className="field">
++                      <IconLock />
++                      <input className="input" type="password" placeholder="At least 8 characters"
++                        value={fpNewPw} onChange={(e) => setFpNewPw(e.target.value)} required autoComplete="new-password" />
++                    </div>
++                  </label>
++                  <label className="label">
++                    <span>Confirm new password</span>
++                    <div className="field">
++                      <IconLock />
++                      <input className="input" type="password" placeholder="Re-enter new password"
++                        value={fpConfirm} onChange={(e) => setFpConfirm(e.target.value)} required />
++                    </div>
++                  </label>
++                  {fpMsg && <div className="resend-msg">{fpMsg}</div>}
++                  <button className="cta" type="submit"
++                    disabled={fpBusy || fpCode.length < 6 || fpNewPw.length < 8 || fpNewPw !== fpConfirm}>
++                    {fpBusy ? "Updating…" : "Confirm & Login"}
+                   </button>
++                  <button type="button" className="back-btn" onClick={() => setStep("forgot-password")}>← Back</button>
+                 </form>
+               </>
+             )}
+-                        {/* STEP: Forgot password – enter code + new password */}
+-                        {step === "forgot-password-reset" && (
+-                          <>
+-                            <div className="hero">
+-                              <h3>Enter code & new password</h3>
+-                              <p>
+-                                Check your email for the 6-digit code sent to{" "}
+-                                <strong>{fpEmail}</strong>.
+-                              </p>
+-                            </div>
+-
+-                            <form className="form email-form" onSubmit={completePasswordReset}>
+-                              <label className="label">
+-                                <span>Reset code</span>
+-                                <div className="field">
+-                                  <input
+-                                    className="input"
+-                                    type="text"
+-                                    inputMode="numeric"
+-                                    maxLength={6}
+-                                    placeholder="000000"
+-                                    value={fpCode}
+-                                    onChange={(e) =>
+-                                      setFpCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+-                                    }
+-                                    autoFocus
+-                                  />
+-                                </div>
+-                              </label>
+-
+-                              <label className="label">
+-                                <span>New password</span>
+-                                <div className="field">
+-                                  <IconLock />
+-                                  <input
+-                                    className="input"
+-                                    type="password"
+-                                    placeholder="At least 8 characters"
+-                                    value={fpNewPw}
+-                                    onChange={(e) => setFpNewPw(e.target.value)}
+-                                    required
+-                                    autoComplete="new-password"
+-                                  />
+-                                </div>
+-                              </label>
+-
+-                              <label className="label">
+-                                <span>Confirm new password</span>

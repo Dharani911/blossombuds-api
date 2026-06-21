@@ -91,6 +91,7 @@ export default function Hero() {
           <div
             key={`${i}-${f.url}`}
             className={`hero-slide ${i === idx ? "active" : i === prevIdx ? "exiting" : ""}`}
+            aria-hidden={i !== idx}
           >
             <img
               src={f.url}
@@ -103,12 +104,15 @@ export default function Hero() {
           </div>
         ))}
 
-        <div className="hero-overlay-base" />
-        <div className="hero-overlay-glow" />
-        <div className="hero-overlay-side" />
+        <div className="hero-gradient" aria-hidden="true" />
 
-        {/* Desktop / tablet content inside stage */}
-
+        <div className="hero-content">
+          <span className="hero-eyebrow">Handcrafted floral artistry</span>
+          <h1 className="hero-headline">
+            Artificial handmade flowers for every occasions
+          </h1>
+          <Link to="/categories" className="hero-cta">Shop collection →</Link>
+        </div>
 
         {frames.length > 1 && (
           <div className="hero-dots" role="tablist" aria-label="Slides">
@@ -126,8 +130,6 @@ export default function Hero() {
           </div>
         )}
       </div>
-
-
     </section>
   );
 }
@@ -154,48 +156,34 @@ function normalizeUrlForPhone(raw: string): string {
 const heroStyles = `
 .hero{
   width:100%;
-  background: var(--bb-bg, #FAF7E7);
   overflow:hidden;
 }
 
-/* 16:9 visual banner */
 .hero-stage{
   position:relative;
-  width:min(100%, 1280px);
-  margin: 0 auto;
-  aspect-ratio: 16 / 9;
-  min-height: 220px;
-  max-height: 720px;
+  width:100%;
+  /* 16:9 ratio — grows with full screen width, capped only at 95vh */
+  height:clamp(220px,56.25vw,95vh);
   overflow:hidden;
-  background:#170f0a;
-  border-radius: 0 0 28px 28px;
-}
-
-/* Full width on very small screens */
-@media (max-width: 767px){
-  .hero-stage{
-    width:100%;
-    border-radius: 0 0 22px 22px;
-  }
+  background:#1A1610;
 }
 
 .hero-slide{
   position:absolute;
   inset:0;
   opacity:0;
-  transition:none;
 }
 
 .hero-slide.active{
   opacity:1;
-  transition: opacity .95s ease;
   z-index:1;
+  transition:opacity .95s ease;
 }
 
 .hero-slide.exiting{
   opacity:0;
-  transition: opacity .95s ease;
   z-index:0;
+  transition:opacity .95s ease;
 }
 
 .hero-slide img{
@@ -203,68 +191,80 @@ const heroStyles = `
   inset:0;
   width:100%;
   height:100%;
-  object-fit:cover;
+  /* contain — shows the full poster without any cropping */
+  object-fit:contain;
   object-position:center center;
   display:block;
-  transform: scale(1.002);
 }
 
-/* Elegant overlays so text is gone but image still looks rich */
-.hero-overlay-base{
+.hero-gradient{
   position:absolute;
   inset:0;
   z-index:2;
-  background:
-    linear-gradient(
-      to top,
-      rgba(11,7,4,.20) 0%,
-      rgba(11,7,4,.08) 28%,
-      rgba(11,7,4,.03) 50%,
-      transparent 100%
-    );
+  background:linear-gradient(to top,rgba(26,22,16,.82) 0%,rgba(26,22,16,.34) 38%,rgba(26,22,16,0) 64%);
   pointer-events:none;
 }
 
-.hero-overlay-glow{
+.hero-content{
   position:absolute;
-  inset:0;
-  z-index:2;
-  background:
-    radial-gradient(circle at 18% 20%, rgba(246,195,32,.08), transparent 24%),
-    radial-gradient(circle at 78% 22%, rgba(240,93,139,.08), transparent 22%);
-  mix-blend-mode: screen;
-  pointer-events:none;
+  bottom:clamp(32px,7vh,72px);
+  left:clamp(20px,6vw,80px);
+  z-index:3;
 }
 
-.hero-overlay-side{
-  position:absolute;
-  inset:0;
-  z-index:2;
-  background:
-    linear-gradient(
-      to right,
-      rgba(11,7,4,.08) 0%,
-      transparent 24%,
-      transparent 76%,
-      rgba(11,7,4,.06) 100%
-    );
-  pointer-events:none;
+.hero-eyebrow{
+  display:block;
+  font-size:11px;
+  font-weight:600;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:rgba(255,255,255,.74);
+  margin-bottom:12px;
 }
 
-/* Dots */
+.hero-headline{
+  margin:0 0 24px;
+  font-family:'DM Serif Display',Georgia,serif;
+  font-size:clamp(36px,6vw,72px);
+  font-weight:400;
+  line-height:1.06;
+  color:#fff;
+  max-width:14ch;
+}
+
+.hero-headline em{
+  font-style:italic;
+}
+
+.hero-cta{
+  display:inline-flex;
+  align-items:center;
+  height:48px;
+  padding:0 24px;
+  border-radius:999px;
+  background:#fff;
+  color:#1A1610;
+  font-size:14px;
+  font-weight:700;
+  text-decoration:none;
+  letter-spacing:.01em;
+  transition:transform .22s ease,box-shadow .22s ease;
+  box-shadow:0 8px 24px rgba(0,0,0,.22);
+}
+
+.hero-cta:hover{
+  transform:translateY(-2px);
+  box-shadow:0 14px 32px rgba(0,0,0,.28);
+}
+
 .hero-dots{
   position:absolute;
-  left:50%;
-  transform:translateX(-50%);
-  bottom:12px;
+  right:clamp(16px,4vw,48px);
+  bottom:clamp(20px,3.5vh,36px);
   z-index:4;
   display:flex;
   align-items:center;
   gap:7px;
-  padding:6px 8px;
-  border-radius:999px;
-  background: rgba(0,0,0,.16);
-  backdrop-filter: blur(8px);
 }
 
 .hero-dot{
@@ -273,9 +273,9 @@ const heroStyles = `
   border:none;
   border-radius:999px;
   padding:0;
-  background: rgba(255,255,255,.48);
+  background:rgba(255,255,255,.42);
   cursor:pointer;
-  transition: width .22s ease, background .22s ease;
+  transition:width .22s ease,background .22s ease;
 }
 
 .hero-dot.on{
@@ -283,49 +283,36 @@ const heroStyles = `
   background:#fff;
 }
 
-/* remove old content containers */
-.hero-desktop-content,
-.hero-mobile-content{
-  display:none !important;
-}
-
-/* 360x800 tuning */
-@media (max-width: 420px){
-  .hero-stage{
-    aspect-ratio: 16 / 10;
-    min-height: 210px;
-    border-radius: 0 0 18px 18px;
+@media (max-width:640px){
+  /* Posters are 16:9 — container is already 16:9 so no additional override needed */
+  /* Just hide the text overlay since posters carry their own design */
+  .hero-content{
+    display:none;
   }
 
   .hero-dots{
-    bottom:10px;
-    padding:5px 7px;
-    gap:6px;
+    right:8px;
+    bottom:8px;
+    gap:5px;
+    padding:4px 6px;
+    background:rgba(0,0,0,.22);
+    border-radius:999px;
   }
 
   .hero-dot{
-    width:7px;
-    height:7px;
+    width:6px;
+    height:6px;
   }
 
   .hero-dot.on{
-    width:18px;
+    width:16px;
   }
 }
 
-@media (min-width: 768px){
-  .hero-stage{
-    border-radius: 0 0 32px 32px;
-  }
-
-  .hero-dots{
-    bottom:18px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce){
+@media (prefers-reduced-motion:reduce){
   .hero-slide,
-  .hero-dot{
+  .hero-dot,
+  .hero-cta{
     transition:none;
   }
 }
