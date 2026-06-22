@@ -99,7 +99,6 @@ export default function Hero() {
               loading={i === idx ? "eager" : "lazy"}
               decoding="async"
               referrerPolicy="no-referrer"
-              crossOrigin="anonymous"
             />
           </div>
         ))}
