@@ -28,7 +28,6 @@ import {
   updateAddress as apiUpdateAddress,
   setDefaultAddress as apiSetDefaultAddress,
   deleteAddress as apiDeleteAddress,
-  saveCommunicationPreference,
   type Address as AddrModel,
 } from "../api/customers";
 
@@ -537,8 +536,6 @@ useEffect(() => {
 
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [waOptIn, setWaOptIn] = useState(false);
-  const [smsOptIn, setSmsOptIn] = useState(false);
 
   const itemsSubtotalBeforeDiscount = useMemo(() => {
     return (items || []).reduce((sum, it: any) => {
@@ -970,15 +967,7 @@ const grandTotal = useMemo(() => {
       const rzpOrder = resp.razorpayOrder; // { id, amount, currency, ... }
       const internalOrderId = (resp as any).orderId || (rzpOrder.notes?.orderId ? Number(rzpOrder.notes.orderId) : undefined);
 
-      // Always persist the user's opt-in/opt-out choice so explicit unchecks are saved too
-      if (user?.id && selectedAddress.phone) {
-        saveCommunicationPreference(Number(user.id), {
-          phone: selectedAddress.phone,
-          whatsappOptedIn: waOptIn,
-          smsOptedIn: smsOptIn,
-          source: "CHECKOUT",
-        }).catch(() => {});
-      }
+      // Communication preference capture — disabled until WhatsApp/SMS is live in production
 
       // 4) Ensure Razorpay script is loaded
       const ok = await loadRazorpay();
@@ -1668,33 +1657,7 @@ const grandTotal = useMemo(() => {
                   {500 - (orderNotes?.length || 0)} characters left
                 </div>
               </div>)}
-            {!international && user?.id && (
-              <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 6 }}>
-                <div className="small" style={{ fontWeight: 700, opacity: 0.7 }}>Stay in the loop:</div>
-                <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={waOptIn}
-                    onChange={e => setWaOptIn(e.target.checked)}
-                    style={{ marginTop: 3, accentColor: "#F05D8B", flexShrink: 0 }}
-                  />
-                  <span className="small" style={{ lineHeight: 1.4 }}>
-                    Get offers and festive deals on <strong>WhatsApp</strong>
-                  </span>
-                </label>
-                <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={smsOptIn}
-                    onChange={e => setSmsOptIn(e.target.checked)}
-                    style={{ marginTop: 3, accentColor: "#F05D8B", flexShrink: 0 }}
-                  />
-                  <span className="small" style={{ lineHeight: 1.4 }}>
-                    Get offers and festive deals via <strong>SMS</strong>
-                  </span>
-                </label>
-              </div>
-            )}
+            {/* "Stay in the loop" WhatsApp/SMS checkboxes — hidden until service is live in production */}
 
             {hasUnavailableItems && (
               <div className="small" style={{ color: "#b0003a", fontWeight: 900 }}>

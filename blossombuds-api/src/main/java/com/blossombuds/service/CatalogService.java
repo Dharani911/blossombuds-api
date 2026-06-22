@@ -137,11 +137,12 @@ public class CatalogService {
             c.setParent(null);
         }
 
-        // slug
+        // slug — use countBySlugAllRows to include soft-deleted rows; existsBySlug misses
+        // them due to @Where(active=true) but the DB unique constraint covers all rows.
         String provided = dto.getSlug();
         if (provided != null && !provided.isBlank()) {
             String normalized = slugify(provided);
-            if (categoryRepo.existsBySlug(normalized)) {
+            if (categoryRepo.countBySlugAllRows(normalized) > 0) {
                 log.warn("[CATEGORY][CREATE][FAIL] Duplicate slug '{}'", normalized);
                 throw new DuplicateKeyException("Slug already exists: " + normalized);
             }
@@ -150,7 +151,7 @@ public class CatalogService {
             String base = slugify(c.getName());
             String candidate = base;
             int i = 2;
-            while (categoryRepo.existsBySlug(candidate)) candidate = base + "-" + i++;
+            while (categoryRepo.countBySlugAllRows(candidate) > 0) candidate = base + "-" + i++;
             c.setSlug(candidate);
         }
         if (dto.getDescription()!=null){
@@ -224,7 +225,8 @@ public class CatalogService {
         if (dto.getSlug() != null) {
             String normalized = slugify(dto.getSlug());
             if (!normalized.equalsIgnoreCase(c.getSlug())) {
-                if (categoryRepo.existsBySlug(normalized) && !normalized.equalsIgnoreCase(c.getSlug())) {
+                // countBySlugAllRows includes soft-deleted rows; existsBySlug misses them
+                if (categoryRepo.countBySlugAllRows(normalized) > 0) {
                     log.warn("[CATEGORY][UPDATE][FAIL] Duplicate slug '{}' id={}", normalized, id);
                     throw new org.springframework.dao.DuplicateKeyException("Slug already exists: " + normalized);
                 }

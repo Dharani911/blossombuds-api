@@ -214,7 +214,7 @@ function initials(n: string) {
 const styles = `
 .ts-wrap{
   width:100%;
-  padding: clamp(30px, 5vw, 56px) 0;
+  padding: clamp(24px, 4vw, 56px) 0;
   background: var(--bb-bg, #FAF7E7);
 }
 
@@ -249,9 +249,9 @@ const styles = `
 .ts-head h2{
   margin:0 0 8px;
   color: var(--bb-primary, #4A4F41);
-  font-family: "Cinzel", "DM Serif Display", Georgia, serif;
+  font-family: "DM Serif Display", Georgia, serif;
   font-size: clamp(24px, 3.8vw, 38px);
-  font-weight:700;
+  font-weight:400;
   line-height:1.1;
 }
 
@@ -383,7 +383,7 @@ const styles = `
 }
 
 .ts-stars{
-  color:#f5b400;
+  color:var(--bb-accent);
   letter-spacing:.26em;
   font-size:13px;
 }

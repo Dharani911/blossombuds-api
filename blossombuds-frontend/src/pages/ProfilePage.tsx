@@ -18,7 +18,7 @@ import {
   type District,
   type Country,
 } from "../api/geo";
-import { getCommunicationPreference, saveCommunicationPreference } from "../api/customers";
+// getCommunicationPreference / saveCommunicationPreference — hidden until WhatsApp/SMS is live in production
 
 export default function ProfilePage() {
   const { user, logout, loading: authLoading } = useAuth();
@@ -59,11 +59,6 @@ export default function ProfilePage() {
   const [addrModal, setAddrModal] = useState<null | { mode: "add" | "edit"; data?: Address }>(null);
   const [addrBusy, setAddrBusy] = useState(false);
   const [addrErr, setAddrErr] = useState<string | null>(null);
-
-  // communication preferences state
-  const [waOptedIn, setWaOptedIn] = useState(false);
-  const [smsOptedIn, setSmsOptedIn] = useState(false);
-  const [commPrefToggling, setCommPrefToggling] = useState(false);
 
   // load lookups once (states, districts, countries)
   useEffect(() => {
@@ -106,11 +101,10 @@ export default function ProfilePage() {
       if (!user?.id) return;
       setLoading(true); setErr(null);
       try {
-        const [c, a, o, waPref] = await Promise.all([
+        const [c, a, o] = await Promise.all([
           http.get<Customer>(`/api/customers/${user.id}`),
           http.get<Address[]>(`/api/customers/${user.id}/addresses`),
           http.get<OrderLite[]>(`/api/orders/by-customer/${user.id}`),
-          getCommunicationPreference(Number(user.id)).catch(() => null),
         ]);
         if (!alive) return;
         setCust(c.data || null);
@@ -118,8 +112,6 @@ export default function ProfilePage() {
         setPhone(c.data?.phone || "");
         setAddresses(a.data || []);
         setOrders(o.data || []);
-        setWaOptedIn(waPref?.whatsappOptedIn ?? false);
-        setSmsOptedIn(waPref?.smsOptedIn ?? false);
       } catch (e: any) {
         if (!alive) return;
         setErr(e?.response?.data?.message || "Could not load your profile data.");
@@ -179,40 +171,6 @@ export default function ProfilePage() {
       toasts.push(msg, "bad");
     } finally {
       setSavingAcc(false);
-    }
-  }
-
-  async function toggleChannel(channel: "whatsapp" | "sms", currentValue: boolean) {
-    if (!cust?.id || commPrefToggling) return;
-    const custPhone = phone || cust?.phone || "";
-    if (!currentValue && !custPhone) {
-      toasts.push("Add a phone number to your profile first.", "bad");
-      return;
-    }
-    setCommPrefToggling(true);
-    try {
-      const newValue = !currentValue;
-      const payload: { phone?: string; whatsappOptedIn?: boolean; smsOptedIn?: boolean; source: string } = {
-        source: "PROFILE",
-        // Always send phone so the backend can identify the preference record on opt-out too
-        phone: custPhone || undefined,
-      };
-      if (channel === "whatsapp") payload.whatsappOptedIn = newValue;
-      else payload.smsOptedIn = newValue;
-
-      await saveCommunicationPreference(cust.id, payload);
-
-      if (channel === "whatsapp") {
-        setWaOptedIn(newValue);
-        toasts.push(newValue ? "WhatsApp notifications turned on!" : "WhatsApp notifications turned off.", "ok");
-      } else {
-        setSmsOptedIn(newValue);
-        toasts.push(newValue ? "SMS notifications turned on!" : "SMS notifications turned off.", "ok");
-      }
-    } catch {
-      toasts.push("Could not update preference.", "bad");
-    } finally {
-      setCommPrefToggling(false);
     }
   }
 
@@ -376,71 +334,7 @@ export default function ProfilePage() {
               countryNameById={countryNameById}
             />
 
-            {/* Marketing notification preferences */}
-            <div className="card" style={{ marginTop: 16 }}>
-              <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12 }}>Notification Preferences</div>
-              <div style={{ fontSize: 13, opacity: 0.7, marginBottom: 14 }}>
-                Choose how you'd like to receive offers, new arrivals and festive deals.
-              </div>
-
-              {/* WhatsApp row */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 10 }}>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>WhatsApp</div>
-                  <div style={{ fontSize: 12, opacity: 0.65, marginTop: 2 }}>
-                    {waOptedIn ? "Currently receiving updates on WhatsApp." : "Not opted in."}
-                  </div>
-                </div>
-                <button
-                  onClick={() => toggleChannel("whatsapp", waOptedIn)}
-                  disabled={commPrefToggling || loading}
-                  style={{
-                    flexShrink: 0,
-                    padding: "5px 16px",
-                    borderRadius: 20,
-                    border: "none",
-                    fontWeight: 700,
-                    fontSize: 13,
-                    cursor: commPrefToggling || loading ? "not-allowed" : "pointer",
-                    opacity: commPrefToggling || loading ? 0.6 : 1,
-                    background: waOptedIn ? "#e8f5e9" : "#F05D8B",
-                    color: waOptedIn ? "#2e7d32" : "#fff",
-                    transition: "background .2s, opacity .2s",
-                  }}
-                >
-                  {commPrefToggling ? "…" : waOptedIn ? "Turn Off" : "Turn On"}
-                </button>
-              </div>
-
-              {/* SMS row */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>SMS</div>
-                  <div style={{ fontSize: 12, opacity: 0.65, marginTop: 2 }}>
-                    {smsOptedIn ? "Currently receiving updates via SMS." : "Not opted in."}
-                  </div>
-                </div>
-                <button
-                  onClick={() => toggleChannel("sms", smsOptedIn)}
-                  disabled={commPrefToggling || loading}
-                  style={{
-                    flexShrink: 0,
-                    padding: "5px 16px",
-                    borderRadius: 20,
-                    border: "none",
-                    fontWeight: 700,
-                    fontSize: 13,
-                    cursor: commPrefToggling || loading ? "not-allowed" : "pointer",
-                    opacity: commPrefToggling || loading ? 0.6 : 1,
-                    background: smsOptedIn ? "#e8f5e9" : "#F05D8B",
-                    color: smsOptedIn ? "#2e7d32" : "#fff",
-                    transition: "background .2s, opacity .2s",
-                  }}
-                >
-                  {commPrefToggling ? "…" : smsOptedIn ? "Turn Off" : "Turn On"}
-                </button>
-              </div>
-            </div>
+            {/* Notification Preferences — hidden until WhatsApp/SMS service is live in production */}
           </div>
 
           <div className="col">

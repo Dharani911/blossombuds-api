@@ -62,38 +62,38 @@ export default function CustomOrderCTA() {
       <style>{styles}</style>
 
       <div className="cta-shell">
-        <div className="cta-card">
-          <div className="cta-head">
+        <div className="cta-inner">
+          {/* Left: image grid */}
+          <div className="cta-images" aria-hidden="true">
+            <img src={customizationFlowers} alt="" loading="lazy" />
+            <img src={customizationGarland} alt="" loading="lazy" />
+          </div>
+
+          {/* Right: content */}
+          <div className="cta-content">
             <span className="cta-eyebrow">Custom orders</span>
             <h2 id="cta-title">
               Real customized floral pieces made for our customers
             </h2>
             <p>
               These are real custom pieces created based on customer ideas,
-              colours, and occasion needs. If you want something similar,
-              send us a quick WhatsApp message with your idea and we’ll help
-              create it beautifully.
+              colours, and occasion needs. If you want something similar, send
+              us a quick WhatsApp message with your idea and we'll help create
+              it beautifully.
             </p>
-          </div>
 
-          <div className="cta-gallery" aria-hidden="true">
-            <figure className="cta-shot">
-              <div className="cta-shot-media">
-                <img src={customizationFlowers} alt="" loading="lazy" />
-              </div>
-              <figcaption>Custom floral set</figcaption>
-            </figure>
-
-            <figure className="cta-shot">
-              <div className="cta-shot-media">
-                <img src={customizationGarland} alt="" loading="lazy" />
-              </div>
-              <figcaption>Custom garland design</figcaption>
-            </figure>
-          </div>
-
-          <div className="cta-actions">
-
+            <div className="cta-chips">
+              {quickChips.map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  className="cta-chip"
+                  onClick={() => addChip(chip)}
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
 
             <form className="cta-form" onSubmit={onSubmit}>
               <input
@@ -116,267 +116,191 @@ export default function CustomOrderCTA() {
 
 const styles = `
 .cta-wrap{
-  padding: clamp(36px, 5vw, 72px) clamp(14px, 5vw, 48px) clamp(46px, 6vw, 86px);
+  width:100%;
+  padding:clamp(36px,5vw,72px) clamp(14px,5vw,48px);
+  background:#F5F0E8;
 }
 
 .cta-shell{
-  max-width: 1160px;
-  margin: 0 auto;
+  max-width:1160px;
+  margin:0 auto;
+  background:#fff;
+  border-radius:24px;
+  overflow:hidden;
 }
 
-.cta-card{
-  border-radius: 34px;
-  padding: clamp(18px, 2.4vw, 28px);
-  background:
-    radial-gradient(circle at top left, rgba(240,93,139,.08), transparent 24%),
-    radial-gradient(circle at bottom right, rgba(246,195,32,.08), transparent 24%),
-    linear-gradient(180deg, #fff, #fffafc);
-  border: 1px solid rgba(74,79,65,.08);
-  box-shadow:
-    0 20px 46px rgba(0,0,0,.08),
-    inset 0 1px 0 rgba(255,255,255,.92);
+.cta-inner{
+  display:grid;
+  grid-template-columns:1fr 1fr;
 }
 
-.cta-head{
-  max-width: 760px;
-  margin: 0 auto 22px;
-  text-align: center;
+.cta-images{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+  padding:24px;
+  background:#F5F0E8;
+  align-content:start;
+}
+
+.cta-images img{
+  width:100%;
+  height:clamp(200px,28vw,380px);
+  object-fit:cover;
+  border-radius:14px;
+  display:block;
+}
+
+.cta-content{
+  padding:clamp(24px,4vw,52px);
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:16px;
 }
 
 .cta-eyebrow{
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 28px;
-  padding: 0 12px;
-  margin-bottom: 12px;
-  border-radius: 999px;
-  background: rgba(240,93,139,.08);
-  border: 1px solid rgba(240,93,139,.14);
-  color: var(--bb-accent);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .14em;
-  text-transform: uppercase;
+  display:inline-flex;
+  align-items:center;
+  min-height:28px;
+  padding:0 12px;
+  border-radius:999px;
+  background:rgba(240,93,139,.08);
+  border:1px solid rgba(240,93,139,.14);
+  color:var(--bb-accent);
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  width:fit-content;
 }
 
-.cta-head h2{
-  margin: 0 0 12px;
-  font-family: "Cinzel","DM Serif Display",Georgia,serif;
-  font-size: clamp(28px, 4vw, 42px);
-  line-height: 1.12;
-  color: var(--bb-primary);
+.cta-content h2{
+  margin:0;
+  font-family:'DM Serif Display',Georgia,serif;
+  font-size:clamp(24px,3vw,36px);
+  font-weight:400;
+  line-height:1.15;
+  color:var(--bb-primary);
 }
 
-.cta-head p{
-  margin: 0 auto;
-  max-width: 62ch;
-  color: #687163;
-  font-size: 15px;
-  line-height: 1.75;
-}
-
-.cta-gallery{
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  margin-bottom: 20px;
-}
-
-.cta-shot{
-  margin: 0;
-  border-radius: 26px;
-  overflow: hidden;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.84), rgba(255,255,255,.66)),
-    #f7f1ea;
-  border: 1px solid rgba(74,79,65,.08);
-  box-shadow:
-    0 18px 36px rgba(0,0,0,.08),
-    inset 0 1px 0 rgba(255,255,255,.74);
-}
-
-.cta-shot-media{
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 14px;
-  background:
-    radial-gradient(circle at top, rgba(255,255,255,.50), rgba(255,255,255,0) 34%),
-    linear-gradient(180deg, #f8f4ee 0%, #f2ece4 100%);
-  min-height: clamp(240px, 42vw, 480px);
-}
-
-.cta-shot-media img{
-  width: 100%;
-  height: 100%;
-  max-height: 430px;
-  object-fit: contain;
-  object-position: center;
-  display: block;
-}
-
-.cta-shot figcaption{
-  padding: 12px 14px 14px;
-  text-align: center;
-  color: var(--bb-primary);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.cta-actions{
-  max-width: 820px;
-  margin: 0 auto;
+.cta-content p{
+  margin:0;
+  color:#687163;
+  font-size:14px;
+  line-height:1.75;
 }
 
 .cta-chips{
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  margin-bottom: 18px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
 }
 
 .cta-chip{
-  min-height: 38px;
-  padding: 0 14px;
-  border: 1px solid rgba(240,93,139,.12);
-  border-radius: 999px;
-  background: rgba(240,93,139,.06);
-  color: var(--bb-primary);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: transform .18s ease, background .18s ease, border-color .18s ease;
+  min-height:36px;
+  padding:0 14px;
+  border:1px solid rgba(240,93,139,.18);
+  border-radius:999px;
+  background:rgba(240,93,139,.06);
+  color:var(--bb-primary);
+  font-size:13px;
+  font-weight:600;
+  cursor:pointer;
+  transition:transform .18s ease,background .18s ease,border-color .18s ease;
 }
 
 .cta-chip:hover{
-  transform: translateY(-1px);
-  background: rgba(240,93,139,.12);
-  border-color: rgba(240,93,139,.20);
+  transform:translateY(-1px);
+  background:rgba(240,93,139,.12);
+  border-color:rgba(240,93,139,.26);
 }
 
 .cta-form{
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:10px;
 }
 
 .cta-input{
-  height: 54px;
-  border-radius: 999px;
-  border: 1px solid rgba(0,0,0,.12);
-  background: #fff;
-  padding: 0 18px;
-  font-size: 15px;
-  color: var(--bb-primary);
-  outline: none;
+  height:52px;
+  border-radius:999px;
+  border:1px solid rgba(0,0,0,.12);
+  background:#fff;
+  padding:0 18px;
+  font-size:14px;
+  color:var(--bb-primary);
+  outline:none;
 }
 
 .cta-input:focus{
-  border-color: var(--bb-accent);
-  box-shadow: 0 0 0 4px rgba(240,93,139,.12);
+  border-color:var(--bb-accent);
+  box-shadow:0 0 0 4px rgba(240,93,139,.10);
 }
 
 .cta-btn{
-  height: 54px;
-  padding: 0 22px;
-  border: none;
-  border-radius: 999px;
-  background: #25D366;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 800;
-  cursor: pointer;
-  box-shadow: 0 12px 28px rgba(37,211,102,.22);
-  transition: transform .18s ease, box-shadow .18s ease;
+  height:52px;
+  padding:0 20px;
+  border:none;
+  border-radius:999px;
+  background:#25D366;
+  color:#fff;
+  font-size:14px;
+  font-weight:800;
+  cursor:pointer;
+  white-space:nowrap;
+  box-shadow:0 10px 26px rgba(37,211,102,.22);
+  transition:transform .18s ease,box-shadow .18s ease;
 }
 
 .cta-btn:hover:not(:disabled){
-  transform: translateY(-1px);
-  box-shadow: 0 16px 32px rgba(37,211,102,.26);
+  transform:translateY(-1px);
+  box-shadow:0 14px 30px rgba(37,211,102,.28);
 }
 
 .cta-btn:disabled{
-  opacity: .5;
-  cursor: not-allowed;
-  box-shadow: none;
+  opacity:.5;
+  cursor:not-allowed;
+  box-shadow:none;
 }
 
-@media (max-width: 700px){
+@media (max-width:840px){
+  .cta-inner{
+    grid-template-columns:1fr;
+  }
+
+  .cta-images{
+    grid-template-columns:1fr 1fr;
+    padding:16px;
+    gap:10px;
+  }
+
+  .cta-images img{
+    height:clamp(140px,38vw,240px);
+  }
+
+  .cta-content{
+    padding:clamp(20px,5vw,36px);
+  }
+}
+
+@media (max-width:540px){
   .cta-wrap{
-    padding: 26px 10px 38px;
+    padding:24px 10px 36px;
   }
 
-  .cta-card{
-    border-radius: 22px;
-    padding: 14px;
-  }
-
-  .cta-head{
-    margin-bottom: 16px;
-  }
-
-  .cta-head h2{
-    font-size: clamp(24px, 7.6vw, 32px);
-  }
-
-  .cta-head p{
-    font-size: 14px;
-    line-height: 1.62;
-  }
-
-  .cta-gallery{
-    grid-template-columns: 1fr;
-    gap: 12px;
-    margin-bottom: 16px;
-  }
-
-  .cta-shot{
-    border-radius: 18px;
-  }
-
-  .cta-shot-media{
-    min-height: 220px;
-    padding: 10px;
-  }
-
-  .cta-shot-media img{
-    max-height: 280px;
-  }
-
-  .cta-shot figcaption{
-    padding: 10px 12px 12px;
-    font-size: 12px;
-  }
-
-  .cta-chips{
-    justify-content: center;
-    margin-bottom: 14px;
-  }
-
-  .cta-chip{
-    min-height: 34px;
-    padding: 0 12px;
-    font-size: 12px;
+  .cta-shell{
+    border-radius:18px;
   }
 
   .cta-form{
-    grid-template-columns: 1fr;
+    grid-template-columns:1fr;
   }
 
   .cta-input,
   .cta-btn{
-    width: 100%;
-    height: 48px;
-  }
-
-  .cta-input{
-    font-size: 14px;
-  }
-
-  .cta-btn{
-    font-size: 13px;
+    width:100%;
+    height:48px;
   }
 }
 `;

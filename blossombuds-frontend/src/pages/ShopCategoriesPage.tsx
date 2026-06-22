@@ -13,6 +13,30 @@ import {
   type PageResp,
 } from "../api/catalog";
 import categoryDefaultImg from "../assets/category_default.jpg";
+
+/* ─── localStorage cache (stale-while-revalidate) ─────────────────────────
+   Shows cached data instantly on page load while fresh data fetches in
+   the background. Prevents blank screens when the backend is slow.       */
+const CACHE_CATS_KEY   = "bb:catalog:cats:v1";
+const CACHE_PRODS_KEY  = "bb:catalog:prods:v1";
+const CACHE_CATS_TTL   = 2  * 60 * 60 * 1000; // 2 h  — categories rarely change
+const CACHE_PRODS_TTL  = 30 * 60 * 1000;       // 30 m — prices/stock fresher
+
+function cacheRead<T>(key: string, ttl: number): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const { d, t } = JSON.parse(raw);
+    if (Date.now() - t > ttl) return null;
+    return d as T;
+  } catch { return null; }
+}
+
+function cacheWrite<T>(key: string, data: T): void {
+  try {
+    localStorage.setItem(key, JSON.stringify({ d: data, t: Date.now() }));
+  } catch { /* quota exceeded — silently ignore */ }
+}
 /* ----------------------------- Keywords (search-only) ----------------------------- */
 const KEYWORDS: { label: string; value: string }[] = [
   { label: "Malli", value: "malli" },
@@ -263,28 +287,39 @@ useEffect(() => {
   return () => mq.removeEventListener?.("change", onChange);
 }, []);
 
-  // load all categories once, with one silent auto-retry after 3 s
+  // load all categories — seed from localStorage cache instantly, then refresh in background
   useEffect(() => {
     let live = true;
+
+    // Show cached categories immediately so sidebar is never blank
+    const cached = cacheRead<Category[]>(CACHE_CATS_KEY, CACHE_CATS_TTL);
+    if (cached?.length) {
+      setCats(cached);
+      setLoadingCats(false);
+    }
+
     (async () => {
       try {
-        setLoadingCats(true);
+        if (!cached?.length) setLoadingCats(true);
         setErr(null);
         const all = await getCategories();
         if (!live) return;
         setCats(all || []);
+        if (all?.length) cacheWrite(CACHE_CATS_KEY, all);
       } catch {
         if (!live) return;
-        // auto-retry once after 10 s — gives Railway enough time to wake from sleep
-        await new Promise((r) => setTimeout(r, 10000));
+        if (cached?.length) { if (live) setLoadingCats(false); return; } // already showing cache
+        // retry after 3 s — backend is on paid plan (no sleep), just a transient failure
+        await new Promise((r) => setTimeout(r, 3000));
         if (!live) return;
         try {
           const all = await getCategories();
           if (!live) return;
           setCats(all || []);
+          if (all?.length) cacheWrite(CACHE_CATS_KEY, all);
         } catch (e2: any) {
           if (!live) return;
-          setErr(e2?.response?.data?.message || "Could not load categories.");
+          if (!cached?.length) setErr(e2?.response?.data?.message || "Could not load categories.");
         }
       } finally {
         if (live) setLoadingCats(false);
@@ -377,19 +412,30 @@ useEffect(() => {
     return rows;
   }, []);
 
-  // ✅ NEW: load ALL products progressively when allMode (no empty loading page)
-  // ✅ Load ALL products progressively when allMode (FAST first paint, no empty screen)
+  // Load ALL products progressively — seed from localStorage cache first so the
+  // grid is never blank. Fresh data replaces cache in the background.
   useEffect(() => {
     let live = true;
 
     async function loadAllProgressive() {
       if (!allMode) return;
 
-      setLoadingAll(true);
       setProductErr(null);
-      // Always start fresh — stale products from a previous session (including
-      // server-deleted items) must not persist across all-mode re-entries.
-      setAllProducts([]);
+
+      // ── 1. Seed from cache immediately (instant render, no blank grid) ──
+      const cached = cacheRead<Product[]>(CACHE_PRODS_KEY, CACHE_PRODS_TTL);
+      if (cached?.length) {
+        setAllProducts(cached);
+        setLoadingAll(false); // don't show spinner if we already have content
+      } else {
+        setAllProducts([]);
+        setLoadingAll(true);
+      }
+
+      // ── 2. Fetch fresh data in background ──────────────────────────────
+      setLoadingAll(true);
+      const allFetched: Product[] = [];
+      let replacedCache = false;
 
       try {
         const size = 60;
@@ -403,32 +449,44 @@ useEffect(() => {
           const rows = (resp?.content || []) as Product[];
           if (!rows.length) break;
 
-          // filter + dedupe this batch
           const batch: Product[] = [];
           for (const p of rows as any[]) {
             const v = p?.visible ?? p?.isVisible ?? null;
             const isVisible = v === true || v == null;
             const isActive = p?.active !== false;
             if (!isActive || !isVisible) continue;
-
             if (!p?.id || seen.has(p.id)) continue;
             seen.add(p.id);
             batch.push(p as Product);
+            allFetched.push(p as Product);
           }
 
-          // Paint IMMEDIATELY (keep arrival order: first loaded shows first)
           if (!live) return;
           if (batch.length) {
-            setAllProducts((prev) => [...prev, ...batch]);
+            if (!replacedCache) {
+              // First fresh batch: replace stale cache data entirely
+              setAllProducts(batch);
+              replacedCache = true;
+            } else {
+              setAllProducts((prev) => [...prev, ...batch]);
+            }
           }
 
-          // stop if last page
           if (rows.length < size) break;
         }
+
+        // Persist fresh complete list to cache
+        if (allFetched.length) cacheWrite(CACHE_PRODS_KEY, allFetched);
+
       } catch {
         if (!live) return;
-        // Retry after 10 s — gives Railway enough time to wake from sleep
-        await new Promise((r) => setTimeout(r, 10000));
+        if (cached?.length) {
+          // Already showing cached data — silently stop, don't show error
+          if (live) setLoadingAll(false);
+          return;
+        }
+        // No cache — retry once after 3 s
+        await new Promise((r) => setTimeout(r, 3000));
         if (!live) return;
         try {
           const resp2 = await listProductsPage(0, 60);
@@ -437,7 +495,10 @@ useEffect(() => {
             const v = p?.visible ?? p?.isVisible ?? null;
             return p?.active !== false && v !== false && p?.id;
           });
-          if (live && batch2.length) setAllProducts(batch2 as Product[]);
+          if (live && batch2.length) {
+            setAllProducts(batch2 as Product[]);
+            cacheWrite(CACHE_PRODS_KEY, batch2 as Product[]);
+          }
         } catch {
           if (live) setProductErr("Could not load products. Check your connection and try again.");
         }
@@ -1000,13 +1061,15 @@ useEffect(() => {
                     </div>
 
                     <div className="pd-right">
-                      <span className="badge">{shownCount} items</span>
+                      <span className="badge">
+                        {loadingAll && allProducts.length === 0 ? "Loading…" : `${shownCount} items`}
+                      </span>
                     </div>
                   </div>
                 </div>
               </section>
 
-              {loadingAll && filteredProducts.length > 0 && (
+              {loadingAll && allProducts.length > 0 && (
                 <div className="muted" style={{ padding: "8px 2px" }}>
                   Loading more…
                 </div>
