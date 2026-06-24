@@ -1,7 +1,6 @@
 package com.blossombuds.service;
 
-import com.blossombuds.domain.WhatsAppCampaign;
-import com.blossombuds.domain.WhatsAppCampaignRecipient;
+import com.blossombuds.domain.Setting;
 import com.blossombuds.domain.WhatsAppMessageEvent;
 import com.blossombuds.repository.WhatsAppCampaignRecipientRepository;
 import com.blossombuds.repository.WhatsAppCampaignRepository;
@@ -13,6 +12,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
 import java.time.OffsetDateTime;
 
 /** Service for processing Meta WhatsApp Cloud API webhook payloads. */
@@ -21,25 +23,31 @@ import java.time.OffsetDateTime;
 @RequiredArgsConstructor
 public class WhatsAppWebhookService {
 
+    private static final java.util.concurrent.ConcurrentHashMap<String, Long> AUTO_REPLY_LAST_SENT
+            = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final long AUTO_REPLY_COOLDOWN_MS = 5 * 60 * 1000L;
+
     private final ObjectMapper objectMapper;
     private final WhatsAppMessageEventRepository messageEventRepository;
     private final WhatsAppCampaignRecipientRepository recipientRepository;
     private final WhatsAppCampaignRepository campaignRepository;
+    private final WhatsAppCloudClient whatsAppCloudClient;
+    private final SettingsService settingsService;
 
     /** Stores and processes a raw WhatsApp webhook payload. */
     @Transactional
     public void processWebhookPayload(String rawPayload) {
+        if (rawPayload == null || rawPayload.isBlank()) {
+            log.warn("[WHATSAPP][WEBHOOK] Empty payload received");
+            return;
+        }
+
         WhatsAppMessageEvent rawEvent = new WhatsAppMessageEvent();
         rawEvent.setEventType("RAW_WEBHOOK");
         rawEvent.setRawPayload(rawPayload);
         rawEvent.setReceivedAt(OffsetDateTime.now());
         rawEvent.setCreatedAt(OffsetDateTime.now());
         messageEventRepository.save(rawEvent);
-
-        if (rawPayload == null || rawPayload.isBlank()) {
-            log.warn("[WHATSAPP][WEBHOOK] Empty payload received");
-            return;
-        }
 
         try {
             JsonNode root = objectMapper.readTree(rawPayload);
@@ -132,6 +140,89 @@ public class WhatsAppWebhookService {
 
             log.info("[WHATSAPP][WEBHOOK][MESSAGE] Incoming message received from phone={}, type={}",
                     maskPhone(phone), messageType);
+
+            sendAutoReply(phone);
+        }
+    }
+
+    /**
+     * Schedules an auto-reply to fire AFTER the enclosing transaction commits,
+     * so the HTTP call to Meta API does not hold the DB connection open.
+     */
+    private void sendAutoReply(String phone) {
+        String mainNumber = mainWhatsAppNumber();
+        if (mainNumber.isBlank()) {
+            log.debug("[WHATSAPP][AUTO_REPLY] brand.whatsapp not configured, skipping");
+            return;
+        }
+        String ownDigits = ownPhoneDigits();
+        String incomingDigits = phone == null ? "" : phone.replaceAll("[^0-9]", "");
+        if (!ownDigits.isBlank() && incomingDigits.endsWith(ownDigits)) {
+            log.debug("[WHATSAPP][AUTO_REPLY] Skipping auto-reply to own number");
+            return;
+        }
+        // Rate-limit: one auto-reply per phone per 5 minutes to prevent reply loops.
+        // Evict stale entries first so the map stays bounded under spam traffic.
+        long now = System.currentTimeMillis();
+        long evictBefore = now - AUTO_REPLY_COOLDOWN_MS;
+        AUTO_REPLY_LAST_SENT.entrySet().removeIf(e -> e.getValue() < evictBefore);
+
+        Long lastSent = AUTO_REPLY_LAST_SENT.get(phone);
+        if (lastSent != null && (now - lastSent) < AUTO_REPLY_COOLDOWN_MS) {
+            log.debug("[WHATSAPP][AUTO_REPLY] Rate-limited for phone={}", maskPhone(phone));
+            return;
+        }
+        AUTO_REPLY_LAST_SENT.put(phone, now);
+
+        String waLink = "https://wa.me/" + mainNumber;
+        String message = "Hi! This number is used only for sending order updates and offers. "
+                + "For queries or support, please reach us directly here: " + waLink;
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            // Defer the HTTP call until after commit so the DB connection is released first.
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    sendAutoReplyHttp(phone, message);
+                }
+            });
+        } else {
+            // No active transaction (e.g. called from a test or scheduler) — send directly.
+            sendAutoReplyHttp(phone, message);
+        }
+    }
+
+    private void sendAutoReplyHttp(String phone, String message) {
+        WhatsAppCloudClient.SendResult result = whatsAppCloudClient.sendTextMessage(phone, message);
+        if (result.isSuccess()) {
+            log.info("[WHATSAPP][AUTO_REPLY] Sent to phone={}", maskPhone(phone));
+        } else {
+            log.warn("[WHATSAPP][AUTO_REPLY] Failed for phone={}: {}", maskPhone(phone), result.getErrorMessage());
+        }
+    }
+
+    /** Reads brand.whatsapp from settings and strips it to digits only for wa.me link. */
+    private String mainWhatsAppNumber() {
+        try {
+            Setting s = settingsService.get("brand.whatsapp");
+            if (s == null || s.getValue() == null || s.getValue().isBlank()) return "";
+            return s.getValue().replaceAll("[^0-9]", "");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /** Returns last 10 digits of the Cloud API sending number to guard against echo loops. */
+    private String ownPhoneDigits() {
+        try {
+            Setting s = settingsService.get("whatsapp.cloud.own_phone_number");
+            if (s != null && s.getValue() != null && !s.getValue().isBlank()) {
+                String digits = s.getValue().replaceAll("[^0-9]", "");
+                return digits.length() >= 10 ? digits.substring(digits.length() - 10) : digits;
+            }
+            return "";
+        } catch (Exception e) {
+            return "";
         }
     }
 

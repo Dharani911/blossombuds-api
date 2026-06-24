@@ -18,7 +18,7 @@ import {
   type District,
   type Country,
 } from "../api/geo";
-// getCommunicationPreference / saveCommunicationPreference — hidden until WhatsApp/SMS is live in production
+import { getCommunicationPreference, saveCommunicationPreference, type CommunicationPreference } from "../api/customers";
 
 export default function ProfilePage() {
   const { user, logout, loading: authLoading } = useAuth();
@@ -54,6 +54,10 @@ export default function ProfilePage() {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [savingAcc, setSavingAcc] = useState(false);
+
+  // communication preferences
+  const [prefs, setPrefs] = useState<CommunicationPreference | null>(null);
+  const [savingPrefs, setSavingPrefs] = useState(false);
 
   // address modal state
   const [addrModal, setAddrModal] = useState<null | { mode: "add" | "edit"; data?: Address }>(null);
@@ -101,10 +105,11 @@ export default function ProfilePage() {
       if (!user?.id) return;
       setLoading(true); setErr(null);
       try {
-        const [c, a, o] = await Promise.all([
+        const [c, a, o, p] = await Promise.all([
           http.get<Customer>(`/api/customers/${user.id}`),
           http.get<Address[]>(`/api/customers/${user.id}/addresses`),
           http.get<OrderLite[]>(`/api/orders/by-customer/${user.id}`),
+          getCommunicationPreference(user.id).catch(() => null),
         ]);
         if (!alive) return;
         setCust(c.data || null);
@@ -112,6 +117,7 @@ export default function ProfilePage() {
         setPhone(c.data?.phone || "");
         setAddresses(a.data || []);
         setOrders(o.data || []);
+        setPrefs(p);
       } catch (e: any) {
         if (!alive) return;
         setErr(e?.response?.data?.message || "Could not load your profile data.");
@@ -134,6 +140,25 @@ export default function ProfilePage() {
     try { await http.post("/api/auth/logout"); } catch { }
     logout();
   };
+
+  async function togglePref(field: "smsOptedIn" | "whatsappOptedIn") {
+    if (!cust?.id || savingPrefs) return;
+    const current = prefs ?? { id: null, phone: null, whatsappOptedIn: false, smsOptedIn: false, source: null, whatsappOptedInAt: null, whatsappOptedOutAt: null, smsOptedInAt: null, smsOptedOutAt: null };
+    const next = {
+      smsOptedIn: field === "smsOptedIn" ? !current.smsOptedIn : current.smsOptedIn,
+      whatsappOptedIn: field === "whatsappOptedIn" ? !current.whatsappOptedIn : current.whatsappOptedIn,
+    };
+    setSavingPrefs(true);
+    try {
+      const updated = await saveCommunicationPreference(cust.id, { ...next, phone: cust.phone ?? undefined });
+      setPrefs(updated);
+      toasts.push("Preferences saved", "ok");
+    } catch {
+      toasts.push("Could not save preferences", "bad");
+    } finally {
+      setSavingPrefs(false);
+    }
+  }
 
   async function saveAccount() {
     if (!cust?.id) return;
@@ -334,7 +359,14 @@ export default function ProfilePage() {
               countryNameById={countryNameById}
             />
 
-            {/* Notification Preferences — hidden until WhatsApp/SMS service is live in production */}
+            <NotifPrefsCard
+              loading={loading}
+              smsOptedIn={prefs?.smsOptedIn ?? false}
+              waOptedIn={prefs?.whatsappOptedIn ?? false}
+              saving={savingPrefs}
+              onToggleSms={() => togglePref("smsOptedIn")}
+              onToggleWa={() => togglePref("whatsappOptedIn")}
+            />
           </div>
 
           <div className="col">
@@ -366,6 +398,96 @@ export default function ProfilePage() {
     </div>
   );
 }
+
+// ── Notification Preferences Card ─────────────────────────────────────────
+
+function NotifPrefsCard({ loading, smsOptedIn, waOptedIn, saving, onToggleSms, onToggleWa }: {
+  loading: boolean;
+  smsOptedIn: boolean;
+  waOptedIn: boolean;
+  saving: boolean;
+  onToggleSms: () => void;
+  onToggleWa: () => void;
+}) {
+  return (
+    <div className="card">
+      <style>{notifStyles}</style>
+      <div className="head">
+        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800 }}>Notification Preferences</h3>
+      </div>
+      <div className="body" style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 14 }}>
+        {loading ? (
+          <div className="skeleton">Loading…</div>
+        ) : (
+          <>
+            <ToggleRow
+              label="SMS notifications"
+              desc="Order confirmed, dispatched &amp; delivered"
+              checked={smsOptedIn}
+              disabled={saving}
+              onChange={onToggleSms}
+            />
+            <ToggleRow
+              label="WhatsApp updates"
+              desc="Offers, new arrivals &amp; promotions"
+              checked={waOptedIn}
+              disabled={saving}
+              onChange={onToggleWa}
+            />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ToggleRow({ label, desc, checked, disabled, onChange }: {
+  label: string; desc: string; checked: boolean; disabled: boolean; onChange: () => void;
+}) {
+  return (
+    <div className="notif-row">
+      <div className="notif-text">
+        <span className="notif-label">{label}</span>
+        <span className="notif-desc" dangerouslySetInnerHTML={{ __html: desc }} />
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        disabled={disabled}
+        onClick={onChange}
+        className={`toggle-pill ${checked ? "on" : ""}`}
+      >
+        <span className="toggle-thumb" />
+      </button>
+    </div>
+  );
+}
+
+const notifStyles = `
+.notif-row{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:10px 0; border-bottom:1px solid rgba(0,0,0,.05);
+}
+.notif-row:last-child{ border-bottom:none; padding-bottom:0; }
+.notif-text{ display:flex; flex-direction:column; gap:3px; }
+.notif-label{ font-weight:800; font-size:13px; color:var(--bb-primary); }
+.notif-desc{ font-size:12px; color:var(--bb-primary); opacity:.7; }
+.toggle-pill{
+  width:44px; min-width:44px; height:24px; border-radius:99px;
+  border:none; cursor:pointer; position:relative; transition:background .2s;
+  background:rgba(0,0,0,.15);
+}
+.toggle-pill.on{ background:var(--bb-accent); }
+.toggle-pill:disabled{ opacity:.5; cursor:not-allowed; }
+.toggle-thumb{
+  position:absolute; top:3px; left:3px;
+  width:18px; height:18px; border-radius:50%;
+  background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.2);
+  transition:transform .2s;
+}
+.toggle-pill.on .toggle-thumb{ transform:translateX(20px); }
+`;
 
 /* page-level styles (responsive width + small padding on mobile) */
 const pageStyles = `

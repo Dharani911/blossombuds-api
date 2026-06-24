@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+          http://www.liquibase.org/xml/ns/dbchangelog
+          https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- Add SMS opt-in columns to customer_whatsapp_preferences table so the same
+         record tracks both WhatsApp and SMS marketing consent per customer. -->
+    <changeSet id="0036-01-add-sms-opted-in" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="customer_whatsapp_preferences" columnName="sms_opted_in"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="customer_whatsapp_preferences">
+            <column name="sms_opted_in" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="customer_whatsapp_preferences" columnName="sms_opted_in"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="0036-02-add-sms-opted-in-at" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="customer_whatsapp_preferences" columnName="sms_opted_in_at"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="customer_whatsapp_preferences">
+            <column name="sms_opted_in_at" type="timestamptz"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="customer_whatsapp_preferences" columnName="sms_opted_in_at"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="0036-03-add-sms-opted-out-at" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="customer_whatsapp_preferences" columnName="sms_opted_out_at"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="customer_whatsapp_preferences">
+            <column name="sms_opted_out_at" type="timestamptz"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="customer_whatsapp_preferences" columnName="sms_opted_out_at"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

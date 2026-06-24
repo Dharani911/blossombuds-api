@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.blossombuds.dto.WhatsAppDtos;
+import jakarta.annotation.PostConstruct;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,6 +31,34 @@ public class WhatsAppCampaignService {
     private final WhatsAppCampaignRecipientRepository recipientRepository;
     private final CustomerWhatsAppPreferenceRepository preferenceRepository;
     private final WhatsAppCloudClient whatsAppCloudClient;
+
+    /**
+     * On startup, reset any campaigns that were left in SENDING (from a previous crash/restart).
+     * Recipients in SENDING are reset to PENDING so they can be retried on the next send call.
+     */
+    @PostConstruct
+    @Transactional
+    public void recoverStuckCampaigns() {
+        campaignRepository.findByActiveTrueOrderByCreatedAtDesc().stream()
+                .filter(c -> "SENDING".equals(c.getStatus()))
+                .forEach(campaign -> {
+                    recipientRepository
+                            .findByCampaignIdAndStatusAndActiveTrueOrderByCreatedAtAsc(campaign.getId(), "SENDING")
+                            .forEach(r -> {
+                                r.setStatus("PENDING");
+                                r.setModifiedBy("system");
+                                r.setModifiedAt(OffsetDateTime.now());
+                                recipientRepository.save(r);
+                            });
+                    campaign.setStatus("FAILED");
+                    campaign.setCompletedAt(OffsetDateTime.now());
+                    campaign.setModifiedBy("system");
+                    campaign.setModifiedAt(OffsetDateTime.now());
+                    campaignRepository.save(campaign);
+                    log.warn("[WHATSAPP][CAMPAIGN][RECOVERY] Reset stuck campaign campaignId={} from SENDING to FAILED",
+                            campaign.getId());
+                });
+    }
 
     /** Lists all active WhatsApp templates. */
     @Transactional(readOnly = true)
@@ -98,8 +127,11 @@ public class WhatsAppCampaignService {
         return campaign;
     }
 
-    /** Sends all pending recipients for a campaign. */
-    @Transactional
+    /**
+     * Sends all pending recipients for a campaign.
+     * Not @Transactional at the outer level — each DB write commits independently
+     * so no single connection is held open across N blocking HTTP calls to Meta.
+     */
     public WhatsAppCampaign sendCampaign(Long campaignId) {
         if (campaignId == null) {
             throw new IllegalArgumentException("campaignId is required");
@@ -131,16 +163,25 @@ public class WhatsAppCampaignService {
         int failed = 0;
 
         for (WhatsAppCampaignRecipient recipient : recipients) {
+            // Persist SENDING before the HTTP call so a mid-loop crash leaves the row
+            // in a recoverable state (startup recovery resets SENDING → PENDING for retry)
+            // rather than as PENDING which would be silently re-sent as a duplicate.
             recipient.setQueuedAt(OffsetDateTime.now());
-            recipient.setStatus("QUEUED");
+            recipient.setStatus("SENDING");
+            recipient.setModifiedBy("system");
+            recipient.setModifiedAt(OffsetDateTime.now());
+            recipientRepository.save(recipient);
 
             List<String> variables = buildTemplateVariables(recipient, template);
+            String imageUrl = getVariableValue(recipient.getVariablesJson(), "imageUrl");
 
+            // HTTP call outside any transaction — each recipient save commits on its own
             WhatsAppCloudClient.SendResult result = whatsAppCloudClient.sendTemplateMessage(
                     recipient.getPhone(),
                     template.getProviderTemplateName(),
                     template.getLanguageCode(),
-                    variables
+                    variables,
+                    isBlank(imageUrl) ? null : imageUrl
             );
 
             if (result.isSuccess()) {
@@ -161,16 +202,25 @@ public class WhatsAppCampaignService {
             recipientRepository.save(recipient);
         }
 
-        campaign.setSentCount(campaign.getSentCount() + sent);
-        campaign.setFailedCount(campaign.getFailedCount() + failed);
-        campaign.setStatus("COMPLETED");
+        campaign.setSentCount((campaign.getSentCount() == null ? 0 : campaign.getSentCount()) + sent);
+        campaign.setFailedCount((campaign.getFailedCount() == null ? 0 : campaign.getFailedCount()) + failed);
+
+        // Reflect true outcome: FAILED if all failed, PARTIAL if some failed, COMPLETED if all sent
+        if (sent == 0) {
+            campaign.setStatus("FAILED");
+        } else if (failed > 0) {
+            campaign.setStatus("PARTIAL");
+        } else {
+            campaign.setStatus("COMPLETED");
+        }
+
         campaign.setCompletedAt(OffsetDateTime.now());
         campaign.setModifiedAt(OffsetDateTime.now());
 
         WhatsAppCampaign saved = campaignRepository.save(campaign);
 
-        log.info("[WHATSAPP][CAMPAIGN][SEND] Completed campaignId={}, sent={}, failed={}",
-                campaignId, sent, failed);
+        log.info("[WHATSAPP][CAMPAIGN][SEND] Finished campaignId={}, sent={}, failed={}, status={}",
+                campaignId, sent, failed, saved.getStatus());
 
         return saved;
     }
@@ -259,6 +309,7 @@ public class WhatsAppCampaignService {
         String trackingNumber = getVariableValue(recipient.getVariablesJson(), "trackingNumber");
         String trackingLink = getVariableValue(recipient.getVariablesJson(), "trackingLink");
         String paymentLink = getVariableValue(recipient.getVariablesJson(), "paymentLink");
+        String offerText = getVariableValue(recipient.getVariablesJson(), "offerText");
 
         if (isBlank(name)) {
             name = isBlank(recipient.getRecipientName()) ? "Customer" : recipient.getRecipientName();
@@ -268,6 +319,13 @@ public class WhatsAppCampaignService {
 
         if ("new_arrivals_campaign".equalsIgnoreCase(templateName)) {
             variables.add(name);
+            variables.add(isBlank(link) ? "https://www.blossom-buds-floral-artistry.com/categories" : link);
+            return variables;
+        }
+
+        if ("festival_offers".equalsIgnoreCase(templateName)) {
+            variables.add(name);
+            variables.add(isBlank(offerText) ? "exclusive discounts" : offerText);
             variables.add(isBlank(link) ? "https://www.blossom-buds-floral-artistry.com/categories" : link);
             return variables;
         }
@@ -302,7 +360,9 @@ public class WhatsAppCampaignService {
                 + ";orderCode=" + safe(request.getOrderCode())
                 + ";trackingNumber=" + safe(request.getTrackingNumber())
                 + ";trackingLink=" + safe(request.getTrackingLink())
-                + ";paymentLink=" + safe(request.getPaymentLink());
+                + ";paymentLink=" + safe(request.getPaymentLink())
+                + ";offerText=" + safe(request.getOfferText())
+                + ";imageUrl=" + safe(request.getImageUrl());
     }
 
     /** Extracts link variable from the simple variables text. */
@@ -364,6 +424,12 @@ public class WhatsAppCampaignService {
 
         /** Payment link variable used by payment reminder templates. */
         private String paymentLink;
+
+        /** Offer or discount text used by festival/promotional templates (e.g. "20% off"). */
+        private String offerText;
+
+        /** Public image URL attached as a header image (for templates with image header). */
+        private String imageUrl;
 
         /** Internal campaign notes. */
         private String notes;

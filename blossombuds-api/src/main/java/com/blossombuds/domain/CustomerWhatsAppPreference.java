@@ -19,7 +19,7 @@ public class CustomerWhatsAppPreference {
     private Long id;
 
     /** Customer who owns this WhatsApp preference. */
-    @Column(name = "customer_id", nullable = false)
+    @Column(name = "customer_id")
     private Long customerId;
 
     /** WhatsApp phone number in international format without spaces. */
@@ -38,9 +38,21 @@ public class CustomerWhatsAppPreference {
     @Column(name = "opted_in_at")
     private OffsetDateTime optedInAt;
 
-    /** Time when the customer opted out. */
+    /** Time when the customer opted out of WhatsApp. */
     @Column(name = "opted_out_at")
     private OffsetDateTime optedOutAt;
+
+    /** Whether the customer has opted in to SMS notifications. */
+    @Column(name = "sms_opted_in", nullable = false)
+    private Boolean smsOptedIn = Boolean.FALSE;
+
+    /** Time when the customer opted in to SMS. */
+    @Column(name = "sms_opted_in_at")
+    private OffsetDateTime smsOptedInAt;
+
+    /** Time when the customer opted out of SMS. */
+    @Column(name = "sms_opted_out_at")
+    private OffsetDateTime smsOptedOutAt;
 
     /** Last consent text shown to the customer. */
     @Column(name = "last_consent_text", columnDefinition = "text")

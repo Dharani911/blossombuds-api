@@ -43,4 +43,8 @@
     <include file="db/changelog/liquibase/changes/0031-add-gst-fields-to-orders.xml"/>
     <include file="db/changelog/liquibase/changes/0032-whatsapp-crm-and-payment-reminders.xml"/>
     <include file="db/changelog/liquibase/changes/0033-seed-whatsapp-settings-and-templates.xml"/>
+    <include file="db/changelog/liquibase/changes/0034-whatsapp-transactional.xml"/>
+    <include file="db/changelog/liquibase/changes/0035-seed-festival-offers-template.xml"/>
+    <include file="db/changelog/liquibase/changes/0036-add-sms-preference-columns.xml"/>
+    <include file="db/changelog/liquibase/changes/0037-normalize-customer-phone-numbers.xml"/>
 </databaseChangeLog>

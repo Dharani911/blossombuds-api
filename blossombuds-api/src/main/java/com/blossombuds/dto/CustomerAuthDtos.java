@@ -9,9 +9,11 @@ public class CustomerAuthDtos {
     @Data
     public static class RegisterRequest {
         @NotBlank private String name;
-        @Email private String email; // optional if phone is provided
-        @NotBlank private String password;
-        private String phone; // optional if email is provided
+        @Email private String email;   // optional if phone is provided
+        private String password;       // optional for phone-only signup
+        private String phone;          // optional if email is provided
+        private Boolean whatsAppOptIn; // consent to receive WhatsApp promotions
+        private Boolean smsOptIn;      // consent to receive SMS promotions
     }
 
     @Data

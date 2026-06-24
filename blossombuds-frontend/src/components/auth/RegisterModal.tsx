@@ -41,6 +41,10 @@ export default function RegisterModal() {
   const [phoneResendBusy, setPhoneResendBusy] = useState(false);
   const [phoneResendMsg, setPhoneResendMsg] = useState<string | null>(null);
 
+  // Communication consent (phone path)
+  const [smsOptIn, setSmsOptIn] = useState(true);
+  const [waOptIn, setWaOptIn] = useState(false);
+
   const sheetRef = useRef<HTMLDivElement>(null);
 
   // Scroll lock (iOS-safe)
@@ -80,7 +84,7 @@ export default function RegisterModal() {
   // Phone path validations
   const rawPhone = phone.replace(/\D/g, "");
   const phoneOk = /^[6-9]\d{9}$/.test(rawPhone);
-  const canPhoneSubmit = nameOk && phoneOk && pwOk && confirmOk;
+  const canPhoneSubmit = nameOk && phoneOk;
 
   // ── Email path ─────────────────────────────────────────────────────────────
 
@@ -150,8 +154,9 @@ export default function RegisterModal() {
     try {
       await customerRegister({
         name,
-        password,
         phone: rawPhone,
+        smsOptIn,
+        whatsAppOptIn: waOptIn,
       });
       setStep("phone-otp-verify");
     } catch (e: any) {
@@ -353,7 +358,7 @@ export default function RegisterModal() {
               <>
                 <div className="hero">
                   <h3>Sign up with Mobile</h3>
-                  <p>We'll send you a verification code via SMS.</p>
+                  <p>We'll send a 6-digit code to verify your number — no password needed.</p>
                 </div>
                 <form className="form slide-in" onSubmit={submitPhoneForm}>
                   <label className="label">
@@ -378,38 +383,24 @@ export default function RegisterModal() {
                     </small>
                   </label>
 
-                  <label className="label">
-                    <span>Password</span>
-                    <div className="field">
-                      <input className="input" type={showPw ? "text" : "password"} placeholder="At least 8 characters"
-                        value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="new-password" />
-                      <button type="button" className="icon-btn eye" onClick={() => setShowPw(s => !s)}>
-                        <EyeIcon open={showPw} />
-                      </button>
-                    </div>
-                    <small className={`hint ${pwOk ? "ok" : ""}`}>{pwOk ? "Strong enough." : "Minimum 8 characters."}</small>
-                  </label>
-
-                  <label className="label">
-                    <span>Confirm password</span>
-                    <div className="field">
-                      <input className="input" type={showPw2 ? "text" : "password"} placeholder="Re-enter password"
-                        value={confirm} onChange={(e) => setConfirm(e.target.value)} required autoComplete="new-password" />
-                      <button type="button" className="icon-btn eye" onClick={() => setShowPw2(s => !s)}>
-                        <EyeIcon open={showPw2} />
-                      </button>
-                    </div>
-                    <small className={`hint ${confirmOk ? "ok" : ""}`}>
-                      {confirm.length === 0 ? "Please confirm password." : confirmOk ? "Passwords match." : "Passwords don't match."}
-                    </small>
-                  </label>
-
-                  {/* WhatsApp/SMS opt-in — hidden until service is live in production */}
+                  <div className="consent-block">
+                    <p className="consent-title">Notification preferences</p>
+                    <label className="consent-row">
+                      <input type="checkbox" className="consent-check" checked={smsOptIn}
+                        onChange={(e) => setSmsOptIn(e.target.checked)} />
+                      <span>Receive order updates via <strong>SMS</strong> (OTP, dispatch, delivery)</span>
+                    </label>
+                    <label className="consent-row">
+                      <input type="checkbox" className="consent-check" checked={waOptIn}
+                        onChange={(e) => setWaOptIn(e.target.checked)} />
+                      <span>Receive offers &amp; updates via <strong>WhatsApp</strong></span>
+                    </label>
+                  </div>
 
                   {err && <div className="error" role="alert">{err}</div>}
 
                   <button className="cta" type="submit" disabled={!canPhoneSubmit || busy}>
-                    {busy ? "Creating account…" : "Continue"}
+                    {busy ? "Creating account…" : "Send OTP"}
                   </button>
                   <button type="button" className="back-btn" onClick={() => setStep("choose")}>← Back</button>
                 </form>

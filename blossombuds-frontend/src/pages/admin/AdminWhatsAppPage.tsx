@@ -11,6 +11,7 @@ type WhatsAppPreference,
   getWhatsAppTemplates,
   sendWhatsAppCampaign,
   getWhatsAppIntegrationStatus,
+  uploadWhatsAppCampaignImage,
   type WhatsAppIntegrationStatus,
   type CreateWhatsAppCampaignRequest,
   type WhatsAppCampaign,
@@ -25,23 +26,25 @@ export default function AdminWhatsAppPage() {
   const [recipients, setRecipients] = useState<WhatsAppCampaignRecipient[]>([]);
   const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null);
 const [integrationStatus, setIntegrationStatus] = useState<WhatsAppIntegrationStatus | null>(null);
-  const [title, setTitle] = useState("Dry Run - New Arrivals Test");
+  const [title, setTitle] = useState("");
   const [templateId, setTemplateId] = useState<number | "">("");
   const [audienceType, setAudienceType] = useState<"MANUAL" | "ALL_OPTED_IN">("MANUAL");
 
-  const [recipientName, setRecipientName] = useState("Dharani");
+  const [recipientName, setRecipientName] = useState("");
   const [recipientPhone, setRecipientPhone] = useState("");
 
   const [link, setLink] = useState("https://www.blossom-buds-floral-artistry.com/categories");
   const [offerText, setOfferText] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [imagePreview, setImagePreview] = useState("");
+  const [imageUploading, setImageUploading] = useState(false);
   const [orderCode, setOrderCode] = useState("");
   const [trackingNumber, setTrackingNumber] = useState("");
   const [trackingLink, setTrackingLink] = useState(
     "https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignment.aspx"
   );
   const [paymentLink, setPaymentLink] = useState("https://www.blossom-buds-floral-artistry.com");
-  const [notes, setNotes] = useState("First WhatsApp dry-run campaign test");
+  const [notes, setNotes] = useState("");
 const [preferences, setPreferences] = useState<WhatsAppPreference[]>([]);
 const [preferencePhone, setPreferencePhone] = useState("");
 const [preferenceCustomerId, setPreferenceCustomerId] = useState("");
@@ -121,6 +124,24 @@ const [preferenceCustomerId, setPreferenceCustomerId] = useState("");
     setSelectedCampaignId(campaignId);
     const data = await getWhatsAppCampaignRecipients(campaignId);
     setRecipients(data);
+  }
+
+  /** Uploads a header image to R2 and stores the presigned URL. */
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImagePreview(URL.createObjectURL(file));
+    setImageUploading(true);
+    try {
+      const url = await uploadWhatsAppCampaignImage(file);
+      setImageUrl(url);
+    } catch {
+      setMessage("Image upload failed. Please try again.");
+      setImagePreview("");
+      setImageUrl("");
+    } finally {
+      setImageUploading(false);
+    }
   }
 
   /** Creates a WhatsApp campaign in draft mode. */
@@ -403,36 +424,46 @@ async function handleDisablePreference(id: number) {
               <div className="whatsapp-section-box">
                 {(providerTemplateName === "new_arrivals_campaign" ||
                   providerTemplateName === "festival_offers") && (
-                  <Field label="Marketing link">
-                    <input
-                      className="whatsapp-input"
-                      value={link}
-                      onChange={(e) => setLink(e.target.value)}
-                    />
-                  </Field>
-                )}
-
-                {providerTemplateName === "festival_offers" && (
                   <>
-                    <Field label="Offer / discount text">
+                    <Field label="Marketing link">
                       <input
                         className="whatsapp-input"
-                        placeholder="e.g. 20% off, Flat ₹200 off"
-                        value={offerText}
-                        onChange={(e) => setOfferText(e.target.value)}
+                        value={link}
+                        onChange={(e) => setLink(e.target.value)}
                       />
                     </Field>
-                    <Field label="Header image URL">
+                    <Field label="Header image (required if template has an image header)">
                       <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
                         className="whatsapp-input"
-                        placeholder="https://your-cdn.com/banner.jpg"
-                        value={imageUrl}
-                        onChange={(e) => setImageUrl(e.target.value)}
+                        onChange={handleImageUpload}
+                        disabled={imageUploading}
                       />
+                      {imageUploading && (
+                        <p className="whatsapp-card-subtitle">Uploading image...</p>
+                      )}
+                      {imagePreview && !imageUploading && (
+                        <img
+                          src={imagePreview}
+                          alt="Campaign header preview"
+                          className="whatsapp-image-preview"
+                        />
+                      )}
                     </Field>
                   </>
                 )}
 
+                {providerTemplateName === "festival_offers" && (
+                  <Field label="Offer / discount text">
+                    <input
+                      className="whatsapp-input"
+                      placeholder="e.g. 20% off, Flat ₹200 off"
+                      value={offerText}
+                      onChange={(e) => setOfferText(e.target.value)}
+                    />
+                  </Field>
+                )}
 
                 {!providerTemplateName && (
                   <p className="whatsapp-card-subtitle">Select a template to see variables.</p>
@@ -570,8 +601,8 @@ async function handleDisablePreference(id: number) {
                               </button>
                               <button
                                 className="whatsapp-btn whatsapp-btn-primary"
-                                disabled={loading || campaign.status === "COMPLETED" || campaign.status === "FAILED" || campaign.status === "SENT"}
-                                title={campaign.status === "FAILED" ? "Campaign failed — create a new one to retry" : undefined}
+                                disabled={loading || ["COMPLETED", "FAILED", "PARTIAL", "SENDING"].includes(campaign.status)}
+                                title={["FAILED", "PARTIAL"].includes(campaign.status) ? "Campaign ended — create a new one to retry failed recipients" : undefined}
                                 onClick={() => handleSendCampaign(campaign.id)}
                               >
                                 Send
@@ -700,6 +731,8 @@ function StatusBadge({ status }: { status: string }) {
     className = "whatsapp-status whatsapp-status-success";
   } else if (normalized === "FAILED") {
     className = "whatsapp-status whatsapp-status-error";
+  } else if (normalized === "PARTIAL") {
+    className = "whatsapp-status whatsapp-status-warning";
   } else if (["SENDING", "QUEUED", "DRAFT"].includes(normalized)) {
     className = "whatsapp-status whatsapp-status-progress";
   }

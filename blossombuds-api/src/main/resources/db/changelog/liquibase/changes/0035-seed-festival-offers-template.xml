@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+          http://www.liquibase.org/xml/ns/dbchangelog
+          https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- Seed WhatsApp template: Festival Offers (MARKETING — manually sent via admin portal) -->
+    <changeSet id="0035-01-seed-template-festival-offers" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM whatsapp_templates
+                WHERE provider_template_name = 'festival_offers'
+                AND language_code = 'en'
+            </sqlCheck>
+        </preConditions>
+        <insert tableName="whatsapp_templates">
+            <column name="name" value="Festival Offers"/>
+            <column name="provider_template_name" value="festival_offers"/>
+            <column name="category" value="MARKETING"/>
+            <column name="language_code" value="en"/>
+            <column name="body_preview" value="Hi {{1}}, celebrate the festive season with Blossom Buds! Enjoy {{2}} on our floral collections this season. Shop now: {{3}}"/>
+            <column name="variable_count" valueNumeric="3"/>
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+            <column name="created_at" valueDate="NOW()"/>
+            <column name="modified_by" value="liquibase"/>
+            <column name="modified_at" valueDate="NOW()"/>
+        </insert>
+        <rollback>
+            <delete tableName="whatsapp_templates">
+                <where>provider_template_name = 'festival_offers' AND language_code = 'en'</where>
+            </delete>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

@@ -89,6 +89,42 @@ public class CustomerAuthController {
         auth.completePasswordReset(req.getEmail(), req.getCode(), req.getNewPassword());
     }
 
+    /**
+     * Verify phone number using the OTP sent via SMS during registration.
+     * Returns a JWT token for auto-login on success.
+     */
+    @PostMapping("/verify-phone-otp")
+    public CustomerTokenResponse verifyPhoneAndLogin(@Valid @RequestBody VerifyPhoneOtpRequest req) {
+        return new CustomerTokenResponse(auth.verifyPhoneOtpAndLogin(req.getPhone(), req.getCode()));
+    }
+
+    /**
+     * Resend phone verification OTP via SMS.
+     * Frontend: "Resend code" on phone-verify screen.
+     */
+    @PostMapping("/resend-phone-otp")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void resendPhoneOtp(@Valid @RequestBody ResendPhoneOtpRequest req) {
+        auth.resendPhoneOtp(req.getPhone());
+    }
+
+    /**
+     * Sends a login OTP via SMS to an existing phone-registered account.
+     */
+    @PostMapping("/phone-login/request")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void requestPhoneLoginOtp(@Valid @RequestBody ResendPhoneOtpRequest req) {
+        auth.requestPhoneLoginOtp(req.getPhone());
+    }
+
+    /**
+     * Verifies phone login OTP and returns a JWT.
+     */
+    @PostMapping("/phone-login/verify")
+    public CustomerTokenResponse verifyPhoneLogin(@Valid @RequestBody VerifyPhoneOtpRequest req) {
+        return new CustomerTokenResponse(auth.verifyPhoneLoginOtp(req.getPhone(), req.getCode()));
+    }
+
     @PostMapping("/google-login")
     public CustomerTokenResponse googleLogin(@Valid @RequestBody GoogleLoginRequest req) {
         String jwtToken = auth.loginWithGoogle(req.getIdToken());
@@ -141,5 +177,21 @@ public class CustomerAuthController {
         @NotBlank
         @Size(min = 8, message = "Password must be at least 8 characters")
         private String newPassword;
+    }
+
+    @Data
+    public static class VerifyPhoneOtpRequest {
+        @NotBlank
+        private String phone;
+
+        @NotBlank
+        @Size(min = 4, max = 10)
+        private String code;
+    }
+
+    @Data
+    public static class ResendPhoneOtpRequest {
+        @NotBlank
+        private String phone;
     }
 }

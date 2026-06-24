@@ -412,9 +412,23 @@
   color: #be123c;
 }
 
+.whatsapp-status-warning {
+  background: #fef9c3;
+  color: #a16207;
+}
+
 .whatsapp-status-progress {
   background: #dbeafe;
   color: #1d4ed8;
+}
+
+.whatsapp-image-preview {
+  margin-top: 8px;
+  max-width: 100%;
+  max-height: 160px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
 }
 
 .whatsapp-status-default {

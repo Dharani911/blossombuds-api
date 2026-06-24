@@ -10,8 +10,8 @@ export async function customerLogin(payload: { identifier: string; password: str
 /** POST /api/customers/auth/register */
 export async function customerRegister(payload: {
   name: string;
-  email: string;
-  password: string;
+  email?: string;
+  password?: string;
   phone?: string;
   whatsAppOptIn?: boolean;
   smsOptIn?: boolean;

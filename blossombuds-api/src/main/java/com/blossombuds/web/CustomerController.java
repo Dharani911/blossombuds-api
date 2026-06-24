@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+import lombok.Data;
+
 /** HTTP endpoints for customers and their addresses (active-only by default). */
 @RestController
 @RequiredArgsConstructor
@@ -103,6 +105,36 @@ public class CustomerController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteAddress(@PathVariable @Min(1) Long addressId, Authentication auth) {
         customers.deleteAddress(addressId, actor(auth));
+    }
+
+    // ── Communication Preferences ─────────────────────────────────────────────
+
+    /** Returns the customer's WhatsApp/SMS communication preference. */
+    @GetMapping("/{customerId}/communication-preference")
+    @PreAuthorize("hasAnyRole('CUSTOMER','ADMIN')")
+    public CustomerService.CommunicationPreferenceView getCommunicationPreference(
+            @PathVariable Long customerId, Authentication auth) {
+        ensureOwnershipOrAdmin(auth, customerId);
+        return customers.getCommunicationPreference(customerId);
+    }
+
+    /** Creates or updates the customer's WhatsApp/SMS communication preference. */
+    @PutMapping("/{customerId}/communication-preference")
+    @PreAuthorize("hasAnyRole('CUSTOMER','ADMIN')")
+    public CustomerService.CommunicationPreferenceView saveCommunicationPreference(
+            @PathVariable Long customerId,
+            @RequestBody SavePreferenceRequest req,
+            Authentication auth) {
+        ensureOwnershipOrAdmin(auth, customerId);
+        return customers.saveCommunicationPreference(
+                customerId, req.getPhone(), req.isWhatsappOptedIn(), req.isSmsOptedIn());
+    }
+
+    @Data
+    public static class SavePreferenceRequest {
+        private String phone;
+        private boolean whatsappOptedIn;
+        private boolean smsOptedIn;
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

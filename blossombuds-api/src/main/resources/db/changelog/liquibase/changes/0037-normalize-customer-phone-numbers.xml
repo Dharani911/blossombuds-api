@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+          http://www.liquibase.org/xml/ns/dbchangelog
+          https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+        Back-fill: old registrations stored raw phone strings (e.g. "9876543210", "919876543210").
+        New code normalises to E.164 on every write and lookup (+91XXXXXXXXXX for Indian numbers),
+        so existing customers couldn't use phone-login or receive OTPs without this migration.
+
+        Change set 01 targets the customers table, which has a unique index on phone.
+        It only updates rows whose normalised form doesn't already exist in another row,
+        avoiding unique-constraint violations from genuinely duplicate accounts.
+
+        Change set 02 targets customer_whatsapp_preferences.phone (no unique constraint, safe to bulk-update).
+    -->
+
+    <changeSet id="0037-01-normalize-customer-phones" author="dharani">
+        <sql>
+-- Inline normalisation: digits-only 10-char → +91..., 12-char starting 91 → +91..., etc.
+-- Skip rows already in E.164 (start with +) and rows whose normalised form would collide.
+UPDATE customers c
+SET phone = normalized.e164
+FROM (
+    SELECT
+        id,
+        CASE
+            WHEN regexp_replace(phone, '[^0-9]', '', 'g') ~ '^[6-9][0-9]{9}$'
+                THEN '+91' || regexp_replace(phone, '[^0-9]', '', 'g')
+            WHEN regexp_replace(phone, '[^0-9]', '', 'g') ~ '^91[6-9][0-9]{9}$'
+                THEN '+'  || regexp_replace(phone, '[^0-9]', '', 'g')
+            WHEN regexp_replace(phone, '[^0-9]', '', 'g') ~ '^0091[6-9][0-9]{9}$'
+                THEN '+91' || substr(regexp_replace(phone, '[^0-9]', '', 'g'), 5)
+            ELSE phone
+        END AS e164
+    FROM customers
+    WHERE phone IS NOT NULL
+      AND phone != ''
+      AND phone NOT LIKE '+%'
+) AS normalized
+WHERE c.id = normalized.id
+  -- Skip if the target E.164 value already exists in a different row (would violate unique index)
+  AND NOT EXISTS (
+      SELECT 1 FROM customers other
+      WHERE other.phone = normalized.e164
+        AND other.id != c.id
+  );
+        </sql>
+        <rollback>
+            <sql>
+-- Best-effort rollback: strip +91 prefix from 13-char E.164 numbers only.
+-- Cannot recover numbers that were already in non-standard format before the migration.
+UPDATE customers
+SET phone = substr(phone, 4)
+WHERE phone ~ '^\+91[6-9][0-9]{9}$';
+            </sql>
+        </rollback>
+    </changeSet>
+
+    <!-- Strip spaces from numbers already prefixed with + (e.g. "+91 6385590664" → "+916385590664").
+         These are excluded by the NOT LIKE '+%' guard in 0037-01 but would still fail
+         lookup because normalizePhone() strips whitespace before comparing. -->
+    <changeSet id="0037-03-strip-spaces-in-e164-customers" author="dharani">
+        <sql>
+UPDATE customers
+SET phone = regexp_replace(phone, '\s+', '', 'g')
+WHERE phone LIKE '+%'
+  AND phone ~ '\s';
+        </sql>
+        <rollback><!-- whitespace removal is non-reversible --></rollback>
+    </changeSet>
+
+    <changeSet id="0037-02-normalize-preference-phones" author="dharani">
+        <sql>
+UPDATE customer_whatsapp_preferences
+SET phone = CASE
+    WHEN regexp_replace(phone, '[^0-9]', '', 'g') ~ '^[6-9][0-9]{9}$'
+        THEN '+91' || regexp_replace(phone, '[^0-9]', '', 'g')
+    WHEN regexp_replace(phone, '[^0-9]', '', 'g') ~ '^91[6-9][0-9]{9}$'
+        THEN '+'  || regexp_replace(phone, '[^0-9]', '', 'g')
+    WHEN regexp_replace(phone, '[^0-9]', '', 'g') ~ '^0091[6-9][0-9]{9}$'
+        THEN '+91' || substr(regexp_replace(phone, '[^0-9]', '', 'g'), 5)
+    ELSE phone
+END
+WHERE phone IS NOT NULL
+  AND phone != ''
+  AND phone NOT LIKE '+%';
+        </sql>
+        <rollback>
+            <sql>
+UPDATE customer_whatsapp_preferences
+SET phone = substr(phone, 4)
+WHERE phone ~ '^\+91[6-9][0-9]{9}$';
+            </sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

@@ -22,12 +22,23 @@ public class WhatsAppCloudClient {
 
     private final RestTemplate restTemplate = new RestTemplate();
 
-    /** Sends a WhatsApp template message using Meta Cloud API or dry-run mode. */
+    /** Sends a WhatsApp template message without a header image. */
     public SendResult sendTemplateMessage(
             String phone,
             String templateName,
             String languageCode,
             List<String> variables
+    ) {
+        return sendTemplateMessage(phone, templateName, languageCode, variables, null);
+    }
+
+    /** Sends a WhatsApp template message, optionally with a header image URL. */
+    public SendResult sendTemplateMessage(
+            String phone,
+            String templateName,
+            String languageCode,
+            List<String> variables,
+            String headerImageUrl
     ) {
         if (isBlank(phone)) {
             return SendResult.failed("Phone number is required");
@@ -45,8 +56,8 @@ public class WhatsAppCloudClient {
         if (!enabled) {
             String dryRunId = "DRY_RUN_" + OffsetDateTime.now()
                     .format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
-            log.info("[WHATSAPP][DRY_RUN] Template '{}' prepared for phone={}, variablesCount={}, dryRunId={}",
-                    templateName, maskPhone(normalizedPhone), variables == null ? 0 : variables.size(), dryRunId);
+            log.info("[WHATSAPP][DRY_RUN] Template '{}' prepared for phone={}, variablesCount={}, hasImage={}, dryRunId={}",
+                    templateName, maskPhone(normalizedPhone), variables == null ? 0 : variables.size(), !isBlank(headerImageUrl), dryRunId);
             return SendResult.success(dryRunId, true);
         }
 
@@ -66,7 +77,7 @@ public class WhatsAppCloudClient {
 
         String url = "https://graph.facebook.com/" + apiVersion + "/" + phoneNumberId + "/messages";
 
-        Map<String, Object> body = buildTemplatePayload(normalizedPhone, templateName, lang, variables);
+        Map<String, Object> body = buildTemplatePayload(normalizedPhone, templateName, lang, variables, headerImageUrl);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -104,12 +115,61 @@ public class WhatsAppCloudClient {
         }
     }
 
-    /** Builds Meta Cloud API template message payload. */
+    /** Sends a free-form text message (only valid within 24h of customer-initiated conversation). */
+    public SendResult sendTextMessage(String phone, String text) {
+        if (isBlank(phone)) return SendResult.failed("Phone number is required");
+        if (isBlank(text))  return SendResult.failed("Message text is required");
+
+        String normalizedPhone = normalizePhone(phone);
+        boolean enabled = boolSetting("whatsapp.cloud.enabled", false);
+
+        if (!enabled) {
+            log.info("[WHATSAPP][DRY_RUN] Text to phone={}: {}", maskPhone(normalizedPhone), text);
+            return SendResult.success("DRY_RUN_TEXT_" + System.currentTimeMillis(), true);
+        }
+
+        String apiVersion   = setting("whatsapp.cloud.api_version", "v25.0");
+        String phoneNumberId = setting("whatsapp.cloud.phone_number_id", "");
+        String accessToken  = setting("whatsapp.cloud.access_token", "");
+
+        if (isBlank(phoneNumberId)) return SendResult.failed("WhatsApp phone number id is not configured");
+        if (isBlank(accessToken))   return SendResult.failed("WhatsApp access token is not configured");
+
+        String url = "https://graph.facebook.com/" + apiVersion + "/" + phoneNumberId + "/messages";
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("messaging_product", "whatsapp");
+        body.put("to", normalizedPhone);
+        body.put("type", "text");
+        Map<String, Object> textObj = new LinkedHashMap<>();
+        textObj.put("body", text);
+        body.put("text", textObj);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(accessToken);
+
+        try {
+            log.info("[WHATSAPP][SEND] Sending text message to phone={}", maskPhone(normalizedPhone));
+            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                    url, HttpMethod.POST, new HttpEntity<>(body, headers),
+                    new org.springframework.core.ParameterizedTypeReference<>() {});
+            String providerMessageId = extractMessageId(response.getBody());
+            log.info("[WHATSAPP][SEND] Text message sent. providerMessageId={}", providerMessageId);
+            return SendResult.success(isBlank(providerMessageId) ? "UNKNOWN" : providerMessageId, false);
+        } catch (Exception e) {
+            log.error("[WHATSAPP][SEND] Failed to send text to phone={}: {}", maskPhone(normalizedPhone), e.getMessage(), e);
+            return SendResult.failed(e.getMessage());
+        }
+    }
+
+    /** Builds Meta Cloud API template message payload, with optional image header. */
     private Map<String, Object> buildTemplatePayload(
             String phone,
             String templateName,
             String languageCode,
-            List<String> variables
+            List<String> variables,
+            String headerImageUrl
     ) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("messaging_product", "whatsapp");
@@ -124,6 +184,21 @@ public class WhatsAppCloudClient {
         template.put("language", language);
 
         List<Map<String, Object>> components = new ArrayList<>();
+
+        if (!isBlank(headerImageUrl)) {
+            Map<String, Object> headerComponent = new LinkedHashMap<>();
+            headerComponent.put("type", "header");
+
+            Map<String, Object> imageParam = new LinkedHashMap<>();
+            imageParam.put("type", "image");
+
+            Map<String, Object> imageObj = new LinkedHashMap<>();
+            imageObj.put("link", headerImageUrl);
+            imageParam.put("image", imageObj);
+
+            headerComponent.put("parameters", List.of(imageParam));
+            components.add(headerComponent);
+        }
 
         if (variables != null && !variables.isEmpty()) {
             Map<String, Object> bodyComponent = new LinkedHashMap<>();

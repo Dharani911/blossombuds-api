@@ -11,6 +11,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import java.math.RoundingMode;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -33,6 +35,8 @@ public class OrderService {
     private final PaymentRepository paymentRepo;
     private final OrderEventRepository eventRepo;
     private final EmailService emailService;
+    private final SmsService smsService;
+    private final WhatsAppTransactionalService whatsAppService;
     private final CustomerRepository customerRepository;
     private final DeliveryFeeRulesService deliveryFeeService;
     private final DistrictRepository districtRepository;
@@ -44,6 +48,9 @@ public class OrderService {
     private final CouponRedemptionRepository couponRedemptionRepository;
     private final CatalogService catalogService;
     private final SettingsService settingsService;
+
+    @org.springframework.beans.factory.annotation.Value("${app.frontend.baseUrl:}")
+    private String frontendBase;
 
     private static final BigDecimal GST_THRESHOLD_AMOUNT =
             BigDecimal.valueOf(10000).setScale(2, RoundingMode.HALF_UP);
@@ -268,22 +275,24 @@ public class OrderService {
         o.setPaidAt(OffsetDateTime.now());
         orderRepo.save(o);
 
-        // send confirmation mail here (since order is now real & paid)
+        // send confirmation via email, WhatsApp, and SMS
         var cust = customerRepository.findById(o.getCustomerId()).orElse(null);
         if (cust != null) {
-            emailService.sendOrderConfirmation(
-                    cust.getEmail(),
-                    cust.getName(),
-                    o.getPublicCode(),
-                    o.getCurrency(),
-                    o.getItemsSubtotal(),
-                    o.getDiscountTotal(),
-                    o.getTaxableAmount(),
-                    o.getGstRate(),
-                    o.getGstAmount(),
-                    o.getShippingFee(),
-                    o.getGrandTotal()
-            );
+            if (!isBlank(cust.getEmail())) {
+                emailService.sendOrderConfirmation(
+                        cust.getEmail(), cust.getName(), o.getPublicCode(),
+                        o.getCurrency(), o.getItemsSubtotal(), o.getDiscountTotal(),
+                        o.getTaxableAmount(), o.getGstRate(), o.getGstAmount(),
+                        o.getShippingFee(), o.getGrandTotal()
+                );
+            }
+            if (!isBlank(cust.getPhone())) {
+                final String phone = cust.getPhone(), name = cust.getName(),
+                        publicCode = o.getPublicCode(), currency = o.getCurrency();
+                final BigDecimal grandTotal = o.getGrandTotal();
+                runAfterCommit(() -> smsService.sendOrderConfirmation(phone, name, publicCode, grandTotal, currency));
+                runAfterCommit(() -> whatsAppService.sendOrderConfirmation(phone, name, publicCode));
+            }
         }
         log.info("[ORDER][PAID] Paid order created and confirmation sent: orderId={}, customerId={}", o.getId(), o.getCustomerId());
         return o;
@@ -322,20 +331,22 @@ public class OrderService {
             log.info("[ORDER][ITEM_ADDED] Added item to order {}: productId={}, quantity={}", order.getId(), it.getProductId(), it.getQuantity());}
         }
 
-        log.info("[EMAIL][ORDER_CONFIRM] Sending order confirmation to customer {}", cust.getId());
-        emailService.sendOrderConfirmation(
-                cust.getEmail(),
-                cust.getName(),
-                order.getPublicCode(),
-                order.getCurrency(),
-                order.getItemsSubtotal(),
-                order.getDiscountTotal(),
-                order.getTaxableAmount(),
-                order.getGstRate(),
-                order.getGstAmount(),
-                order.getShippingFee(),
-                order.getGrandTotal()
-        );
+        log.info("[ORDER][CONFIRM] Sending order confirmation to customerId={}", cust.getId());
+        if (!isBlank(cust.getEmail())) {
+            emailService.sendOrderConfirmation(
+                    cust.getEmail(), cust.getName(), order.getPublicCode(),
+                    order.getCurrency(), order.getItemsSubtotal(), order.getDiscountTotal(),
+                    order.getTaxableAmount(), order.getGstRate(), order.getGstAmount(),
+                    order.getShippingFee(), order.getGrandTotal()
+            );
+        }
+        if (!isBlank(cust.getPhone())) {
+            final String phone = cust.getPhone(), name = cust.getName(),
+                    publicCode = order.getPublicCode(), currency = order.getCurrency();
+            final BigDecimal grandTotal = order.getGrandTotal();
+            runAfterCommit(() -> smsService.sendOrderConfirmation(phone, name, publicCode, grandTotal, currency));
+            runAfterCommit(() -> whatsAppService.sendOrderConfirmation(phone, name, publicCode));
+        }
         return order;
     }
     /** Returns true when an existing order already has GST/tax fields. */
@@ -557,13 +568,28 @@ public class OrderService {
         }
 
         Customer cust = customerRepository.findById(order.getCustomerId()).orElse(null);
-        if (cust != null && cust.getEmail() != null && !cust.getEmail().isBlank()) {
-            // PASS BARE YYNNNN to email templates (they add the 'BB' themselves)
+        if (cust != null) {
             String bareCode = order.getPublicCode();
-            log.info("[EMAIL][STATUS_UPDATE] Sending status update to customer {} for order {}", cust.getId(), bareCode);
-            emailService.sendOrderStatusChanged(
-                    cust.getEmail(), cust.getName(), bareCode, updateStatusRequest.getStatus().name(), eventNote, order.getTrackingUrl()
-            );
+            String statusName = updateStatusRequest.getStatus().name();
+            log.info("[ORDER][STATUS_UPDATE] Sending status update to customerId={} for order {}", cust.getId(), bareCode);
+            if (!isBlank(cust.getEmail())) {
+                emailService.sendOrderStatusChanged(
+                        cust.getEmail(), cust.getName(), bareCode, statusName, eventNote, order.getTrackingUrl()
+                );
+            }
+            if (!isBlank(cust.getPhone())) {
+                final String phone = cust.getPhone(), name = cust.getName();
+                if (updateStatusRequest.getStatus() == OrderStatus.DISPATCHED
+                        && !isBlank(order.getTrackingUrl())) {
+                    final String trackingUrl = order.getTrackingUrl();
+                    runAfterCommit(() -> smsService.sendOrderDispatched(phone, name, bareCode, trackingUrl));
+                    runAfterCommit(() -> whatsAppService.sendOrderDispatched(phone, name, bareCode, trackingUrl));
+                } else if (updateStatusRequest.getStatus() == OrderStatus.DELIVERED) {
+                    final String reviewUrl = buildReviewUrl(bareCode);
+                    runAfterCommit(() -> smsService.sendOrderDelivered(phone, name, bareCode));
+                    runAfterCommit(() -> whatsAppService.sendOrderDelivered(phone, name, bareCode, reviewUrl));
+                }
+            }
         }
         return order;
     }
@@ -1287,5 +1313,27 @@ public class OrderService {
         private String type;
         private String message;
         private LocalDateTime createdAt;
+    }
+
+    private String buildReviewUrl(String publicCode) {
+        String base = (frontendBase == null) ? "" : frontendBase.trim();
+        String rel = "/profile?code=" + java.net.URLEncoder.encode(
+                publicCode == null ? "" : publicCode, java.nio.charset.StandardCharsets.UTF_8);
+        if (base.isEmpty()) return rel;
+        if (!base.startsWith("http")) base = "https://" + base;
+        if (base.endsWith("/")) base = base.substring(0, base.length() - 1);
+        return base + rel;
+    }
+
+    private static boolean isBlank(String s) { return s == null || s.isBlank(); }
+
+    private void runAfterCommit(Runnable action) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCommit() { action.run(); }
+            });
+        } else {
+            action.run();
+        }
     }
 }

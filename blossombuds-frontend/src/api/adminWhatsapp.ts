@@ -56,6 +56,8 @@ export type CreateWhatsAppCampaignRequest = {
   templateId: number;
   audienceType: "MANUAL" | "ALL_OPTED_IN";
   link?: string;
+  offerText?: string;
+  imageUrl?: string;
   orderCode?: string;
   trackingNumber?: string;
   trackingLink?: string;
@@ -181,4 +183,14 @@ export async function createManualWhatsAppPreference(
 /** Disables a WhatsApp opt-in preference. */
 export async function disableWhatsAppPreference(id: number): Promise<void> {
   await adminHttp.delete(`/api/admin/whatsapp/preferences/${id}`);
+}
+
+/** Uploads a campaign header image and returns the presigned URL for Meta to fetch. */
+export async function uploadWhatsAppCampaignImage(file: File): Promise<string> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await adminHttp.post<{ url: string }>("/api/admin/whatsapp/upload-image", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data.url;
 }

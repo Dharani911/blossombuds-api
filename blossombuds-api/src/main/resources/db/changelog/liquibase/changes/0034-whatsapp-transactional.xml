@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+          http://www.liquibase.org/xml/ns/dbchangelog
+          https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- Seed WhatsApp template: Order Confirmation (UTILITY — sent automatically on order creation) -->
+    <changeSet id="0034-01-seed-template-order-confirmation" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM whatsapp_templates
+                WHERE provider_template_name = 'order_confirmation'
+                AND language_code = 'en'
+            </sqlCheck>
+        </preConditions>
+        <insert tableName="whatsapp_templates">
+            <column name="name" value="Order Confirmation"/>
+            <column name="provider_template_name" value="order_confirmation"/>
+            <column name="category" value="UTILITY"/>
+            <column name="language_code" value="en"/>
+            <column name="body_preview" value="Hi {{1}}, your Blossom Buds order {{2}} is confirmed! We'll notify you once it's dispatched."/>
+            <column name="variable_count" valueNumeric="2"/>
+            <column name="active" valueBoolean="true"/>
+            <column name="created_by" value="liquibase"/>
+            <column name="created_at" valueDate="NOW()"/>
+            <column name="modified_by" value="liquibase"/>
+            <column name="modified_at" valueDate="NOW()"/>
+        </insert>
+        <rollback>
+            <delete tableName="whatsapp_templates">
+                <where>provider_template_name = 'order_confirmation' AND language_code = 'en'</where>
+            </delete>
+        </rollback>
+    </changeSet>
+
+    <!-- Make customer_whatsapp_preferences.customer_id nullable so admin can add test contacts
+         without linking them to an existing customer account. The FK constraint remains in place
+         and still enforces referential integrity for non-null values. -->
+    <changeSet id="0034-02-make-whatsapp-pref-customer-id-nullable" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <columnExists tableName="customer_whatsapp_preferences" columnName="customer_id"/>
+        </preConditions>
+        <dropNotNullConstraint
+                tableName="customer_whatsapp_preferences"
+                columnName="customer_id"
+                columnDataType="bigint"/>
+        <rollback>
+            <addNotNullConstraint
+                    tableName="customer_whatsapp_preferences"
+                    columnName="customer_id"
+                    columnDataType="bigint"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

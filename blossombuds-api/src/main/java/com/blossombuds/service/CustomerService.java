@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
 
+import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -27,6 +28,7 @@ public class CustomerService {
     private final DistrictRepository districtRepository;
     private final StateRepository stateRepository;
     private final CountryRepository countryRepository;
+    private final CustomerWhatsAppPreferenceRepository preferenceRepo;
 
     // ─────────────────────────────────────────────────────────────
     // Customers
@@ -360,5 +362,77 @@ public class CustomerService {
         } catch (Exception e) {
             throw new IllegalArgumentException("Invalid customer principal");
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Communication Preferences (WhatsApp + SMS)
+    // ─────────────────────────────────────────────────────────────
+
+    public record CommunicationPreferenceView(
+            Long id,
+            String phone,
+            boolean whatsappOptedIn,
+            boolean smsOptedIn,
+            String source,
+            OffsetDateTime whatsappOptedInAt,
+            OffsetDateTime whatsappOptedOutAt,
+            OffsetDateTime smsOptedInAt,
+            OffsetDateTime smsOptedOutAt
+    ) {}
+
+    /** Returns the communication preference for a customer, or an empty/opted-out default. */
+    @Transactional(readOnly = true)
+    public CommunicationPreferenceView getCommunicationPreference(Long customerId) {
+        return preferenceRepo.findByCustomerId(customerId)
+                .map(p -> new CommunicationPreferenceView(
+                        p.getId(), p.getPhone(),
+                        Boolean.TRUE.equals(p.getOptedIn()),
+                        Boolean.TRUE.equals(p.getSmsOptedIn()),
+                        p.getSource(),
+                        p.getOptedInAt(), p.getOptedOutAt(),
+                        p.getSmsOptedInAt(), p.getSmsOptedOutAt()
+                ))
+                .orElseGet(() -> new CommunicationPreferenceView(null, null, false, false, null, null, null, null, null));
+    }
+
+    /** Upserts the communication preference for a customer. */
+    @Transactional
+    public CommunicationPreferenceView saveCommunicationPreference(
+            Long customerId, String phone, boolean whatsappOptedIn, boolean smsOptedIn) {
+
+        CustomerWhatsAppPreference pref = preferenceRepo.findByCustomerId(customerId)
+                .orElseGet(() -> {
+                    CustomerWhatsAppPreference p = new CustomerWhatsAppPreference();
+                    p.setCustomerId(customerId);
+                    p.setCreatedBy("customer");
+                    p.setCreatedAt(OffsetDateTime.now());
+                    return p;
+                });
+
+        boolean wasWa = Boolean.TRUE.equals(pref.getOptedIn());
+        if (whatsappOptedIn && !wasWa) pref.setOptedInAt(OffsetDateTime.now());
+        else if (!whatsappOptedIn && wasWa) pref.setOptedOutAt(OffsetDateTime.now());
+        pref.setOptedIn(whatsappOptedIn);
+
+        boolean wasSms = Boolean.TRUE.equals(pref.getSmsOptedIn());
+        if (smsOptedIn && !wasSms) pref.setSmsOptedInAt(OffsetDateTime.now());
+        else if (!smsOptedIn && wasSms) pref.setSmsOptedOutAt(OffsetDateTime.now());
+        pref.setSmsOptedIn(smsOptedIn);
+
+        if (phone != null && !phone.isBlank()) pref.setPhone(phone);
+        pref.setSource("PROFILE");
+        pref.setActive(true);
+        pref.setModifiedBy("customer");
+        pref.setModifiedAt(OffsetDateTime.now());
+
+        CustomerWhatsAppPreference saved = preferenceRepo.save(pref);
+        return new CommunicationPreferenceView(
+                saved.getId(), saved.getPhone(),
+                Boolean.TRUE.equals(saved.getOptedIn()),
+                Boolean.TRUE.equals(saved.getSmsOptedIn()),
+                saved.getSource(),
+                saved.getOptedInAt(), saved.getOptedOutAt(),
+                saved.getSmsOptedInAt(), saved.getSmsOptedOutAt()
+        );
     }
 }
