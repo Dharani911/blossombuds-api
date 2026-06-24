@@ -206,7 +206,15 @@ public class WhatsAppWebhookService {
         if (phone == null || phone.isBlank()) return;
         OffsetDateTime now = OffsetDateTime.now();
 
-        preferenceRepository.findByPhoneAndActiveTrue(phone).ifPresent(pref -> {
+        // Meta webhook sends phone without '+' (e.g. "919876543210").
+        // Preferences may be stored in various formats; contacts are stored as E.164 with '+'.
+        // Try both forms so we hit whichever format is in the DB.
+        String withPlus    = phone.startsWith("+") ? phone : "+" + phone;
+        String withoutPlus = phone.startsWith("+") ? phone.substring(1) : phone;
+
+        preferenceRepository.findByPhoneAndActiveTrue(withPlus)
+                .or(() -> preferenceRepository.findByPhoneAndActiveTrue(withoutPlus))
+                .ifPresent(pref -> {
             pref.setOptedIn(false);
             pref.setOptedOutAt(now);
             pref.setActive(false);
@@ -216,7 +224,9 @@ public class WhatsAppWebhookService {
             log.info("[WHATSAPP][STOP] Deactivated preference for phone={}", maskPhone(phone));
         });
 
-        whatsAppContactRepository.findByPhone(phone).ifPresent(contact -> {
+        whatsAppContactRepository.findByPhone(withPlus)
+                .or(() -> whatsAppContactRepository.findByPhone(withoutPlus))
+                .ifPresent(contact -> {
             contact.setOptedIn(false);
             contact.setOptedOutAt(now);
             contact.setActive(false);

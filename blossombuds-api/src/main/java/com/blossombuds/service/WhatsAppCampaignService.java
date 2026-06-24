@@ -289,10 +289,10 @@ public class WhatsAppCampaignService {
         }
 
         if ("EXPO_CONTACTS".equalsIgnoreCase(audienceType)) {
-            // Collect all registered customer phones (digits only) to skip duplicates
-            Set<String> registeredPhones = customerRepository.findAllRegisteredPhones()
+            // Compare by last 10 digits so "+919876543210" matches "9876543210" in customer DB
+            Set<String> registeredLast10 = customerRepository.findAllRegisteredPhones()
                     .stream()
-                    .map(p -> p.replaceAll("[^0-9]", ""))
+                    .map(this::last10)
                     .collect(Collectors.toSet());
 
             List<WhatsAppContact> contacts = whatsAppContactRepository.findByOptedInTrueAndActiveTrue();
@@ -300,7 +300,7 @@ public class WhatsAppCampaignService {
 
             for (WhatsAppContact contact : contacts) {
                 String normalized = normalizePhone(contact.getPhone());
-                if (registeredPhones.contains(normalized)) {
+                if (registeredLast10.contains(last10(contact.getPhone()))) {
                     skipped++;
                     continue; // already a registered customer — managed via their preference
                 }
@@ -431,9 +431,19 @@ public class WhatsAppCampaignService {
         return "";
     }
 
-    /** Normalizes a phone number for WhatsApp Cloud API. */
+    /** Normalizes a phone number for WhatsApp Cloud API (strips all non-digits). */
     private String normalizePhone(String phone) {
         return phone == null ? "" : phone.replaceAll("[^0-9]", "");
+    }
+
+    /**
+     * Returns the last 10 digits of a phone number for format-agnostic comparison.
+     * "9876543210", "+919876543210", "919876543210" all return "9876543210".
+     */
+    private String last10(String phone) {
+        if (phone == null) return "";
+        String d = phone.replaceAll("[^0-9]", "");
+        return d.length() >= 10 ? d.substring(d.length() - 10) : d;
     }
 
     /**
@@ -535,9 +545,10 @@ public class WhatsAppCampaignService {
             return new ImportResult(0, 0, 0);
         }
 
-        Set<String> registeredPhones = customerRepository.findAllRegisteredPhones()
+        // Compare by last 10 digits so "+919876543210" matches "9876543210" in customer DB
+        Set<String> registeredLast10 = customerRepository.findAllRegisteredPhones()
                 .stream()
-                .map(p -> p.replaceAll("[^0-9]", ""))
+                .map(this::last10)
                 .collect(Collectors.toSet());
 
         int imported = 0, skippedRegistered = 0, skippedDuplicate = 0;
@@ -548,9 +559,7 @@ public class WhatsAppCampaignService {
             String normalized = normalizeE164(entry.getPhone());
             if (isBlank(normalized)) continue;
 
-            String digitsOnly = normalized.replaceAll("[^0-9]", "");
-
-            if (registeredPhones.contains(digitsOnly)) {
+            if (registeredLast10.contains(last10(normalized))) {
                 skippedRegistered++;
                 continue;
             }
