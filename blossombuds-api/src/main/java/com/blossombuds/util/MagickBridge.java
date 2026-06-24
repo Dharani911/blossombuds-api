@@ -64,13 +64,22 @@ public final class MagickBridge {
     private static boolean tryImageMagick(File input, File output, String cmd)
             throws IOException, InterruptedException {
 
+        // Append [0] to select only the first frame — HEIC files often contain multiple images
+        // (thumbnail + full) and without [0] ImageMagick creates numbered outputs (file-0.jpg, file-1.jpg)
+        // instead of the expected single output path, causing the exists() check to fail.
+        // Skip the frame selector if the path contains brackets — ImageMagick would misparse them.
+        String absPath = input.getAbsolutePath();
+        String inputWithFrame = (absPath.contains("[") || absPath.contains("]"))
+                ? absPath
+                : absPath + "[0]";
+
         ProcessBuilder pb;
         if ("magick".equals(cmd)) {
             pb = new ProcessBuilder("magick", "convert",
-                    input.getAbsolutePath(), "-quality", "85", output.getAbsolutePath());
+                    inputWithFrame, "-quality", "85", output.getAbsolutePath());
         } else {
             pb = new ProcessBuilder(cmd,
-                    input.getAbsolutePath(), "-quality", "85", output.getAbsolutePath());
+                    inputWithFrame, "-quality", "85", output.getAbsolutePath());
         }
 
         pb.redirectErrorStream(true);

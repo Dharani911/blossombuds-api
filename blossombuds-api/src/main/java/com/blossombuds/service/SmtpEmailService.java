@@ -279,6 +279,44 @@ public class SmtpEmailService implements EmailService {
         sendRichMasked(toEmail, subject, b.toString());
     }
 
+    /** Sends a "complete your payment" reminder for an abandoned Razorpay checkout. */
+    @Override
+    public void sendPaymentPendingReminder(String toEmail, String toName,
+                                           String orderRef, java.math.BigDecimal grandTotal,
+                                           String currency, String paymentLink) {
+        log.info("[EMAIL][PAYMENT_PENDING_REMINDER] to='{}' orderRef='{}'", toEmail, orderRef);
+
+        String subject = "You left something behind — complete your Blossom Buds order";
+        String amountLine = (grandTotal != null)
+                ? "\nOrder total: " + formatMoney(grandTotal, currency) + "\n"
+                : "";
+
+        String body = """
+            Hi %s,
+
+            It looks like you started placing an order with %s but didn't complete the payment.%s
+            Your items are still waiting! Complete your purchase securely here:
+
+            {{A|Complete My Payment|%s}}
+
+            If you've already paid or changed your mind, please ignore this message.
+
+            %s
+
+            Warm regards,
+            %s
+            """.formatted(
+                safeName(toName),
+                brandName(),
+                amountLine,
+                paymentLink,
+                contactLineText(),
+                brandName()
+        );
+
+        sendRichMasked(toEmail, subject, body);
+    }
+
     /** Sends a short request asking the customer to leave a review for the order. */
     @Override
     public void sendReviewRequest(String toEmail, String toName,

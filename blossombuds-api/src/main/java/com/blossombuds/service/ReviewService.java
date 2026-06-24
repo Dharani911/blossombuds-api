@@ -10,7 +10,9 @@ import com.blossombuds.dto.*;
 import com.blossombuds.repository.CustomerRepository;
 import com.blossombuds.repository.ProductReviewImageRepository;
 import com.blossombuds.repository.ProductReviewRepository;
+import com.blossombuds.util.ImageMagickUtil;
 import com.blossombuds.util.ImageUtil;
+import com.blossombuds.util.MagickBridge;
 import jakarta.persistence.criteria.Subquery;
 import jakarta.validation.Valid;
 import lombok.Data;
@@ -51,8 +53,9 @@ public class ReviewService {
 
     // R2 / S3 (reuse your existing config)
     private final AmazonS3 r2Client;
-    @Value("${cloudflare.r2.bucket}")   private String bucketName;
-    @Value("${cloudflare.r2.endpoint}") private String r2Endpoint;
+    @Value("${cloudflare.r2.bucket}")        private String bucketName;
+    @Value("${cloudflare.r2.endpoint}")      private String r2Endpoint;
+    @Value("${app.imagemagick.cmd:convert}") private String magickCmd;
 
 
 
@@ -200,17 +203,34 @@ public class ReviewService {
             throw new IllegalStateException("Maximum 3 images per review");
         }
 
-        // Validate type/size (no HEIC)
+        // Validate type/size
         validateFile(file);
 
-        // Decode using pure Java
+        // Read all bytes so we can convert HEIC if needed
+        byte[] rawBytes;
+        try (InputStream tmp = file.getInputStream()) {
+            rawBytes = tmp.readAllBytes();
+        }
+
+        // For HEIC/HEIF: convert to JPEG via ImageMagick before passing to ImageIO
+        byte[] processedBytes = rawBytes;
+        if (ImageMagickUtil.isHeicLike(file.getOriginalFilename(), file.getContentType())) {
+            log.info("[REVIEW][UPLOAD] Detected HEIC/HEIF, converting via ImageMagick");
+            try {
+                processedBytes = MagickBridge.heicToJpeg(rawBytes, magickCmd);
+            } catch (Exception e) {
+                log.warn("[REVIEW][UPLOAD] HEIC conversion failed: {}", e.toString());
+                throw new IllegalArgumentException("Could not convert HEIC image. Please try exporting as JPG first.");
+            }
+        }
+
         BufferedImage original;
-        try (InputStream in = file.getInputStream()) {
+        try (InputStream in = new ByteArrayInputStream(processedBytes)) {
             original = ImageIO.read(in);
         }
         if (original == null) {
             throw new IllegalArgumentException(
-                    "Uploaded file is not a supported image (JPG, PNG, WebP, GIF, BMP, TIFF).");
+                    "Uploaded file is not a supported image (JPG, PNG, WebP, GIF, BMP, TIFF, HEIC).");
         }
 
         // Resize + compress using your ImageUtil
@@ -288,12 +308,21 @@ public class ReviewService {
             raw = baos.toByteArray();
         }
 
-        // Decode & validate as image
+        // Decode image; fall back to ImageMagick for HEIC/HEIF (not supported by ImageIO natively)
         BufferedImage original = ImageIO.read(new ByteArrayInputStream(raw));
+        if (original == null && ImageMagickUtil.isHeicLike(tempKey, null)) {
+            log.info("[REVIEW][ATTACH] HEIC detected at tempKey={}, converting via ImageMagick", tempKey);
+            try {
+                byte[] converted = MagickBridge.heicToJpeg(raw, magickCmd);
+                original = ImageIO.read(new ByteArrayInputStream(converted));
+            } catch (Exception e) {
+                log.warn("[REVIEW][ATTACH] HEIC conversion failed for tempKey={}: {}", tempKey, e.toString());
+            }
+        }
         if (original == null) {
             log.warn("[REVIEW][ATTACH][FAIL] Unsupported image tempKey={}", tempKey);
             throw new IllegalArgumentException(
-                    "Uploaded file is not a supported image (JPG, PNG, WebP, GIF, BMP, TIFF).");
+                    "Uploaded file is not a supported image (JPG, PNG, WebP, GIF, BMP, TIFF, HEIC).");
         }
 
         // Resize + compress to JPEG
@@ -594,13 +623,16 @@ public class ReviewService {
                 name.endsWith(".jpg")  || name.endsWith(".jpeg") ||
                         name.endsWith(".png")  || name.endsWith(".webp") ||
                         name.endsWith(".gif")  || name.endsWith(".bmp")  ||
-                        name.endsWith(".tif")  || name.endsWith(".tiff");
+                        name.endsWith(".tif")  || name.endsWith(".tiff") ||
+                        name.endsWith(".heic") || name.endsWith(".heif");
 
-        boolean mimeOk = ct.startsWith("image/");
+        // HEIC files may arrive with "application/octet-stream" from some browsers — only allow that for HEIC/HEIF
+        boolean isHeicExt = name.endsWith(".heic") || name.endsWith(".heif");
+        boolean mimeOk = ct.isBlank() || ct.startsWith("image/") || (ct.equals("application/octet-stream") && isHeicExt);
 
         if (!(extOk && mimeOk)) {
             throw new IllegalArgumentException(
-                    "Only JPG, PNG, WebP, GIF, BMP, TIFF images are supported (no HEIC). You uploaded: " + name);
+                    "Only JPG, PNG, WebP, GIF, BMP, TIFF, HEIC images are supported. You uploaded: " + name);
         }
     }
 

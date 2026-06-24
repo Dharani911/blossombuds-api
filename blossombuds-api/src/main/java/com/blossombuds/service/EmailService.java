@@ -36,4 +36,9 @@ public interface EmailService {
 
     void sendPasswordResetOtp(String toEmail, String otpCode);
     void sendRichMasked(String toEmail, String subject, String maskedBodyWithMarkers);
+
+    /** Sends a "complete your payment" reminder to a customer who abandoned checkout. */
+    void sendPaymentPendingReminder(String toEmail, String toName,
+                                    String orderRef, java.math.BigDecimal grandTotal,
+                                    String currency, String paymentLink);
 }
