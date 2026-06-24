@@ -11,10 +11,22 @@
         NOT registered on the platform. Includes mandatory opt-out instruction since
         these contacts cannot opt out via a profile page.
 
-        Meta template body (must match exactly what is approved in WhatsApp Business Manager):
-        "Hi {{1}}, 🌸 {{2}} Shop our collection: {{3}} — Reply STOP to unsubscribe."
+        Meta template structure (must match exactly what is approved in WhatsApp Business Manager):
+          Header : IMAGE (variable — uploaded per campaign)
+          Body   :
+            Hi {{1}},
 
-        Variables: {{1}} name, {{2}} offer/message text, {{3}} link
+            {{2}} 🌸
+
+            Discover our fresh, handcrafted floral arrangements for every occasion.
+
+            For support, reach us on WhatsApp: +91 88073 92855
+
+            Reply STOP to unsubscribe from future messages.
+          Footer : Blossom Buds Floral Artistry
+          Button : "Shop Now" — static URL → https://www.blossom-buds-floral-artistry.com
+
+        Variables: {{1}} customer name, {{2}} offer / event description text
     -->
     <changeSet id="0041-01-seed-template-expo-outreach" author="dharani">
         <preConditions onFail="MARK_RAN">
@@ -27,8 +39,8 @@
             <column name="provider_template_name" value="expo_outreach"/>
             <column name="category"               value="MARKETING"/>
             <column name="language_code"          value="en"/>
-            <column name="body_preview"           value="Hi {{1}}, 🌸 {{2}} Shop our collection: {{3}} — Reply STOP to unsubscribe."/>
-            <column name="variable_count"         valueNumeric="3"/>
+            <column name="body_preview"           value="Hi {{1}}, {{2}} 🌸 Discover our fresh, handcrafted floral arrangements. Reply STOP to unsubscribe."/>
+            <column name="variable_count"         valueNumeric="2"/>
             <column name="active"                 valueBoolean="true"/>
             <column name="created_by"             value="system"/>
             <column name="created_at"             valueComputed="NOW()"/>

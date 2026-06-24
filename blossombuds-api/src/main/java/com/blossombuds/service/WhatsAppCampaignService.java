@@ -390,7 +390,6 @@ public class WhatsAppCampaignService {
         if ("expo_outreach".equalsIgnoreCase(templateName)) {
             variables.add(name);
             variables.add(isBlank(offerText) ? "Check out our latest floral collections!" : offerText);
-            variables.add(isBlank(link) ? "https://www.blossom-buds-floral-artistry.com/categories" : link);
             return variables;
         }
 
