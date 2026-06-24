@@ -552,6 +552,7 @@ useEffect(() => {
   // 🔎 Profile info for WhatsApp message
   const [custName, setCustName] = useState<string>("");
   const [custEmail, setCustEmail] = useState<string>("");
+  const [custPhone, setCustPhone] = useState<string>("");
   useEffect(() => {
     if (!err) return;
     const t = setTimeout(() => setErr(null), 6000);
@@ -572,8 +573,10 @@ useEffect(() => {
           data?.username ??
           "";
         const email = data?.email ?? data?.mail ?? "";
+        const phone = data?.phone ?? data?.mobilePhone ?? data?.mobile ?? "";
         setCustName(name || "");
         setCustEmail(email || "");
+        setCustPhone(phone || "");
       } catch {
         setCustName("");
         setCustEmail("");
@@ -909,6 +912,10 @@ const grandTotal = useMemo(() => {
 
     const selectedAddress = domesticAddresses.find(a => a.id === selectedAddrId) || null;
     if (!selectedAddress) { setErr("Please add/select an Indian address."); return; }
+    if (!isValidIndianPhone(selectedAddress.phone || "")) {
+      setErr("The phone number on your selected address is invalid. Please edit the address and enter a valid 10-digit Indian mobile number.");
+      return;
+    }
     if (!partnerId) { setErr("Please select a delivery partner."); return; }
     if (shippingLoading) { setErr("Please wait while we calculate shipping."); return; }
 
@@ -1177,6 +1184,25 @@ const grandTotal = useMemo(() => {
     setNaErr(null);
   }, [newAddrOpen, editAddr]);
 
+  function isValidIndianPhone(raw: string): boolean {
+    const digits = raw.replace(/\D/g, "");
+    const core = digits.length === 12 && digits.startsWith("91") ? digits.slice(2) : digits;
+    return core.length === 10 && /^[6-9]/.test(core);
+  }
+
+  function phoneDigits(raw: string): string {
+    const d = raw.replace(/\D/g, "");
+    return d.length === 12 && d.startsWith("91") ? d.slice(2) : d;
+  }
+
+  const naPhoneErr: string | null = (() => {
+    if (modalContext !== "domestic") return null;
+    if (!naPhone.trim()) return null;
+    return isValidIndianPhone(naPhone)
+      ? null
+      : "Enter a valid 10-digit Indian mobile number starting with 6–9";
+  })();
+
   async function saveNewAddress() {
     if (!user?.id) { setNaErr("Please login to add an address."); return; }
     const isDomestic = modalContext === "domestic";
@@ -1184,6 +1210,10 @@ const grandTotal = useMemo(() => {
     // 🔒 Strict required fields for BOTH flows
     if (!naName.trim()) { setNaErr("Recipient name is required."); return; }
     if (!naPhone.trim()) { setNaErr("Phone number is required."); return; }
+    if (isDomestic && !isValidIndianPhone(naPhone)) {
+      setNaErr("Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.");
+      return;
+    }
     if (!naLine1.trim()) { setNaErr("Address line 1 is required."); return; }
     if (!naLine2.trim()) { setNaErr("Address line 2 is required."); return; }
     if (!naPincode.trim()) { setNaErr("Pincode / ZIP is required."); return; }
@@ -1233,6 +1263,10 @@ const grandTotal = useMemo(() => {
     // 🔒 Strict required fields for BOTH flows
     if (!naName.trim()) { setNaErr("Recipient name is required."); return; }
     if (!naPhone.trim()) { setNaErr("Phone number is required."); return; }
+    if (isDomestic && !isValidIndianPhone(naPhone)) {
+      setNaErr("Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.");
+      return;
+    }
     if (!naLine1.trim()) { setNaErr("Address line 1 is required."); return; }
     if (!naLine2.trim()) { setNaErr("Address line 2 is required."); return; }
     if (!naPincode.trim()) { setNaErr("Pincode / ZIP is required."); return; }
@@ -1414,6 +1448,18 @@ const grandTotal = useMemo(() => {
                   </div>
                 )}
 
+
+                {selectedAddress && custPhone && phoneDigits(selectedAddress.phone || "") !== phoneDigits(custPhone) && (
+                  <div className="small" style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    background: "rgba(246,195,32,.10)",
+                    border: "1px solid rgba(246,195,32,.28)",
+                    color: "#5a4a00",
+                  }}>
+                    WhatsApp order updates will be sent to your registered number ending in {custPhone.slice(-4)}.
+                  </div>
+                )}
 
                 <hr className="sep" />
 
@@ -1834,7 +1880,19 @@ const grandTotal = useMemo(() => {
               <div className="na-row2">
                 <div>
                   <div className="lbl">Phone *</div>
-                  <input className="inp" value={naPhone} onChange={e => setNaPhone(e.target.value)} placeholder={modalContext === "intl" ? "+49 176..." : "+91 9xxxxxxxxx"} />
+                  <input
+                    className="inp"
+                    type="tel"
+                    inputMode="tel"
+                    maxLength={15}
+                    value={naPhone}
+                    onChange={e => setNaPhone(e.target.value.replace(/[^0-9+\s\-]/g, ""))}
+                    placeholder={modalContext === "intl" ? "+49 176..." : "9876543210"}
+                    style={naPhoneErr ? { borderColor: "#b0003a", boxShadow: "0 0 0 3px rgba(176,0,58,.12)" } : undefined}
+                  />
+                  {naPhoneErr && (
+                    <div className="small" style={{ color: "#b0003a", marginTop: 3 }}>{naPhoneErr}</div>
+                  )}
                 </div>
                 <div>
                   <div className="lbl">Pincode / ZIP *</div>

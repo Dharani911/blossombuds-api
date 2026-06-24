@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; margin: 60px; color: #000; }
+  h1 { font-size: 16pt; font-weight: bold; text-align: center; margin-bottom: 4px; }
+  h2 { font-size: 12pt; font-weight: bold; margin-top: 22px; margin-bottom: 6px; border-bottom: 1px solid #000; padding-bottom: 3px; }
+  .subtitle { text-align: center; font-size: 11pt; margin-bottom: 2px; }
+  .meta { text-align: center; font-size: 10pt; color: #333; margin-bottom: 20px; }
+  table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 10.5pt; }
+  th { background-color: #1F3864; color: #fff; padding: 7px 10px; text-align: left; }
+  td { border: 1px solid #ccc; padding: 6px 10px; vertical-align: top; }
+  tr:nth-child(even) td { background-color: #f5f5f5; }
+  .status-done   { color: #1a7a1a; font-weight: bold; }
+  .status-new    { color: #0070c0; font-weight: bold; }
+  .status-dropped{ color: #7f7f7f; font-style: italic; }
+  .subtotal-row td { font-weight: bold; background-color: #dce6f1; }
+  .balance-row  td { font-weight: bold; background-color: #1F3864; color: #fff; }
+  .note { font-size: 9.5pt; color: #555; margin-top: 6px; font-style: italic; }
+  p { margin: 6px 0; }
+  ul { margin: 4px 0 4px 20px; }
+  li { margin-bottom: 3px; }
+</style>
+</head>
+<body>
+
+<h1>Updated Delivery &amp; Settlement Document</h1>
+<p class="subtitle"><strong>Project:</strong> Blossom Buds Floral Artistry — E-commerce Phase 2 Enhancements</p>
+<p class="meta">
+  Prepared for: Blossom Buds Floral Artistry (India) &nbsp;|&nbsp;
+  Prepared by: Dharani Perumal Samy &nbsp;|&nbsp;
+  Date: 24 June 2026
+</p>
+
+<h2>1. Background</h2>
+<p>
+  This document is an updated delivery and settlement record for the Phase 2 development engagement.
+  The original estimate (dated 24 January 2026) covered ten feature areas at a negotiated fixed price
+  of <strong>₹25,000</strong>. Development was delivered in two waves:
+</p>
+<ul>
+  <li><strong>Wave 1 — February 2026:</strong> Six features delivered; ₹12,000 received as payment against this delivery.</li>
+  <li><strong>Wave 2 — June 2026:</strong> Remaining in-scope features completed, plus two new features added outside the original scope.</li>
+</ul>
+<p>
+  This document reflects the revised scope, adjusted pricing, and the final balance due.
+</p>
+
+<h2>2. Feature Delivery Status</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Feature</th>
+      <th>Original Price (INR)</th>
+      <th>Revised Price (INR)</th>
+      <th>Status</th>
+      <th>Wave</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>
+        Phone number login (customer authentication), SMS OTPs &amp; SMS order status notifications
+        <br/><span style="font-size:9.5pt;color:#555;">+₹500 effort surcharge — implementation required DLT registration, PE-TM chain approval, MSG91 integration, and custom OTP brute-force protection beyond original estimate</span>
+      </td>
+      <td>₹ 4,000</td>
+      <td>₹ 4,500</td>
+      <td class="status-done">✔ Delivered</td>
+      <td>June 2026</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Global discount control (all products) with admin controls and product-level exceptions</td>
+      <td>₹ 3,000</td>
+      <td>₹ 3,000</td>
+      <td class="status-done">✔ Delivered</td>
+      <td>Feb 2026</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Home page revamp (layout and content refresh)</td>
+      <td>₹ 3,000</td>
+      <td>₹ 3,000</td>
+      <td class="status-done">✔ Delivered</td>
+      <td>Feb 2026</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>
+        WhatsApp promotional messaging — CRM-style bulk campaign with admin portal, opt-in management,
+        image upload (Cloudflare R2), template seeding, webhook delivery status tracking, and auto-reply handling
+        <br/><span style="font-size:9.5pt;color:#555;">+₹500 effort surcharge — implementation required WhatsApp Cloud API setup, webhook HMAC verification, campaign state recovery, and Meta Business verification beyond original estimate</span>
+      </td>
+      <td>₹ 3,500</td>
+      <td>₹ 4,000</td>
+      <td class="status-done">✔ Delivered</td>
+      <td>June 2026</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Admin category page improvement: product list view per category</td>
+      <td>₹ 2,000</td>
+      <td>₹ 2,000</td>
+      <td class="status-done">✔ Delivered</td>
+      <td>Feb 2026</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>GST inclusion — tax breakup in order summary, checkout, and admin order views</td>
+      <td>₹ 2,500</td>
+      <td>₹ 2,500</td>
+      <td class="status-done">✔ Delivered</td>
+      <td>June 2026</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>Analytics dashboard updates (KPI and view changes)</td>
+      <td>₹ 2,500</td>
+      <td>₹ 2,500</td>
+      <td class="status-done">✔ Delivered</td>
+      <td>Feb 2026</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>Bulk shipping surcharge rules for selected products (admin-controlled)</td>
+      <td>₹ 2,500</td>
+      <td>₹ 0</td>
+      <td class="status-dropped">— Dropped (mutually agreed)</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>Storefront search and filters for product discovery</td>
+      <td>₹ 2,500</td>
+      <td>₹ 2,500</td>
+      <td class="status-done">✔ Delivered</td>
+      <td>Feb 2026</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>Out-of-stock toggle from admin (visibility / add-to-cart behaviour)</td>
+      <td>₹ 2,500</td>
+      <td>₹ 2,500</td>
+      <td class="status-done">✔ Delivered</td>
+      <td>Feb 2026</td>
+    </tr>
+    <tr>
+      <td>★</td>
+      <td>
+        <strong>Payment reminder</strong> — new feature outside original scope<br/>
+        Automated abandoned-checkout follow-up: scheduled job detects pending Razorpay orders
+        and sends personalised email + WhatsApp reminders with a secure payment link
+      </td>
+      <td>—</td>
+      <td>₹ 2,500</td>
+      <td class="status-new">★ New — Delivered</td>
+      <td>June 2026</td>
+    </tr>
+    <tr>
+      <td>★★</td>
+      <td>
+        <strong>Custom delivery charges</strong> — new feature outside original scope<br/>
+        Admin-controlled per-rule shipping fee configuration (distance, weight, or product-based
+        thresholds) replacing the previous fixed-rate model
+      </td>
+      <td>—</td>
+      <td>₹ 2,500</td>
+      <td class="status-new">★★ New — Delivered</td>
+      <td>June 2026</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>3. Financial Settlement</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Description</th>
+      <th style="text-align:right; width:160px;">Amount (INR)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Original fixed price — Phase 2 (after negotiated discount of ₹3,000)</td>
+      <td style="text-align:right;">₹ 25,000</td>
+    </tr>
+    <tr>
+      <td>Less: Item #8 dropped — Bulk shipping surcharge (mutually agreed, not delivered)</td>
+      <td style="text-align:right;">− ₹ 2,500</td>
+    </tr>
+    <tr>
+      <td>Add: Item #1 effort surcharge — Phone login &amp; SMS (DLT / MSG91 complexity)</td>
+      <td style="text-align:right;">+ ₹ 500</td>
+    </tr>
+    <tr>
+      <td>Add: Item #4 effort surcharge — WhatsApp CRM (Meta API / webhook complexity)</td>
+      <td style="text-align:right;">+ ₹ 500</td>
+    </tr>
+    <tr>
+      <td>Add: Payment reminder — new feature (★, out of original scope)</td>
+      <td style="text-align:right;">+ ₹ 2,500</td>
+    </tr>
+    <tr>
+      <td>Add: Custom delivery charges — new feature (★★, out of original scope)</td>
+      <td style="text-align:right;">+ ₹ 2,500</td>
+    </tr>
+    <tr class="subtotal-row">
+      <td>Grand Total</td>
+      <td style="text-align:right;">₹ 28,500</td>
+    </tr>
+    <tr>
+      <td>Amount received — February 2026 (payment against Wave 1 delivery)</td>
+      <td style="text-align:right;">− ₹ 12,000</td>
+    </tr>
+    <tr class="balance-row">
+      <td>Balance Due — payable on production deployment and acceptance</td>
+      <td style="text-align:right;">₹ 16,500</td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="note">
+  Post-release bug fixes for 7 days from production deployment are included for all delivered in-scope
+  features, as per the original agreement. Any further enhancements or new requirements will be scoped
+  and estimated separately.
+</p>
+
+<h2>4. Acceptance Criteria</h2>
+<ul>
+  <li>All delivered features are live on the production environment and functioning as per agreed behaviour.</li>
+  <li>Customer phone login, SMS OTP authentication, and SMS order status notifications are operational.</li>
+  <li>WhatsApp bulk campaign tool is accessible from the admin portal; campaigns can be created, sent, and delivery statuses tracked in real time.</li>
+  <li>GST breakup is visible in checkout, order confirmation, and admin order views.</li>
+  <li>Payment reminder notifications (email + WhatsApp) are sent automatically for abandoned checkouts.</li>
+  <li>Custom delivery charge rules are configurable from the admin panel and applied correctly at checkout.</li>
+  <li>No critical errors in core shopping, checkout, and order flows after deployment.</li>
+</ul>
+
+<h2>5. Payment Terms</h2>
+<p>
+  Balance of <strong>₹16,500</strong> is due upon production deployment and client sign-off on the
+  delivered features listed above.
+</p>
+
+<h2>6. Sign-Off</h2>
+<br/>
+<table style="border:none; width:100%;">
+  <tr>
+    <td style="border:none; width:50%; vertical-align:bottom; padding: 0 20px 0 0;">
+      <p><strong>Approved by (Client):</strong></p>
+      <br/><br/><br/>
+      <div style="border-top:1px solid #000; padding-top:6px;">
+        Name: &nbsp; __________________________ <br/><br/>
+        Date: &nbsp;&nbsp; __________________________ <br/><br/>
+        Signature: ______________________
+      </div>
+    </td>
+    <td style="border:none; width:50%; vertical-align:bottom; padding: 0;">
+      <p><strong>Prepared by (Developer):</strong></p>
+      <br/><br/><br/>
+      <div style="border-top:1px solid #000; padding-top:6px;">
+        Name: &nbsp;&nbsp;&nbsp; Dharani Perumal Samy <br/><br/>
+        Date: &nbsp;&nbsp;&nbsp;&nbsp; 24 June 2026 <br/><br/>
+        Signature: Dharani Perumal Samy
+      </div>
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>

@@ -89,6 +89,7 @@ public class SmsServiceImpl implements SmsService {
         ));
     }
 
+
     private void send(String templateId, String phone, Map<String, String> variables) {
         if (authKey == null || authKey.isBlank()) {
             log.warn("[SMS] authkey not configured — skipping send for templateId={}", templateId);

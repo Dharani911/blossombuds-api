@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+          http://www.liquibase.org/xml/ns/dbchangelog
+          https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- Track how many payment reminders have been sent for an abandoned checkout intent. -->
+    <changeSet id="0038-01-add-reminder-count" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="checkout_intent" columnName="reminder_count"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="checkout_intent">
+            <column name="reminder_count" type="int" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="checkout_intent" columnName="reminder_count"/>
+        </rollback>
+    </changeSet>
+
+    <!-- Timestamp of the most recent reminder sent so we can enforce cooldown between reminders. -->
+    <changeSet id="0038-02-add-reminder-sent-at" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="checkout_intent" columnName="reminder_sent_at"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="checkout_intent">
+            <column name="reminder_sent_at" type="timestamp"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="checkout_intent" columnName="reminder_sent_at"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

@@ -140,6 +140,9 @@ public class CheckoutService {
         }
 
 
+        // India: validate shipping phone before touching DB or Razorpay
+        validateShipPhone(orderDraft.getShipPhone());
+
         // India: backend-authoritative pricing before creating intent/Razorpay order
         applyBackendGstTotals(orderDraft, country);
 
@@ -205,6 +208,22 @@ public class CheckoutService {
     }
 
     // ---------- helpers ----------
+
+    private void validateShipPhone(String phone) {
+        if (phone == null || phone.isBlank()) {
+            throw new IllegalArgumentException(
+                "A phone number is required for delivery. Please enter a valid 10-digit Indian mobile number.");
+        }
+        String digits = phone.replaceAll("[^0-9]", "");
+        if (digits.length() == 12 && digits.startsWith("91")) {
+            digits = digits.substring(2);
+        }
+        if (digits.length() != 10 || !digits.matches("[6-9][0-9]{9}")) {
+            throw new IllegalArgumentException(
+                "\"" + phone + "\" is not a valid Indian mobile number. " +
+                "Please enter a 10-digit number starting with 6, 7, 8, or 9 (e.g. 98765 43210).");
+        }
+    }
     private String write(Object o) {
         try { return om.writeValueAsString(o); }
         catch (Exception e) {

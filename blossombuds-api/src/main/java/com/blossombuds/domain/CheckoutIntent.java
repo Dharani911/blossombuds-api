@@ -50,6 +50,14 @@ public class CheckoutIntent {
     @Column(name = "expires_at")
     private OffsetDateTime expiresAt;
 
+    /** Number of payment reminders already sent for this intent. */
+    @Column(name = "reminder_count", nullable = false)
+    private Integer reminderCount = 0;
+
+    /** Timestamp of the most recent reminder sent. */
+    @Column(name = "reminder_sent_at")
+    private LocalDateTime reminderSentAt;
+
     // audit
     @Column(name = "created_at") private LocalDateTime createdAt;
     @Column(name = "created_by", length = 64) private String createdBy;

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+          http://www.liquibase.org/xml/ns/dbchangelog
+          https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- External contacts (expo leads, import lists) who have not registered on the platform. -->
+    <changeSet id="0040-01-create-whatsapp-contacts" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="whatsapp_contacts"/></not>
+        </preConditions>
+        <createTable tableName="whatsapp_contacts">
+            <column name="id" type="bigserial">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="phone" type="varchar(30)">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uq_whatsapp_contacts_phone"/>
+            </column>
+            <column name="name" type="varchar(200)"/>
+            <!-- Tag identifying the import batch (e.g. EXPO_JUN_2026) -->
+            <column name="source" type="varchar(100)"/>
+            <column name="opted_in" type="boolean" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+            <column name="opted_out_at" type="timestamptz"/>
+            <column name="active" type="boolean" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="varchar(100)"/>
+            <column name="created_at" type="timestamptz">
+                <constraints nullable="false"/>
+            </column>
+            <column name="modified_by" type="varchar(100)"/>
+            <column name="modified_at" type="timestamptz">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <rollback><dropTable tableName="whatsapp_contacts"/></rollback>
+    </changeSet>
+
+</databaseChangeLog>

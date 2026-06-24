@@ -4,6 +4,7 @@ import com.blossombuds.domain.CheckoutIntent;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.data.domain.Pageable;
@@ -41,6 +42,32 @@ public interface CheckoutIntentRepository extends JpaRepository<CheckoutIntent, 
             String status,
             LocalDateTime startTime,
             LocalDateTime safeUpperTime,
+            Pageable pageable
+    );
+
+    /**
+     * Finds PENDING checkout intents that are eligible for a payment reminder.
+     * Eligible = has a Razorpay order, created within the reminder window,
+     * and either never reminded or reminded fewer than maxReminders times with enough cooldown.
+     */
+    @Query("""
+        select ci
+        from CheckoutIntent ci
+        where ci.status = 'PENDING'
+          and ci.active = true
+          and ci.rzpOrderId is not null
+          and ci.rzpOrderId <> ''
+          and ci.createdAt >= :minCreatedAt
+          and ci.createdAt <= :maxCreatedAt
+          and ci.reminderCount < :maxReminders
+          and (ci.reminderSentAt is null or ci.reminderSentAt <= :cooldownBefore)
+        order by ci.createdAt asc
+        """)
+    List<CheckoutIntent> findEligibleForReminder(
+            LocalDateTime minCreatedAt,
+            LocalDateTime maxCreatedAt,
+            int maxReminders,
+            LocalDateTime cooldownBefore,
             Pageable pageable
     );
 }
