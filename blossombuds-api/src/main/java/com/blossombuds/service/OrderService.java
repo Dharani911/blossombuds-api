@@ -582,8 +582,9 @@ public class OrderService {
                 if (updateStatusRequest.getStatus() == OrderStatus.DISPATCHED
                         && !isBlank(order.getTrackingUrl())) {
                     final String trackingUrl = order.getTrackingUrl();
-                    runAfterCommit(() -> smsService.sendOrderDispatched(phone, name, bareCode, trackingUrl));
-                    runAfterCommit(() -> whatsAppService.sendOrderDispatched(phone, name, bareCode, trackingUrl));
+                    final String trackingNumber = order.getTrackingNumber();
+                    runAfterCommit(() -> smsService.sendOrderDispatched(phone, name, bareCode, trackingNumber, trackingUrl));
+                    runAfterCommit(() -> whatsAppService.sendOrderDispatched(phone, name, bareCode, trackingNumber, trackingUrl));
                 } else if (updateStatusRequest.getStatus() == OrderStatus.DELIVERED) {
                     final String reviewUrl = buildReviewUrl(bareCode);
                     runAfterCommit(() -> smsService.sendOrderDelivered(phone, name, bareCode));

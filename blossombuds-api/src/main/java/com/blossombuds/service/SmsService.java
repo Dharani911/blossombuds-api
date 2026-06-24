@@ -18,9 +18,9 @@ public interface SmsService {
     void sendOrderConfirmation(String phone, String customerName,
                                String orderCode, BigDecimal grandTotal, String currency);
 
-    /** Sends a dispatched notification with tracking URL via SMS. */
+    /** Sends a dispatched notification with tracking number and URL via SMS. */
     void sendOrderDispatched(String phone, String customerName,
-                             String orderCode, String trackingUrl);
+                             String orderCode, String trackingNumber, String trackingUrl);
 
     /** Sends a delivery notification with prompt to leave a review via SMS. */
     void sendOrderDelivered(String phone, String customerName, String orderCode);

@@ -51,12 +51,12 @@ public class SmsServiceStub implements SmsService {
 
     // DLT Template 5 — Order Dispatched
     // "Hi {#alphanumeric#}, your Blossom Buds order BB{#alphanumeric#} has been dispatched!
-    //  Track it here: {#url#}"
+    //  Tracking No: {#alphanumeric#}. Track it here: {#url#} -Blossom Buds Floral Artistry"
     @Override
     public void sendOrderDispatched(String phone, String customerName,
-                                    String orderCode, String trackingUrl) {
-        log.info("[SMS][STUB][ORDER_DISPATCHED] phone={} name={} code=BB{} trackingUrl={}",
-                mask(phone), customerName, orderCode, trackingUrl);
+                                    String orderCode, String trackingNumber, String trackingUrl) {
+        log.info("[SMS][STUB][ORDER_DISPATCHED] phone={} name={} code=BB{} trackingNumber={} trackingUrl={}",
+                mask(phone), customerName, orderCode, trackingNumber, trackingUrl);
     }
 
     // DLT Template 6 — Order Delivered
