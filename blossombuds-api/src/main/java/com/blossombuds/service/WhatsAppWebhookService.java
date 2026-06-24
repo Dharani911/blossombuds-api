@@ -2,8 +2,10 @@ package com.blossombuds.service;
 
 import com.blossombuds.domain.Setting;
 import com.blossombuds.domain.WhatsAppMessageEvent;
+import com.blossombuds.repository.CustomerWhatsAppPreferenceRepository;
 import com.blossombuds.repository.WhatsAppCampaignRecipientRepository;
 import com.blossombuds.repository.WhatsAppCampaignRepository;
+import com.blossombuds.repository.WhatsAppContactRepository;
 import com.blossombuds.repository.WhatsAppMessageEventRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -33,6 +35,8 @@ public class WhatsAppWebhookService {
     private final WhatsAppCampaignRepository campaignRepository;
     private final WhatsAppCloudClient whatsAppCloudClient;
     private final SettingsService settingsService;
+    private final CustomerWhatsAppPreferenceRepository preferenceRepository;
+    private final WhatsAppContactRepository whatsAppContactRepository;
 
     /** Stores and processes a raw WhatsApp webhook payload. */
     @Transactional
@@ -141,7 +145,12 @@ public class WhatsAppWebhookService {
             log.info("[WHATSAPP][WEBHOOK][MESSAGE] Incoming message received from phone={}, type={}",
                     maskPhone(phone), messageType);
 
-            sendAutoReply(phone);
+            String bodyText = messageNode.path("text").path("body").asText("").trim();
+            if ("STOP".equalsIgnoreCase(bodyText)) {
+                handleStop(phone);
+            } else {
+                sendAutoReply(phone);
+            }
         }
     }
 
@@ -189,6 +198,46 @@ public class WhatsAppWebhookService {
         } else {
             // No active transaction (e.g. called from a test or scheduler) — send directly.
             sendAutoReplyHttp(phone, message);
+        }
+    }
+
+    /** Deactivates the sender in both preference and contacts tables, then confirms via WhatsApp. */
+    private void handleStop(String phone) {
+        if (phone == null || phone.isBlank()) return;
+        OffsetDateTime now = OffsetDateTime.now();
+
+        preferenceRepository.findByPhoneAndActiveTrue(phone).ifPresent(pref -> {
+            pref.setOptedIn(false);
+            pref.setOptedOutAt(now);
+            pref.setActive(false);
+            pref.setModifiedBy("webhook-stop");
+            pref.setModifiedAt(now);
+            preferenceRepository.save(pref);
+            log.info("[WHATSAPP][STOP] Deactivated preference for phone={}", maskPhone(phone));
+        });
+
+        whatsAppContactRepository.findByPhone(phone).ifPresent(contact -> {
+            contact.setOptedIn(false);
+            contact.setOptedOutAt(now);
+            contact.setActive(false);
+            contact.setModifiedBy("webhook-stop");
+            contact.setModifiedAt(now);
+            whatsAppContactRepository.save(contact);
+            log.info("[WHATSAPP][STOP] Deactivated expo contact for phone={}", maskPhone(phone));
+        });
+
+        String confirmMessage = "You have been unsubscribed from Blossom Buds marketing messages. "
+                + "You will no longer receive promotional updates from us.";
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    whatsAppCloudClient.sendTextMessage(phone, confirmMessage);
+                }
+            });
+        } else {
+            whatsAppCloudClient.sendTextMessage(phone, confirmMessage);
         }
     }
 

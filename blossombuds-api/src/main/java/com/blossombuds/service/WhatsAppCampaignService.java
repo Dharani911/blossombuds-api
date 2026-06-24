@@ -3,10 +3,13 @@ package com.blossombuds.service;
 import com.blossombuds.domain.CustomerWhatsAppPreference;
 import com.blossombuds.domain.WhatsAppCampaign;
 import com.blossombuds.domain.WhatsAppCampaignRecipient;
+import com.blossombuds.domain.WhatsAppContact;
 import com.blossombuds.domain.WhatsAppTemplate;
+import com.blossombuds.repository.CustomerRepository;
 import com.blossombuds.repository.CustomerWhatsAppPreferenceRepository;
 import com.blossombuds.repository.WhatsAppCampaignRecipientRepository;
 import com.blossombuds.repository.WhatsAppCampaignRepository;
+import com.blossombuds.repository.WhatsAppContactRepository;
 import com.blossombuds.repository.WhatsAppTemplateRepository;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +22,8 @@ import jakarta.annotation.PostConstruct;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /** Service for creating and sending WhatsApp campaigns. */
 @Slf4j
@@ -30,6 +35,8 @@ public class WhatsAppCampaignService {
     private final WhatsAppCampaignRepository campaignRepository;
     private final WhatsAppCampaignRecipientRepository recipientRepository;
     private final CustomerWhatsAppPreferenceRepository preferenceRepository;
+    private final WhatsAppContactRepository whatsAppContactRepository;
+    private final CustomerRepository customerRepository;
     private final WhatsAppCloudClient whatsAppCloudClient;
 
     /**
@@ -279,6 +286,41 @@ public class WhatsAppCampaignService {
             return recipients;
         }
 
+        if ("EXPO_CONTACTS".equalsIgnoreCase(audienceType)) {
+            // Collect all registered customer phones (digits only) to skip duplicates
+            Set<String> registeredPhones = customerRepository.findAllRegisteredPhones()
+                    .stream()
+                    .map(p -> p.replaceAll("[^0-9]", ""))
+                    .collect(Collectors.toSet());
+
+            List<WhatsAppContact> contacts = whatsAppContactRepository.findByOptedInTrueAndActiveTrue();
+            int skipped = 0;
+
+            for (WhatsAppContact contact : contacts) {
+                String normalized = normalizePhone(contact.getPhone());
+                if (registeredPhones.contains(normalized)) {
+                    skipped++;
+                    continue; // already a registered customer — managed via their preference
+                }
+                String contactName = isBlank(contact.getName()) ? "Customer" : contact.getName().trim();
+                WhatsAppCampaignRecipient recipient = new WhatsAppCampaignRecipient();
+                recipient.setCampaignId(campaign.getId());
+                recipient.setPhone(normalized);
+                recipient.setRecipientName(contactName);
+                recipient.setStatus("PENDING");
+                recipient.setVariablesJson(toVariablesText(contactName, request));
+                recipient.setCreatedBy("admin");
+                recipient.setModifiedBy("admin");
+                recipient.setCreatedAt(OffsetDateTime.now());
+                recipient.setModifiedAt(OffsetDateTime.now());
+                recipients.add(recipient);
+            }
+
+            log.info("[WHATSAPP][CAMPAIGN][EXPO] contacts={} skipped(registered)={} queued={}",
+                    contacts.size(), skipped, recipients.size());
+            return recipients;
+        }
+
         throw new IllegalArgumentException("Unsupported audience type: " + audienceType);
     }
     /** Extracts one variable value from the simple semicolon-separated variables text. */
@@ -342,6 +384,13 @@ public class WhatsAppCampaignService {
             variables.add(name);
             variables.add(isBlank(orderCode) ? "your order" : orderCode);
             variables.add(isBlank(paymentLink) ? "https://www.blossom-buds-floral-artistry.com" : paymentLink);
+            return variables;
+        }
+
+        if ("expo_outreach".equalsIgnoreCase(templateName)) {
+            variables.add(name);
+            variables.add(isBlank(offerText) ? "Check out our latest floral collections!" : offerText);
+            variables.add(isBlank(link) ? "https://www.blossom-buds-floral-artistry.com/categories" : link);
             return variables;
         }
 
@@ -452,6 +501,94 @@ public class WhatsAppCampaignService {
         /** Recipient WhatsApp phone number. */
         private String phone;
     }
+    /**
+     * Imports a batch of external contacts (expo leads). Skips phones that already exist
+     * in whatsapp_contacts or belong to registered customers.
+     * Returns a summary: {imported, skippedRegistered, skippedDuplicate}.
+     */
+    @Transactional
+    public ImportResult importContacts(String source, List<ContactEntry> entries) {
+        if (entries == null || entries.isEmpty()) {
+            return new ImportResult(0, 0, 0);
+        }
+
+        Set<String> registeredPhones = customerRepository.findAllRegisteredPhones()
+                .stream()
+                .map(p -> p.replaceAll("[^0-9]", ""))
+                .collect(Collectors.toSet());
+
+        int imported = 0, skippedRegistered = 0, skippedDuplicate = 0;
+
+        for (ContactEntry entry : entries) {
+            if (entry == null || isBlank(entry.getPhone())) continue;
+
+            String normalized = normalizeE164(entry.getPhone());
+            if (isBlank(normalized)) continue;
+
+            String digitsOnly = normalized.replaceAll("[^0-9]", "");
+
+            if (registeredPhones.contains(digitsOnly)) {
+                skippedRegistered++;
+                continue;
+            }
+
+            if (whatsAppContactRepository.existsByPhone(normalized)) {
+                skippedDuplicate++;
+                continue;
+            }
+
+            WhatsAppContact contact = new WhatsAppContact();
+            contact.setPhone(normalized);
+            contact.setName(isBlank(entry.getName()) ? null : entry.getName().trim());
+            contact.setSource(isBlank(source) ? "IMPORT" : source.trim().toUpperCase());
+            contact.setOptedIn(Boolean.TRUE);
+            contact.setActive(Boolean.TRUE);
+            contact.setCreatedBy("admin");
+            contact.setModifiedBy("admin");
+            whatsAppContactRepository.save(contact);
+            imported++;
+        }
+
+        log.info("[WHATSAPP][CONTACTS][IMPORT] source={} imported={} skippedRegistered={} skippedDuplicate={}",
+                source, imported, skippedRegistered, skippedDuplicate);
+
+        return new ImportResult(imported, skippedRegistered, skippedDuplicate);
+    }
+
+    /** Normalizes a raw phone string to E.164 (+91XXXXXXXXXX for Indian numbers). */
+    private String normalizeE164(String raw) {
+        if (raw == null) return "";
+        String digits = raw.replaceAll("[^0-9]", "");
+        if (digits.length() == 10) return "+91" + digits;
+        if (digits.length() == 12 && digits.startsWith("91")) return "+" + digits;
+        if (digits.length() == 13 && digits.startsWith("091")) return "+" + digits.substring(1);
+        return digits.isEmpty() ? "" : "+" + digits;
+    }
+
+    private String maskPhone(String phone) {
+        if (phone == null || phone.length() <= 4) return "****";
+        return "****" + phone.substring(phone.length() - 4);
+    }
+
+    @Getter @Setter
+    public static class ContactEntry {
+        private String phone;
+        private String name;
+    }
+
+    @Getter
+    public static class ImportResult {
+        private final int imported;
+        private final int skippedRegistered;
+        private final int skippedDuplicate;
+
+        public ImportResult(int imported, int skippedRegistered, int skippedDuplicate) {
+            this.imported = imported;
+            this.skippedRegistered = skippedRegistered;
+            this.skippedDuplicate = skippedDuplicate;
+        }
+    }
+
     /** Converts a WhatsApp template entity into API response DTO. */
     public WhatsAppDtos.TemplateResponse toTemplateResponse(WhatsAppTemplate template) {
         return new WhatsAppDtos.TemplateResponse(

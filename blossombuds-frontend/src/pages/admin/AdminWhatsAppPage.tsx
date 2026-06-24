@@ -12,6 +12,11 @@ type WhatsAppPreference,
   sendWhatsAppCampaign,
   getWhatsAppIntegrationStatus,
   uploadWhatsAppCampaignImage,
+  getWhatsAppContacts,
+  importWhatsAppContacts,
+  deactivateWhatsAppContact,
+  type WhatsAppContact,
+  type ImportContactsResult,
   type WhatsAppIntegrationStatus,
   type CreateWhatsAppCampaignRequest,
   type WhatsAppCampaign,
@@ -28,7 +33,7 @@ export default function AdminWhatsAppPage() {
 const [integrationStatus, setIntegrationStatus] = useState<WhatsAppIntegrationStatus | null>(null);
   const [title, setTitle] = useState("");
   const [templateId, setTemplateId] = useState<number | "">("");
-  const [audienceType, setAudienceType] = useState<"MANUAL" | "ALL_OPTED_IN">("MANUAL");
+  const [audienceType, setAudienceType] = useState<"MANUAL" | "ALL_OPTED_IN" | "EXPO_CONTACTS">("MANUAL");
 
   const [recipientName, setRecipientName] = useState("");
   const [recipientPhone, setRecipientPhone] = useState("");
@@ -48,6 +53,11 @@ const [integrationStatus, setIntegrationStatus] = useState<WhatsAppIntegrationSt
 const [preferences, setPreferences] = useState<WhatsAppPreference[]>([]);
 const [preferencePhone, setPreferencePhone] = useState("");
 const [preferenceCustomerId, setPreferenceCustomerId] = useState("");
+  const [contacts, setContacts] = useState<WhatsAppContact[]>([]);
+  const [importSource, setImportSource] = useState("");
+  const [importText, setImportText] = useState("");
+  const [importResult, setImportResult] = useState<ImportContactsResult | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -71,14 +81,15 @@ const [preferenceCustomerId, setPreferenceCustomerId] = useState("");
   const templateIdRef = React.useRef<number | "">(templateId);
   React.useEffect(() => { templateIdRef.current = templateId; }, [templateId]);
 
-  /** Loads templates, campaigns, settings status, and opted-in contacts safely. */
+  /** Loads templates, campaigns, settings status, opted-in contacts, and expo contacts. */
   async function loadData() {
-    const [templateResult, campaignResult, statusResult, preferenceResult] =
+    const [templateResult, campaignResult, statusResult, preferenceResult, contactsResult] =
       await Promise.allSettled([
         getWhatsAppTemplates(),
         getWhatsAppCampaigns(),
         getWhatsAppIntegrationStatus(),
         getWhatsAppPreferences(),
+        getWhatsAppContacts(),
       ]);
 
     if (templateResult.status === "fulfilled") {
@@ -110,12 +121,43 @@ const [preferenceCustomerId, setPreferenceCustomerId] = useState("");
       console.warn("Failed to load WhatsApp preferences", preferenceResult.reason);
     }
 
+    if (contactsResult.status === "fulfilled") {
+      setContacts(contactsResult.value);
+    } else {
+      setContacts([]);
+    }
+
     if (
       templateResult.status === "rejected" ||
       campaignResult.status === "rejected" ||
       statusResult.status === "rejected"
     ) {
       setMessage("Some WhatsApp CRM data could not be loaded. Please check backend APIs.");
+    }
+  }
+
+  /** Parses the import textarea (one entry per line: "phone" or "phone, name") and calls the API. */
+  async function handleImportContacts() {
+    const source = importSource.trim().toUpperCase().replace(/\s+/g, "_") || "IMPORT";
+    const lines = importText.split("\n").map(l => l.trim()).filter(Boolean);
+    if (!lines.length) { setMessage("Paste at least one phone number to import."); return; }
+
+    const contacts = lines.map(line => {
+      const [phone, ...rest] = line.split(",");
+      return { phone: phone.trim(), name: rest.join(",").trim() || undefined };
+    });
+
+    setImportBusy(true);
+    setImportResult(null);
+    try {
+      const result = await importWhatsAppContacts(source, contacts);
+      setImportResult(result);
+      setImportText("");
+      await loadData();
+    } catch (e: any) {
+      setMessage(e?.response?.data?.message || e?.message || "Import failed.");
+    } finally {
+      setImportBusy(false);
     }
   }
 
@@ -391,10 +433,11 @@ async function handleDisablePreference(id: number) {
                 <select
                   className="whatsapp-select"
                   value={audienceType}
-                  onChange={(e) => setAudienceType(e.target.value as "MANUAL" | "ALL_OPTED_IN")}
+                  onChange={(e) => setAudienceType(e.target.value as "MANUAL" | "ALL_OPTED_IN" | "EXPO_CONTACTS")}
                 >
                   <option value="MANUAL">Manual test recipient</option>
                   <option value="ALL_OPTED_IN">All opted-in customers</option>
+                  <option value="EXPO_CONTACTS">Expo contacts (use expo_outreach template)</option>
                 </select>
               </Field>
 
@@ -684,6 +727,120 @@ async function handleDisablePreference(id: number) {
                 </div>
               </div>
             </section>
+          </section>
+
+          {/* ── Expo Contacts ─────────────────────────────── */}
+          <section className="whatsapp-section">
+            <div className="whatsapp-section-header">
+              <h2 className="whatsapp-section-title">Expo Contacts</h2>
+              <p className="whatsapp-section-desc">
+                Import phone numbers collected at expos or events. These contacts receive
+                campaigns via the <strong>EXPO_CONTACTS</strong> audience type using the
+                <strong> expo_outreach</strong> template (which includes an opt-out instruction).
+                Phones already registered as customers are automatically skipped.
+              </p>
+            </div>
+
+            {/* Import form */}
+            <div className="whatsapp-card" style={{ marginBottom: 16 }}>
+              <div className="whatsapp-card-header">Import contacts</div>
+              <div className="whatsapp-card-body" style={{ display: "grid", gap: 12 }}>
+                <Field label="Source / batch label (e.g. EXPO_JUN_2026)">
+                  <input
+                    className="whatsapp-input"
+                    value={importSource}
+                    onChange={e => setImportSource(e.target.value)}
+                    placeholder="EXPO_JUN_2026"
+                  />
+                </Field>
+                <Field label="Phone numbers — one per line, optionally followed by a comma and name">
+                  <textarea
+                    className="whatsapp-input"
+                    rows={6}
+                    value={importText}
+                    onChange={e => setImportText(e.target.value)}
+                    placeholder={"9876543210, Priya\n9123456789\n+91 98001 23456, Ravi Kumar"}
+                    style={{ resize: "vertical", fontFamily: "monospace", fontSize: 13 }}
+                  />
+                </Field>
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <button
+                    className="whatsapp-btn whatsapp-btn-primary"
+                    onClick={handleImportContacts}
+                    disabled={importBusy || !importText.trim()}
+                  >
+                    {importBusy ? "Importing…" : "Import"}
+                  </button>
+                  {importResult && (
+                    <span style={{ fontSize: 13, color: "#166534" }}>
+                      ✓ {importResult.imported} imported
+                      {importResult.skippedRegistered > 0 && `, ${importResult.skippedRegistered} skipped (registered customer)`}
+                      {importResult.skippedDuplicate > 0 && `, ${importResult.skippedDuplicate} skipped (duplicate)`}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Contacts list */}
+            <div className="whatsapp-card">
+              <div className="whatsapp-card-header">
+                All contacts ({contacts.filter(c => c.optedIn).length} opted-in
+                / {contacts.filter(c => !c.optedIn).length} opted-out)
+              </div>
+              <div className="whatsapp-card-body">
+                <div className="whatsapp-table-wrap">
+                  <table className="whatsapp-table">
+                    <thead>
+                      <tr>
+                        <th>Phone</th>
+                        <th>Name</th>
+                        <th>Source</th>
+                        <th>Status</th>
+                        <th>Opted-out at</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {contacts.map(c => (
+                        <tr key={c.id} style={{ opacity: c.optedIn ? 1 : 0.5 }}>
+                          <td>{c.phone}</td>
+                          <td>{c.name || "—"}</td>
+                          <td>{c.source || "—"}</td>
+                          <td>
+                            <StatusBadge status={c.optedIn ? "OPTED_IN" : "OPTED_OUT"} />
+                          </td>
+                          <td>{c.optedOutAt ? new Date(c.optedOutAt).toLocaleDateString() : "—"}</td>
+                          <td>
+                            {c.optedIn && (
+                              <button
+                                className="whatsapp-btn whatsapp-btn-sm"
+                                onClick={async () => {
+                                  await deactivateWhatsAppContact(c.id);
+                                  await loadData();
+                                }}
+                              >
+                                Opt out
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                      {contacts.length === 0 && (
+                        <tr>
+                          <td colSpan={6}>
+                            <div className="whatsapp-empty">
+                              <strong>No contacts imported yet</strong>
+                              Use the import form above to add expo leads.
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
           </section>
         </main>
       </div>

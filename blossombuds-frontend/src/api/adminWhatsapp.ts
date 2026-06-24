@@ -50,11 +50,30 @@ export type ManualWhatsAppRecipient = {
   phone: string;
 };
 
+/** Expo / external contact imported from events or lists. */
+export type WhatsAppContact = {
+  id: number;
+  phone: string;
+  name?: string;
+  source?: string;
+  optedIn: boolean;
+  optedOutAt?: string;
+  active: boolean;
+  createdAt?: string;
+};
+
+/** Result returned after an import batch. */
+export type ImportContactsResult = {
+  imported: number;
+  skippedRegistered: number;
+  skippedDuplicate: number;
+};
+
 /** Request body for creating a WhatsApp campaign. */
 export type CreateWhatsAppCampaignRequest = {
   title: string;
   templateId: number;
-  audienceType: "MANUAL" | "ALL_OPTED_IN";
+  audienceType: "MANUAL" | "ALL_OPTED_IN" | "EXPO_CONTACTS";
   link?: string;
   offerText?: string;
   imageUrl?: string;
@@ -183,6 +202,26 @@ export async function createManualWhatsAppPreference(
 /** Disables a WhatsApp opt-in preference. */
 export async function disableWhatsAppPreference(id: number): Promise<void> {
   await adminHttp.delete(`/api/admin/whatsapp/preferences/${id}`);
+}
+
+/** Fetches all active expo/external contacts. */
+export async function getWhatsAppContacts(): Promise<WhatsAppContact[]> {
+  const res = await adminHttp.get("/api/admin/whatsapp/contacts");
+  return res.data;
+}
+
+/** Imports a batch of external contacts from a source (e.g. EXPO_JUN_2026). */
+export async function importWhatsAppContacts(
+  source: string,
+  contacts: { phone: string; name?: string }[]
+): Promise<ImportContactsResult> {
+  const res = await adminHttp.post("/api/admin/whatsapp/contacts/import", { source, contacts });
+  return res.data;
+}
+
+/** Manually deactivates an expo contact from the admin. */
+export async function deactivateWhatsAppContact(id: number): Promise<void> {
+  await adminHttp.delete(`/api/admin/whatsapp/contacts/${id}`);
 }
 
 /** Uploads a campaign header image and returns the presigned URL for Meta to fetch. */

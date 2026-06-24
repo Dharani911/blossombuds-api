@@ -6,8 +6,10 @@ import com.amazonaws.services.s3.model.GeneratePresignedUrlRequest;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.blossombuds.domain.CustomerWhatsAppPreference;
+import com.blossombuds.domain.WhatsAppContact;
 import com.blossombuds.dto.WhatsAppDtos;
 import com.blossombuds.repository.CustomerWhatsAppPreferenceRepository;
+import com.blossombuds.repository.WhatsAppContactRepository;
 import com.blossombuds.service.WhatsAppCampaignService;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +40,7 @@ public class AdminWhatsAppController {
 
     private final WhatsAppCampaignService whatsAppCampaignService;
     private final CustomerWhatsAppPreferenceRepository preferenceRepository;
+    private final WhatsAppContactRepository whatsAppContactRepository;
     private final AmazonS3 r2Client;
 
     @Value("${cloudflare.r2.bucket}")
@@ -116,6 +119,41 @@ public class AdminWhatsAppController {
         pref.setModifiedBy("admin");
         pref.setModifiedAt(OffsetDateTime.now());
         return preferenceRepository.save(pref);
+    }
+
+    /** Lists all active expo/external contacts. */
+    @GetMapping("/contacts")
+    public List<WhatsAppContact> listContacts() {
+        return whatsAppContactRepository.findAllByActiveTrueOrderByCreatedAtDesc();
+    }
+
+    /** Imports a batch of external contacts, skipping registered customers and duplicates. */
+    @PostMapping("/contacts/import")
+    public WhatsAppCampaignService.ImportResult importContacts(@RequestBody ImportContactsRequest req) {
+        if (req == null || req.getContacts() == null || req.getContacts().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "contacts list is required");
+        }
+        return whatsAppCampaignService.importContacts(req.getSource(), req.getContacts());
+    }
+
+    /** Manually deactivates a single expo contact (opt-out from admin). */
+    @DeleteMapping("/contacts/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deactivateContact(@PathVariable Long id) {
+        whatsAppContactRepository.findById(id).ifPresent(c -> {
+            c.setOptedIn(false);
+            c.setOptedOutAt(java.time.OffsetDateTime.now());
+            c.setActive(false);
+            c.setModifiedBy("admin");
+            c.setModifiedAt(java.time.OffsetDateTime.now());
+            whatsAppContactRepository.save(c);
+        });
+    }
+
+    @Getter @Setter
+    public static class ImportContactsRequest {
+        private String source;
+        private List<WhatsAppCampaignService.ContactEntry> contacts;
     }
 
     /** Disables a WhatsApp opt-in preference. */

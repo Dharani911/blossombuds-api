@@ -47,4 +47,8 @@
     <include file="db/changelog/liquibase/changes/0035-seed-festival-offers-template.xml"/>
     <include file="db/changelog/liquibase/changes/0036-add-sms-preference-columns.xml"/>
     <include file="db/changelog/liquibase/changes/0037-normalize-customer-phone-numbers.xml"/>
+    <include file="db/changelog/liquibase/changes/0038-checkout-intent-reminder-fields.xml"/>
+    <include file="db/changelog/liquibase/changes/0039-payment-reminders-table.xml"/>
+    <include file="db/changelog/liquibase/changes/0040-whatsapp-contacts.xml"/>
+    <include file="db/changelog/liquibase/changes/0041-seed-expo-outreach-template.xml"/>
 </databaseChangeLog>
