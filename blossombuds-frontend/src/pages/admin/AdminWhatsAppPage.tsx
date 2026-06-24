@@ -77,6 +77,17 @@ const [preferenceCustomerId, setPreferenceCustomerId] = useState("");
 
   const providerTemplateName = selectedTemplate?.providerTemplateName || "";
 
+  // Auto-select the correct audience whenever the template changes.
+  // expo_outreach → EXPO_CONTACTS; everything else → ALL_OPTED_IN (MANUAL stays as-is if already chosen).
+  React.useEffect(() => {
+    if (!providerTemplateName) return;
+    if (providerTemplateName === "expo_outreach") {
+      setAudienceType("EXPO_CONTACTS");
+    } else {
+      setAudienceType(prev => prev === "EXPO_CONTACTS" ? "ALL_OPTED_IN" : prev);
+    }
+  }, [providerTemplateName]);
+
   // Ref always points to the current templateId so loadData never closes over a stale value.
   const templateIdRef = React.useRef<number | "">(templateId);
   React.useEffect(() => { templateIdRef.current = templateId; }, [templateId]);
@@ -436,8 +447,12 @@ async function handleDisablePreference(id: number) {
                   onChange={(e) => setAudienceType(e.target.value as "MANUAL" | "ALL_OPTED_IN" | "EXPO_CONTACTS")}
                 >
                   <option value="MANUAL">Manual test recipient</option>
-                  <option value="ALL_OPTED_IN">All opted-in customers</option>
-                  <option value="EXPO_CONTACTS">Expo contacts (use expo_outreach template)</option>
+                  {providerTemplateName !== "expo_outreach" && (
+                    <option value="ALL_OPTED_IN">All opted-in customers</option>
+                  )}
+                  {providerTemplateName === "expo_outreach" && (
+                    <option value="EXPO_CONTACTS">Expo contacts</option>
+                  )}
                 </select>
               </Field>
 

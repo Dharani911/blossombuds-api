@@ -108,6 +108,8 @@ public class WhatsAppCampaignService {
         WhatsAppTemplate template = templateRepository.findByIdAndActiveTrue(request.getTemplateId())
                 .orElseThrow(() -> new IllegalArgumentException("Active WhatsApp template not found: " + request.getTemplateId()));
 
+        validateAudienceTemplateCompatibility(template.getProviderTemplateName(), audienceType);
+
         WhatsAppCampaign campaign = new WhatsAppCampaign();
         campaign.setTitle(request.getTitle().trim());
         campaign.setTemplateId(template.getId());
@@ -432,6 +434,28 @@ public class WhatsAppCampaignService {
     /** Normalizes a phone number for WhatsApp Cloud API. */
     private String normalizePhone(String phone) {
         return phone == null ? "" : phone.replaceAll("[^0-9]", "");
+    }
+
+    /**
+     * Enforces template-audience pairing rules:
+     * - expo_outreach must only be sent to EXPO_CONTACTS (not registered customers)
+     * - all other marketing templates must only be sent to ALL_OPTED_IN (not expo contacts)
+     * MANUAL is always allowed for test sends.
+     */
+    private void validateAudienceTemplateCompatibility(String providerTemplateName, String audienceType) {
+        if ("MANUAL".equalsIgnoreCase(audienceType)) return;
+
+        boolean isExpoTemplate = "expo_outreach".equalsIgnoreCase(providerTemplateName);
+
+        if (isExpoTemplate && !"EXPO_CONTACTS".equalsIgnoreCase(audienceType)) {
+            throw new IllegalArgumentException(
+                "The \"expo_outreach\" template can only be sent to Expo Contacts, not to registered customers.");
+        }
+
+        if (!isExpoTemplate && "EXPO_CONTACTS".equalsIgnoreCase(audienceType)) {
+            throw new IllegalArgumentException(
+                "The \"" + providerTemplateName + "\" template can only be sent to opted-in registered customers, not to Expo Contacts.");
+        }
     }
 
     /** Checks whether a string is null or blank. */
