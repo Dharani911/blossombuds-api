@@ -42,11 +42,29 @@ FROM (
       AND phone NOT LIKE '+%'
 ) AS normalized
 WHERE c.id = normalized.id
-  -- Skip if the target E.164 value already exists in a different row (would violate unique index)
+  -- Skip if (a) another row already holds this E.164 value, OR
+  --         (b) a lower-id row would also normalize to this same E.164 value.
+  -- Condition (b) ensures that among a group of duplicate raw numbers only the
+  -- earliest-registered customer gets normalised; the rest are left as-is and
+  -- must be resolved manually (merged / deactivated) before a future migration.
   AND NOT EXISTS (
       SELECT 1 FROM customers other
-      WHERE other.phone = normalized.e164
-        AND other.id != c.id
+      WHERE other.id != c.id
+        AND (
+            other.phone = normalized.e164
+            OR (
+                other.id < c.id
+                AND CASE
+                    WHEN regexp_replace(other.phone, '[^0-9]', '', 'g') ~ '^[6-9][0-9]{9}$'
+                        THEN '+91' || regexp_replace(other.phone, '[^0-9]', '', 'g')
+                    WHEN regexp_replace(other.phone, '[^0-9]', '', 'g') ~ '^91[6-9][0-9]{9}$'
+                        THEN '+'  || regexp_replace(other.phone, '[^0-9]', '', 'g')
+                    WHEN regexp_replace(other.phone, '[^0-9]', '', 'g') ~ '^0091[6-9][0-9]{9}$'
+                        THEN '+91' || substr(regexp_replace(other.phone, '[^0-9]', '', 'g'), 5)
+                    ELSE other.phone
+                END = normalized.e164
+            )
+        )
   );
         </sql>
         <rollback>
