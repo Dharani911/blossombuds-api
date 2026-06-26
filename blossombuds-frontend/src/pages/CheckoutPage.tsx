@@ -647,8 +647,7 @@ useEffect(() => {
           const a = await listAddresses(Number(user.id));
           if (!alive) return;
           setAddrList(a || []);
-          const def = (a || []).find(x => x.isDefault) || (a || [])[0] || null;
-          setSelectedAddrId(def?.id ?? null);
+          setSelectedAddrId(null); // don't auto-select — user must choose an address
         } catch (e: any) {
           if (!alive) return;
           setErr(e?.response?.data?.message || e?.message || "Could not load addresses.");
@@ -703,11 +702,8 @@ useEffect(() => {
     if (!INDIA_ID) return;
     const list = international ? internationalAddresses : domesticAddresses;
     if (!list.length) { setSelectedAddrId(null); return; }
-    const inList = list.some(a => a.id === selectedAddrId);
-    if (!inList) {
-      const def = list.find(a => a.isDefault) || list[0];
-      setSelectedAddrId(def?.id ?? null);
-    }
+    const inList = selectedAddrId !== null && list.some(a => a.id === selectedAddrId);
+    if (!inList) setSelectedAddrId(null); // clear on flow switch — user must re-select
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [international, domesticAddresses.length, internationalAddresses.length, INDIA_ID]);
 
@@ -1322,6 +1318,9 @@ const grandTotal = useMemo(() => {
       setSelectedAddrId(updated.id);
       setNewAddrOpen(false);
       setEditAddr(null);
+      // The useEffect won't re-fire when only address data changes (same ID),
+      // so explicitly recalculate shipping with the updated state/district.
+      if (modalContext === "domestic") refreshShippingPreview(updated);
     } catch (e: any) {
       setNaErr(e?.response?.data?.message || e?.message || "Could not update address.");
     } finally {
@@ -1691,18 +1690,28 @@ const grandTotal = useMemo(() => {
              <div className="row-sum">
                <span>Shipping</span>
                <span>
-                 {shippingLoading
-                   ? "Calculating…"
-                   : shippingErr
-                     ? "—"
-                     : inr(shippingFee || 0)}
+                 {!selectedAddrId
+                   ? <span style={{ opacity: 0.5, fontSize: "12px" }}>Select an address</span>
+                   : shippingLoading
+                     ? "Calculating…"
+                     : shippingErr
+                       ? "—"
+                       : shippingFee > 0 ? inr(shippingFee) : "Free"}
                </span>
              </div>
            )}
 
            <div className="row-sum total">
              <span>Total payable</span>
-             <span>{inr(international ? subtotal : grandTotal)}</span>
+             <span>
+               {international
+                 ? inr(subtotal)
+                 : !selectedAddrId
+                   ? "—"
+                   : shippingLoading
+                     ? "Calculating…"
+                     : inr(grandTotal)}
+             </span>
            </div>
 
             {shippingErr && !international && (
