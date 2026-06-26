@@ -4,9 +4,12 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import io.lettuce.core.ClientOptions;
+import io.lettuce.core.protocol.ProtocolVersion;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.data.redis.LettuceClientConfigurationBuilderCustomizer;
 import org.springframework.cache.Cache;
 import org.springframework.cache.annotation.CachingConfigurer;
 import org.springframework.cache.annotation.EnableCaching;
@@ -44,6 +47,17 @@ public class RedisConfig implements CachingConfigurer {
         String safe = redisUrl == null ? "" : redisUrl.replaceAll("://([^:]+):([^@]+)@", "://$1:***@");
         log.info("[REDIS][CONFIG] url={}", safe);
     }
+
+    @Bean
+    public LettuceClientConfigurationBuilderCustomizer lettuceResp2Customizer() {
+        // Redis 8.x changed the HELLO 3 (RESP3) handshake response in a way Lettuce 6.5.x
+        // cannot decode, causing connection initialization to hang until timeout.
+        // Force RESP2 so Lettuce sends plain AUTH instead of HELLO 3.
+        return builder -> builder.clientOptions(
+                ClientOptions.builder().protocolVersion(ProtocolVersion.RESP2).build()
+        );
+    }
+
     /** Builds a RedisCacheManager with JSON values and string keys. */
     @Primary
     @Bean
