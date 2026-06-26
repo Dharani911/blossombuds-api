@@ -7,7 +7,7 @@ import java.time.OffsetDateTime;
 /** External contact (expo lead, import list) who has not registered on the platform. */
 @Data
 @Entity
-@Table(name = "whatsapp_contacts", schema = "bb_app")
+@Table(name = "whatsapp_contacts")
 public class WhatsAppContact {
 
     @Id
