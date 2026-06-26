@@ -5,10 +5,8 @@ import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.GeneratePresignedUrlRequest;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
-import com.blossombuds.domain.CustomerWhatsAppPreference;
 import com.blossombuds.domain.WhatsAppContact;
 import com.blossombuds.dto.WhatsAppDtos;
-import com.blossombuds.repository.CustomerWhatsAppPreferenceRepository;
 import com.blossombuds.repository.WhatsAppContactRepository;
 import com.blossombuds.service.WhatsAppCampaignService;
 import lombok.Getter;
@@ -25,7 +23,6 @@ import org.springframework.web.server.ResponseStatusException;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.time.OffsetDateTime;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -39,7 +36,6 @@ import java.util.UUID;
 public class AdminWhatsAppController {
 
     private final WhatsAppCampaignService whatsAppCampaignService;
-    private final CustomerWhatsAppPreferenceRepository preferenceRepository;
     private final WhatsAppContactRepository whatsAppContactRepository;
     private final AmazonS3 r2Client;
 
@@ -94,33 +90,6 @@ public class AdminWhatsAppController {
                 .toList();
     }
 
-    /** Lists all active WhatsApp opt-in preferences for the opted-in audience selector. */
-    @GetMapping("/preferences")
-    public List<CustomerWhatsAppPreference> listPreferences() {
-        return preferenceRepository.findByOptedInTrueAndActiveTrue();
-    }
-
-    /** Adds a manual opt-in preference for campaign testing. */
-    @PostMapping("/preferences/manual")
-    @ResponseStatus(HttpStatus.CREATED)
-    public CustomerWhatsAppPreference addManualPreference(@RequestBody ManualPreferenceRequest req) {
-        if (req == null || req.getPhone() == null || req.getPhone().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Phone is required");
-        }
-        CustomerWhatsAppPreference pref = new CustomerWhatsAppPreference();
-        pref.setPhone(req.getPhone().trim());
-        pref.setCustomerId(req.getCustomerId());
-        pref.setOptedIn(true);
-        pref.setSource("ADMIN_MANUAL");
-        pref.setOptedInAt(OffsetDateTime.now());
-        pref.setActive(true);
-        pref.setCreatedBy("admin");
-        pref.setCreatedAt(OffsetDateTime.now());
-        pref.setModifiedBy("admin");
-        pref.setModifiedAt(OffsetDateTime.now());
-        return preferenceRepository.save(pref);
-    }
-
     /** Lists all active expo/external contacts. */
     @GetMapping("/contacts")
     public List<WhatsAppContact> listContacts() {
@@ -154,26 +123,6 @@ public class AdminWhatsAppController {
     public static class ImportContactsRequest {
         private String source;
         private List<WhatsAppCampaignService.ContactEntry> contacts;
-    }
-
-    /** Disables a WhatsApp opt-in preference. */
-    @DeleteMapping("/preferences/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void disablePreference(@PathVariable Long id) {
-        preferenceRepository.findById(id).ifPresent(pref -> {
-            pref.setOptedIn(false);
-            pref.setActive(false);
-            pref.setOptedOutAt(OffsetDateTime.now());
-            pref.setModifiedBy("admin");
-            pref.setModifiedAt(OffsetDateTime.now());
-            preferenceRepository.save(pref);
-        });
-    }
-
-    @Getter @Setter
-    public static class ManualPreferenceRequest {
-        private String phone;
-        private Long customerId;
     }
 
     /** Uploads a campaign header image to R2 and returns a 7-day presigned URL for Meta to fetch. */
