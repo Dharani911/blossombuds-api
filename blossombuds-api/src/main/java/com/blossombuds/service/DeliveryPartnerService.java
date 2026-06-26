@@ -3,6 +3,7 @@ package com.blossombuds.service;
 import com.blossombuds.domain.DeliveryPartner;
 import com.blossombuds.dto.DeliveryPartnerDto;
 import com.blossombuds.repository.DeliveryPartnerRepository;
+import com.blossombuds.repository.StatePartnerAllowlistRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -10,9 +11,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
 
-import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /** Application service for managing delivery/courier partners and their metadata. */
 @Slf4j
@@ -23,6 +24,7 @@ import java.util.Optional;
 public class DeliveryPartnerService {
 
     private final DeliveryPartnerRepository partnerRepo;
+    private final StatePartnerAllowlistRepository allowlistRepo;
 
     /** Creates a delivery partner from the provided DTO. */
     @Transactional
@@ -30,13 +32,10 @@ public class DeliveryPartnerService {
     public DeliveryPartner create(DeliveryPartnerDto dto, String actor) {
         validatePartnerDto(dto);
         DeliveryPartner p = new DeliveryPartner();
-        p.setCode(safeTrim(dto.getCode()));                    // <— code (not slug)
+        p.setCode(safeTrim(dto.getCode()));
         p.setName(safeTrim(dto.getName()));
         p.setTrackingUrlTemplate(safeTrim(dto.getTrackingUrlTemplate()));
-        p.setFixedFeeAmount(dto.getFixedFeeAmount());
-        p.setOverrideFreeShipping(
-                dto.getOverrideFreeShipping() != null ? dto.getOverrideFreeShipping() : Boolean.FALSE
-        );
+        p.setOverrideFreeShipping(dto.getOverrideFreeShipping() != null ? dto.getOverrideFreeShipping() : Boolean.FALSE);
         p.setActive(dto.getActive() != null ? dto.getActive() : Boolean.TRUE);
         p.setVisible(dto.getVisible() != null ? dto.getVisible() : Boolean.TRUE);
         //p.setCreatedBy(actor);
@@ -46,58 +45,22 @@ public class DeliveryPartnerService {
         return partnerRepo.save(p);
     }
     private void validatePartnerDto(DeliveryPartnerDto dto) {
-        if (dto == null) {
-            throw new IllegalArgumentException("DeliveryPartnerDto is required");
-        }
-
+        if (dto == null) throw new IllegalArgumentException("DeliveryPartnerDto is required");
         String code = safeTrim(dto.getCode());
         String name = safeTrim(dto.getName());
-
-        if (code == null || code.isBlank()) {
-            throw new IllegalArgumentException("Partner code is required");
-        }
-
-        if (name == null || name.isBlank()) {
-            throw new IllegalArgumentException("Partner name is required");
-        }
-
-        if (dto.getFixedFeeAmount() != null && dto.getFixedFeeAmount().signum() < 0) {
-            throw new IllegalArgumentException("Fixed fee amount cannot be negative");
-        }
-
-        if (Boolean.TRUE.equals(dto.getOverrideFreeShipping()) && dto.getFixedFeeAmount() == null) {
-            throw new IllegalArgumentException("Override free shipping requires a fixed fee amount");
-        }
+        if (code == null || code.isBlank()) throw new IllegalArgumentException("Partner code is required");
+        if (name == null || name.isBlank()) throw new IllegalArgumentException("Partner name is required");
     }
+
     private void validatePartnerDtoForUpdate(DeliveryPartnerDto dto) {
-        if (dto == null) {
-            throw new IllegalArgumentException("DeliveryPartnerDto is required");
-        }
-
-        if (dto.getFixedFeeAmount() != null && dto.getFixedFeeAmount().signum() < 0) {
-            throw new IllegalArgumentException("Fixed fee amount cannot be negative");
-        }
-
-        if (Boolean.TRUE.equals(dto.getOverrideFreeShipping()) && dto.getFixedFeeAmount() == null) {
-            throw new IllegalArgumentException("Override free shipping requires a fixed fee amount");
-        }
+        if (dto == null) throw new IllegalArgumentException("DeliveryPartnerDto is required");
     }
+
     private void validateResolvedPartner(DeliveryPartner p) {
-        if (safeTrim(p.getCode()) == null || safeTrim(p.getCode()).isBlank()) {
+        if (safeTrim(p.getCode()) == null || safeTrim(p.getCode()).isBlank())
             throw new IllegalArgumentException("Partner code is required");
-        }
-
-        if (safeTrim(p.getName()) == null || safeTrim(p.getName()).isBlank()) {
+        if (safeTrim(p.getName()) == null || safeTrim(p.getName()).isBlank())
             throw new IllegalArgumentException("Partner name is required");
-        }
-
-        if (p.getFixedFeeAmount() != null && p.getFixedFeeAmount().signum() < 0) {
-            throw new IllegalArgumentException("Fixed fee amount cannot be negative");
-        }
-
-        if (Boolean.TRUE.equals(p.getOverrideFreeShipping()) && p.getFixedFeeAmount() == null) {
-            throw new IllegalArgumentException("Override free shipping requires a fixed fee amount");
-        }
     }
     /** Updates mutable partner fields by id. */
     @Transactional
@@ -109,13 +72,12 @@ public class DeliveryPartnerService {
         DeliveryPartner p = partnerRepo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("DeliveryPartner not found: " + id));
 
-        if (dto.getCode() != null)               p.setCode(safeTrim(dto.getCode()));
-        if (dto.getName() != null)               p.setName(safeTrim(dto.getName()));
-        if (dto.getTrackingUrlTemplate() != null)p.setTrackingUrlTemplate(safeTrim(dto.getTrackingUrlTemplate()));
-        if (dto.getFixedFeeAmount() != null)        p.setFixedFeeAmount(dto.getFixedFeeAmount());
-        if (dto.getOverrideFreeShipping() != null)  p.setOverrideFreeShipping(dto.getOverrideFreeShipping());
-        if (dto.getActive() != null)             p.setActive(dto.getActive());
-        if (dto.getVisible() != null)            p.setVisible(dto.getVisible());
+        if (dto.getCode() != null)                 p.setCode(safeTrim(dto.getCode()));
+        if (dto.getName() != null)                 p.setName(safeTrim(dto.getName()));
+        if (dto.getTrackingUrlTemplate() != null)  p.setTrackingUrlTemplate(safeTrim(dto.getTrackingUrlTemplate()));
+        if (dto.getOverrideFreeShipping() != null) p.setOverrideFreeShipping(dto.getOverrideFreeShipping());
+        if (dto.getActive() != null)               p.setActive(dto.getActive());
+        if (dto.getVisible() != null)              p.setVisible(dto.getVisible());
         validateResolvedPartner(p);
         log.info("[DELIVERY_PARTNER][UPDATE] Partner updated: id={}, actor={}", id, actor);
         return partnerRepo.save(p);
@@ -148,6 +110,17 @@ public class DeliveryPartnerService {
     /** Lists only visible partners (for customer-facing features). */
     public List<DeliveryPartner> listVisible() {
         return partnerRepo.findByActiveTrueAndVisibleTrue();
+    }
+
+    /**
+     * Lists visible partners filtered by the state allowlist.
+     * If the state has no allowlist entries, all visible partners are returned.
+     */
+    public List<DeliveryPartner> listVisibleForState(Long stateId) {
+        List<DeliveryPartner> all = partnerRepo.findByActiveTrueAndVisibleTrue();
+        if (stateId == null || !allowlistRepo.existsByIdStateId(stateId)) return all;
+        Set<Long> allowed = Set.copyOf(allowlistRepo.findPartnerIdsByStateId(stateId));
+        return all.stream().filter(p -> allowed.contains(p.getId())).toList();
     }
 
     /** Soft-disables or enables a partner (soft-delete). */

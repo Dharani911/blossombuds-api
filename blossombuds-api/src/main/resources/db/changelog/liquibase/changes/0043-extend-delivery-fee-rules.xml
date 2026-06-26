@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- Add delivery_partner_id: partner-specific fee rules (null = applies to all) -->
+    <changeSet id="0043-01-add-partner-id-to-fee-rules" author="dharani">
+        <addColumn tableName="delivery_fee_rules">
+            <column name="delivery_partner_id" type="BIGINT"/>
+        </addColumn>
+        <addForeignKeyConstraint
+                baseTableName="delivery_fee_rules"
+                baseColumnNames="delivery_partner_id"
+                referencedTableName="delivery_partners"
+                referencedColumnNames="id"
+                constraintName="fk_dfr_partner"/>
+        <createIndex tableName="delivery_fee_rules" indexName="idx_dfr_partner_id">
+            <column name="delivery_partner_id"/>
+        </createIndex>
+    </changeSet>
+
+    <!-- Add region_id: used when scope = REGION -->
+    <changeSet id="0043-02-add-region-id-to-fee-rules" author="dharani">
+        <addColumn tableName="delivery_fee_rules">
+            <column name="region_id" type="BIGINT"/>
+        </addColumn>
+        <addForeignKeyConstraint
+                baseTableName="delivery_fee_rules"
+                baseColumnNames="region_id"
+                referencedTableName="delivery_regions"
+                referencedColumnNames="id"
+                constraintName="fk_dfr_region"/>
+    </changeSet>
+
+    <!-- Extend scope column to 16 chars to fit REGION (already fits, but make explicit) -->
+    <changeSet id="0043-03-ensure-scope-length" author="dharani">
+        <modifyDataType tableName="delivery_fee_rules" columnName="scope" newDataType="VARCHAR(16)"/>
+    </changeSet>
+
+</databaseChangeLog>

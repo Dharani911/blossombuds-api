@@ -1,11 +1,13 @@
-// src/api/adminShippingRules.ts
 import adminHttp from "./adminHttp";
 
-export type RuleScope = "DEFAULT" | "STATE" | "DISTRICT";
+export type RuleScope = "DEFAULT" | "STATE" | "DISTRICT" | "REGION";
+
 export type DeliveryFeeRule = {
   id?: number;
   scope: RuleScope | string;
   scopeId?: number | null;
+  regionId?: number | null;
+  deliveryPartnerId?: number | null;
   feeAmount: number | string;
   active?: boolean;
   createdBy?: string;
@@ -20,10 +22,12 @@ export async function listRules(): Promise<DeliveryFeeRule[]> {
 }
 
 export async function saveRule(rule: DeliveryFeeRule): Promise<DeliveryFeeRule> {
+  const scope = String(rule.scope || "DEFAULT").toUpperCase() as RuleScope;
   const payload = {
-    id: rule.id,
-    scope: String(rule.scope || "DEFAULT").toUpperCase(),
-    scopeId: String(rule.scope || "DEFAULT").toUpperCase() === "DEFAULT" ? null : (rule.scopeId ?? null),
+    scope,
+    scopeId: scope === "DEFAULT" || scope === "REGION" ? null : (rule.scopeId ?? null),
+    regionId: scope === "REGION" ? (rule.regionId ?? null) : null,
+    deliveryPartnerId: rule.deliveryPartnerId ?? null,
     feeAmount: Number(rule.feeAmount ?? 0),
     active: rule.active ?? true,
   };

@@ -632,7 +632,7 @@ useEffect(() => {
         } catch {/* ignore */ }
       })();
 
-      // delivery partners (domestic)
+      // delivery partners — initial load without stateId
       try {
         const { data } = await http.get<DeliveryPartnerLite[]>(`/api/partners/visible`);
         if (!alive) return;
@@ -833,7 +833,7 @@ useEffect(() => {
   const [shippingErr, setShippingErr] = useState<string | null>(null);
 
   const selectedDomesticAddress = useMemo(
-    () => domesticAddresses.find(a => a.id === selectedAddrId) || null,
+    () => domesticAddresses.find(a => a.id === selectedAddrId) ?? null,
     [domesticAddresses, selectedAddrId]
   );
 
@@ -859,6 +859,27 @@ useEffect(() => {
       setShippingLoading(false);
     }
   }
+
+  // Re-fetch the partner list when the delivery state changes (allowlist filtering).
+  useEffect(() => {
+    const stateId = selectedDomesticAddress?.stateId;
+    let alive = true;
+    (async () => {
+      try {
+        const url = stateId ? `/api/partners/visible?stateId=${stateId}` : `/api/partners/visible`;
+        const { data } = await http.get<DeliveryPartnerLite[]>(url);
+        if (!alive) return;
+        const available = data ?? [];
+        setPartners(available);
+        // Reset selected partner if it is no longer available for this state.
+        if (partnerId && !available.some(p => p.id === Number(partnerId))) {
+          setPartnerId("");
+        }
+      } catch { /* ignore */ }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDomesticAddress?.stateId]);
 
   // Trigger shipping preview whenever domestic flow + address or subtotal changes
   useEffect(() => {

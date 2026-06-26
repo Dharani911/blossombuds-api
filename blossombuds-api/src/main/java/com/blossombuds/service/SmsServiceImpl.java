@@ -26,7 +26,6 @@ public class SmsServiceImpl implements SmsService {
     private static final String TMPL_PASSWORD_RESET_OTP = "6a393ad1ef50c235180cbc92";
     private static final String TMPL_LOGIN_OTP          = "6a393a52bff9e83de0098490";
     private static final String TMPL_ORDER_CONFIRMED    = "6a3b868649a307e3f40b4422";
-    // TODO: replace with new Vilpower template ID once approved (4-variable template with tracking number)
     private static final String TMPL_ORDER_DISPATCHED   = "6a3b86a8e6c4dacaef0c0194";
     private static final String TMPL_ORDER_DELIVERED    = "6a3b86bfa4e8d7b91c036a84";
 
@@ -74,9 +73,9 @@ public class SmsServiceImpl implements SmsService {
     public void sendOrderDispatched(String phone, String customerName,
                                     String orderCode, String trackingNumber, String trackingUrl) {
         send(TMPL_ORDER_DISPATCHED, phone, Map.of(
-                "name", safe(customerName),
+                "customer", safe(customerName),
                 "ordercode", safe(orderCode),
-                "trackingnumber", safe(trackingNumber),
+                "trackingno", safe(trackingNumber),
                 "url", safe(trackingUrl)
         ));
     }

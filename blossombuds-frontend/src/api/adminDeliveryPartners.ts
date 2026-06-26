@@ -5,7 +5,6 @@ export type DeliveryPartner = {
   name: string;
   code: string;
   trackingUrlTemplate?: string | null;
-  fixedFeeAmount?: number | null;
   overrideFreeShipping?: boolean;
   active?: boolean;
   visible?: boolean;
@@ -21,7 +20,7 @@ export async function createPartner(payload: DeliveryPartner): Promise<DeliveryP
   return data;
 }
 
-export async function updatePartner(id: number, payload: DeliveryPartner): Promise<DeliveryPartner> {
+export async function updatePartner(id: number, payload: Partial<DeliveryPartner>): Promise<DeliveryPartner> {
   const { data } = await adminHttp.patch<DeliveryPartner>(`/api/partners/${id}`, payload);
   return data;
 }

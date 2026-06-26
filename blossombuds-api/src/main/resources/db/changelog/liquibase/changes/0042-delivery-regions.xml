@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- delivery_regions: named groups of states (e.g., "South India", "North India") -->
+    <changeSet id="0042-01-create-delivery-regions" author="dharani">
+        <createTable tableName="delivery_regions">
+            <column name="id" type="BIGSERIAL">
+                <constraints primaryKey="true" primaryKeyName="pk_delivery_regions"/>
+            </column>
+            <column name="name" type="VARCHAR(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+            <column name="modified_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()"/>
+        </createTable>
+    </changeSet>
+
+    <!-- delivery_region_states: maps states to regions (many-to-many) -->
+    <changeSet id="0042-02-create-delivery-region-states" author="dharani">
+        <createTable tableName="delivery_region_states">
+            <column name="region_id" type="BIGINT">
+                <constraints nullable="false"
+                             foreignKeyName="fk_drs_region"
+                             references="delivery_regions(id)"/>
+            </column>
+            <column name="state_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addPrimaryKey tableName="delivery_region_states"
+                       columnNames="region_id, state_id"
+                       constraintName="pk_delivery_region_states"/>
+        <createIndex tableName="delivery_region_states" indexName="idx_drs_state_id">
+            <column name="state_id"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

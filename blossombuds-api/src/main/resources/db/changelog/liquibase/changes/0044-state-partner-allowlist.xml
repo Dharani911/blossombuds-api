@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+      state_partner_allowlist:
+      If a state has rows here, ONLY those partners are shown at checkout for that state.
+      If a state has NO rows, all active+visible partners are shown (default behaviour).
+    -->
+    <changeSet id="0044-01-create-state-partner-allowlist" author="dharani">
+        <createTable tableName="state_partner_allowlist">
+            <column name="state_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="delivery_partner_id" type="BIGINT">
+                <constraints nullable="false"
+                             foreignKeyName="fk_spa_partner"
+                             references="delivery_partners(id)"/>
+            </column>
+        </createTable>
+        <addPrimaryKey tableName="state_partner_allowlist"
+                       columnNames="state_id, delivery_partner_id"
+                       constraintName="pk_state_partner_allowlist"/>
+        <createIndex tableName="state_partner_allowlist" indexName="idx_spa_state_id">
+            <column name="state_id"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

@@ -74,10 +74,15 @@ public class DeliveryPartnerController {
         return partners.listActive();
     }
 
-    /** List only visible partners (for customer-facing features). */
+    /**
+     * List visible partners for customer-facing features.
+     * Accepts optional stateId: when provided and the state has allowlist entries,
+     * only the allowed partners for that state are returned.
+     */
     @GetMapping("/visible")
-    public List<DeliveryPartner> listVisible() {
-        return partners.listVisible();
+    public List<DeliveryPartner> listVisible(
+            @RequestParam(required = false) Long stateId) {
+        return partners.listVisibleForState(stateId);
     }
 
     /** Toggle active flag (soft-delete, admin). */

@@ -68,15 +68,7 @@ export default function AdminDeliveryPartners() {
 
  function openNew() {
    setMode("new");
-   setDraft({
-     name: "",
-     code: "",
-     trackingUrlTemplate: "",
-     fixedFeeAmount: null,
-     overrideFreeShipping: false,
-     active: true,
-     visible: true,
-   });
+   setDraft({ name: "", code: "", trackingUrlTemplate: "", overrideFreeShipping: false, active: true, visible: true });
  }
 
   function openEdit(p: DeliveryPartner) {
@@ -101,17 +93,6 @@ export default function AdminDeliveryPartners() {
       return;
     }
 
-    const rawFee = draft.fixedFeeAmount;
-    const normalizedFee =
-      rawFee === null || rawFee === undefined || rawFee === ("" as any)
-        ? null
-        : Number(rawFee);
-
-    if (normalizedFee != null && (!Number.isFinite(normalizedFee) || normalizedFee < 0)) {
-      setToast({ kind: "bad", msg: "Fixed fee must be a valid non-negative number." });
-      return;
-    }
-
     setSaving(true);
     try {
       const payload: DeliveryPartner = {
@@ -119,8 +100,6 @@ export default function AdminDeliveryPartners() {
         name,
         code,
         trackingUrlTemplate: (draft.trackingUrlTemplate || "").trim() || null,
-        fixedFeeAmount: normalizedFee,
-        overrideFreeShipping: Boolean(draft.overrideFreeShipping),
       };
 
       let saved: DeliveryPartner;
@@ -218,7 +197,6 @@ export default function AdminDeliveryPartners() {
             <div className="dp-table">
               <div className="dp-thead">
                 <div>Partner</div>
-                <div>Shipping</div>
                 <div>Status</div>
                 <div style={{ textAlign: "right" }}>Actions</div>
               </div>
@@ -235,17 +213,6 @@ export default function AdminDeliveryPartners() {
                       ) : (
                         <span className="dp-track muted">No tracking URL</span>
                       )}
-                    </div>
-                  </div>
-
-                  <div className="dp-shipmeta">
-                    <div className="dp-fee">
-                      {p.fixedFeeAmount != null ? `₹${Number(p.fixedFeeAmount).toFixed(2)}` : "No fixed fee"}
-                    </div>
-                    <div className="dp-chiprow">
-                      <span className={p.overrideFreeShipping ? "dp-chip bad" : "dp-chip ok"}>
-                        {p.overrideFreeShipping ? "Overrides free shipping" : "Normal shipping"}
-                      </span>
                     </div>
                   </div>
 
@@ -303,36 +270,14 @@ export default function AdminDeliveryPartners() {
                     placeholder="https://track.example.com/{trackingNumber}"
                   />
                 </div>
-                <div className="dp-f">
-                  <label>Fixed Fee Amount (₹)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={draft.fixedFeeAmount ?? ""}
-                    onChange={e =>
-                      setDraft({
-                        ...draft,
-                        fixedFeeAmount: e.target.value === "" ? null : Number(e.target.value),
-                      })
-                    }
-                    placeholder="80"
-                  />
-                </div>
-
                 <div className="dp-f dp-chk">
                   <label>
                     <input
                       type="checkbox"
-                      checked={Boolean(draft.overrideFreeShipping)}
-                      onChange={e =>
-                        setDraft({
-                          ...draft,
-                          overrideFreeShipping: e.target.checked,
-                        })
-                      }
+                      checked={!!draft.overrideFreeShipping}
+                      onChange={e => setDraft({ ...draft, overrideFreeShipping: e.target.checked })}
                     />
-                    <span>Override free shipping threshold</span>
+                    <span>Override free shipping (always charge this partner's fee, even on large orders)</span>
                   </label>
                 </div>
                 <div className="dp-f dp-chk">

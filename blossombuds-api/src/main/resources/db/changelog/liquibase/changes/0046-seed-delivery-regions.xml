@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Seed "South India" delivery region.
+        States included: Karnataka (16), Kerala (17), Andhra Pradesh (2), Telangana (32).
+        Tamil Nadu (31) is intentionally excluded — it has its own STATE-scope fee rules
+        that take precedence over the region rule in the 8-step hierarchy.
+    -->
+    <changeSet id="0046-01-seed-region-south-india" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM delivery_regions WHERE name = 'South India'
+            </sqlCheck>
+        </preConditions>
+        <sql endDelimiter=";">
+            INSERT INTO delivery_regions (name, active, created_at, modified_at)
+            VALUES ('South India', true, NOW(), NOW());
+
+            INSERT INTO delivery_region_states (region_id, state_id)
+            SELECT r.id, s.state_id
+            FROM delivery_regions r
+            CROSS JOIN (VALUES (2),(16),(17),(32)) AS s(state_id)
+            WHERE r.name = 'South India';
+        </sql>
+        <rollback>
+            DELETE FROM delivery_region_states
+            WHERE region_id = (SELECT id FROM delivery_regions WHERE name = 'South India');
+            DELETE FROM delivery_regions WHERE name = 'South India';
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

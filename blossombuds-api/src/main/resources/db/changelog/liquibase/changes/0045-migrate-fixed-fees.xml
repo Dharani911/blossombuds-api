@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+      Migrate existing delivery_partners.fixed_fee_amount into delivery_fee_rules
+      as DEFAULT-scope partner-specific rules, so the new rule-based system handles them.
+      The fixed_fee_amount and override_free_shipping columns are kept in the table
+      but are no longer read by the application.
+    -->
+    <changeSet id="0045-01-migrate-fixed-fees-to-rules" author="dharani">
+        <sql>
+            INSERT INTO delivery_fee_rules
+                (scope, scope_id, fee_amount, delivery_partner_id, region_id, active, created_at, modified_at)
+            SELECT
+                'DEFAULT',
+                NULL,
+                fixed_fee_amount,
+                id,
+                NULL,
+                true,
+                NOW(),
+                NOW()
+            FROM delivery_partners
+            WHERE fixed_fee_amount IS NOT NULL
+              AND active = true;
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

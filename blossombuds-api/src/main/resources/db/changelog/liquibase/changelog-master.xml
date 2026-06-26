@@ -51,4 +51,9 @@
     <include file="db/changelog/liquibase/changes/0039-payment-reminders-table.xml"/>
     <include file="db/changelog/liquibase/changes/0040-whatsapp-contacts.xml"/>
     <include file="db/changelog/liquibase/changes/0041-seed-expo-outreach-template.xml"/>
+    <include file="db/changelog/liquibase/changes/0042-delivery-regions.xml"/>
+    <include file="db/changelog/liquibase/changes/0043-extend-delivery-fee-rules.xml"/>
+    <include file="db/changelog/liquibase/changes/0044-state-partner-allowlist.xml"/>
+    <include file="db/changelog/liquibase/changes/0045-migrate-fixed-fees.xml"/>
+    <include file="db/changelog/liquibase/changes/0046-seed-delivery-regions.xml"/>
 </databaseChangeLog>

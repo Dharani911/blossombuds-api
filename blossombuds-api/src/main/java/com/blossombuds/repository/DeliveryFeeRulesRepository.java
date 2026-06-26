@@ -8,37 +8,48 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * Delivery fee rules repository.
- *
- * Notes:
- * - The service currently checks the rule's `active` flag,
- *   so these non-filtered methods are required as-is.
- * - Active-only variants are provided for convenience.
- */
 @Repository
 public interface DeliveryFeeRulesRepository extends JpaRepository<DeliveryFeeRules, Long> {
 
-    /* ===== Methods used by DeliveryFeeRulesService ===== */
-
-    /** Most recent (highest id) rule for a specific district/state. */
-    Optional<DeliveryFeeRules> findTopByScopeAndScopeIdOrderByIdDesc(RuleScope scope, Long scopeId);
-
-    /** Most recent DEFAULT-scope rule (scopeId = null). */
-    Optional<DeliveryFeeRules> findTopByScopeAndScopeIdIsNullOrderByIdDesc(RuleScope scope);
-
-    /** List all rules newest-first (useful for admin list). */
+    /** Admin list — all active rules, newest first. */
     List<DeliveryFeeRules> findAllByOrderByIdDesc();
 
+    List<DeliveryFeeRules> findAllByActiveTrueOrderByIdDesc();
 
-    /* ===== Optional convenience methods (not required by the service) ===== */
+    // ── Partner-specific lookups (steps 1–4 in hierarchy) ────────────────────
 
-    /** Active-only variants (use if you want repo to filter `active = true`). */
+    /** Partner + STATE or DISTRICT (scopeId required). */
+    Optional<DeliveryFeeRules> findTopByDeliveryPartnerIdAndScopeAndScopeIdAndActiveTrueOrderByIdDesc(
+            Long deliveryPartnerId, RuleScope scope, Long scopeId);
+
+    /** Partner + REGION (regionId required). */
+    Optional<DeliveryFeeRules> findTopByDeliveryPartnerIdAndScopeAndRegionIdAndActiveTrueOrderByIdDesc(
+            Long deliveryPartnerId, RuleScope scope, Long regionId);
+
+    /** Partner + DEFAULT (no scopeId, no regionId). */
+    Optional<DeliveryFeeRules> findTopByDeliveryPartnerIdAndScopeAndScopeIdIsNullAndRegionIdIsNullAndActiveTrueOrderByIdDesc(
+            Long deliveryPartnerId, RuleScope scope);
+
+    // ── No-partner fallback lookups (steps 5–8 in hierarchy) ─────────────────
+
+    /** No partner + STATE or DISTRICT (scopeId required). */
+    Optional<DeliveryFeeRules> findTopByDeliveryPartnerIdIsNullAndScopeAndScopeIdAndActiveTrueOrderByIdDesc(
+            RuleScope scope, Long scopeId);
+
+    /** No partner + REGION (regionId required). */
+    Optional<DeliveryFeeRules> findTopByDeliveryPartnerIdIsNullAndScopeAndRegionIdAndActiveTrueOrderByIdDesc(
+            RuleScope scope, Long regionId);
+
+    /** No partner + DEFAULT (no scopeId, no regionId). */
+    Optional<DeliveryFeeRules> findTopByDeliveryPartnerIdIsNullAndScopeAndScopeIdIsNullAndRegionIdIsNullAndActiveTrueOrderByIdDesc(
+            RuleScope scope);
+
+    // ── Legacy queries kept for any callers outside the service ──────────────
+
+    Optional<DeliveryFeeRules> findTopByScopeAndScopeIdOrderByIdDesc(RuleScope scope, Long scopeId);
+    Optional<DeliveryFeeRules> findTopByScopeAndScopeIdIsNullOrderByIdDesc(RuleScope scope);
     Optional<DeliveryFeeRules> findTopByScopeAndScopeIdAndActiveTrueOrderByIdDesc(RuleScope scope, Long scopeId);
     Optional<DeliveryFeeRules> findTopByScopeAndScopeIdIsNullAndActiveTrueOrderByIdDesc(RuleScope scope);
-
-    /** Filtered lists for admin views, newest-first. */
     List<DeliveryFeeRules> findByScopeOrderByIdDesc(RuleScope scope);
     List<DeliveryFeeRules> findByScopeAndScopeIdOrderByIdDesc(RuleScope scope, Long scopeId);
-    List<DeliveryFeeRules> findAllByActiveTrueOrderByIdDesc();
 }

@@ -9,6 +9,7 @@ import AdminFeatureImagesSetting from "../../components/admin/AdminFeatureImages
 import AdminCoupons from "../../components/admin/AdminCoupons";
 import AdminDeliveryPartners from "../../components/admin/AdminDeliveryPartners";
 import AdminDeliveryFeeRules from "../../components/admin/AdminDeliveryFeeRules";
+import AdminDeliveryRegions from "../../components/admin/AdminDeliveryRegions";
 import AdminGlobalSale from "../../components/admin/AdminGlobalSale";
 
 /* ---- theme tokens ---- */
@@ -339,6 +340,9 @@ export default function SettingsPage() {
 
       {/* Delivery Partners */}
       <AdminDeliveryPartners />
+
+      {/* Delivery Regions + State Allowlist */}
+      <AdminDeliveryRegions />
 
       {/* Delivery Fee Rules (admin, uses Bearer token) */}
       <AdminDeliveryFeeRules />

@@ -16,9 +16,11 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 
 /**
- * DeliveryFeeRule — per-geo shipping fee rule.
- * scope: DEFAULT / STATE / DISTRICT
- * scopeId: null for DEFAULT, or the referenced states.id / districts.id
+ * DeliveryFeeRule — per-geo, per-partner shipping fee rule.
+ * scope: DEFAULT / STATE / DISTRICT / REGION
+ * scopeId: FK to states.id or districts.id (STATE/DISTRICT scope); null otherwise
+ * regionId: FK to delivery_regions.id (REGION scope); null otherwise
+ * deliveryPartnerId: FK to delivery_partners.id; null means rule applies to all partners
  */
 @Getter
 @Setter
@@ -26,7 +28,8 @@ import java.time.OffsetDateTime;
 @Table(name = "delivery_fee_rules", indexes = {
         @Index(name = "idx_dfr_scope", columnList = "scope"),
         @Index(name = "idx_dfr_scope_scopeid", columnList = "scope, scope_id"),
-        @Index(name = "idx_dfr_active", columnList = "active")
+        @Index(name = "idx_dfr_active", columnList = "active"),
+        @Index(name = "idx_dfr_partner_id", columnList = "delivery_partner_id")
 })
 @EntityListeners(AuditingEntityListener.class)
 @SQLDelete(sql = "UPDATE delivery_fee_rules SET active=false, modified_at=now() WHERE id=?")
@@ -38,14 +41,22 @@ public class DeliveryFeeRules {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** Rule scope: DEFAULT, STATE, or DISTRICT (stored as VARCHAR). */
+    /** Rule scope: DEFAULT, STATE, DISTRICT, or REGION (stored as VARCHAR). */
     @Enumerated(EnumType.STRING)
     @Column(name = "scope", length = 16, nullable = false)
     private RuleScope scope;
 
-    /** FK to states.id or districts.id depending on scope; null for DEFAULT. */
+    /** FK to states.id or districts.id depending on scope; null for DEFAULT and REGION. */
     @Column(name = "scope_id")
     private Long scopeId;
+
+    /** FK to delivery_regions.id; only set when scope = REGION. */
+    @Column(name = "region_id")
+    private Long regionId;
+
+    /** FK to delivery_partners.id; null means this rule applies to all partners. */
+    @Column(name = "delivery_partner_id")
+    private Long deliveryPartnerId;
 
     /** Fee amount in INR. */
     @Column(name = "fee_amount", precision = 10, scale = 2, nullable = false)
@@ -73,6 +84,6 @@ public class DeliveryFeeRules {
 
     /** Scope enum matching the VARCHAR values in the DB. */
     public enum RuleScope {
-        DEFAULT, STATE, DISTRICT
+        DEFAULT, STATE, DISTRICT, REGION
     }
 }
