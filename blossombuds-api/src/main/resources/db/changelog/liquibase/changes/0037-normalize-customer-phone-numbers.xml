@@ -53,7 +53,7 @@ WHERE c.id = normalized.id
         AND (
             other.phone = normalized.e164
             OR (
-                other.id < c.id
+                other.id &lt; c.id
                 AND CASE
                     WHEN regexp_replace(other.phone, '[^0-9]', '', 'g') ~ '^[6-9][0-9]{9}$'
                         THEN '+91' || regexp_replace(other.phone, '[^0-9]', '', 'g')
