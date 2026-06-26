@@ -36,6 +36,9 @@ public class RedisConfig implements CachingConfigurer {
     @Value("${spring.data.redis.url:}")
     private String redisUrl;
 
+    @Value("${app.cache.key-version:v31}")
+    private String cacheKeyVersion;
+
     @PostConstruct
     public void logRedisUrl() {
         String safe = redisUrl == null ? "" : redisUrl.replaceAll("://([^:]+):([^@]+)@", "://$1:***@");
@@ -71,8 +74,8 @@ public class RedisConfig implements CachingConfigurer {
         var valueSerializer = new GenericJackson2JsonRedisSerializer(redisOm);
 
         RedisCacheConfiguration base = RedisCacheConfiguration.defaultCacheConfig()
-                // IMPORTANT: bump this when serialization format changes
-                .computePrefixWith(cacheName -> "bb:v30:" + cacheName + "::")
+                // IMPORTANT: bump app.cache.key-version in application.properties when serialization format changes
+                .computePrefixWith(cacheName -> "bb:" + cacheKeyVersion + ":" + cacheName + "::")
                 .entryTtl(defaultTtl)
                 .disableCachingNullValues()
                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
@@ -128,13 +131,13 @@ public class RedisConfig implements CachingConfigurer {
 
 
             @Override public void handleCachePutError(RuntimeException ex, Cache cache, Object key, Object value) {
-                log.warn("Cache PUT failed. cache={}, key={}", cache.getName(), key, ex.getMessage());
+                log.warn("Cache PUT failed. cache={}, key={}, msg={}", cache.getName(), key, ex.getMessage());
             }
             @Override public void handleCacheEvictError(RuntimeException ex, Cache cache, Object key) {
-                log.warn("Cache EVICT failed. cache={}, key={}", cache.getName(), key, ex.getMessage());
+                log.warn("Cache EVICT failed. cache={}, key={}, msg={}", cache.getName(), key, ex.getMessage());
             }
             @Override public void handleCacheClearError(RuntimeException ex, Cache cache) {
-                log.warn("Cache CLEAR failed. cache={}", cache.getName(), ex.getMessage());
+                log.warn("Cache CLEAR failed. cache={}, msg={}", cache.getName(), ex.getMessage());
             }
         };
     }

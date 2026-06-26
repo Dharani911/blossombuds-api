@@ -31,10 +31,12 @@ export default function HomeCategoryCarousel({
   useEffect(() => {
     let live = true;
 
-    (async () => {
+    const load = async (attempt: number) => {
       try {
-        setLoading(true);
-        setErr(null);
+        if (attempt === 0) {
+          setLoading(true);
+          setErr(null);
+        }
 
         const all = await getCategories();
         if (!live) return;
@@ -48,13 +50,20 @@ export default function HomeCategoryCarousel({
           );
 
         setItems(parents);
+        setLoading(false);
       } catch (e: any) {
         if (!live) return;
-        setErr(e?.response?.data?.message || "Could not load categories.");
-      } finally {
-        if (live) setLoading(false);
+        if (attempt < 2) {
+          // Silently retry — keeps skeleton visible during transient failures (e.g. cold start)
+          setTimeout(() => { if (live) load(attempt + 1); }, 1500);
+        } else {
+          setErr(e?.response?.data?.message || "Could not load categories.");
+          setLoading(false);
+        }
       }
-    })();
+    };
+
+    load(0);
 
     return () => {
       live = false;

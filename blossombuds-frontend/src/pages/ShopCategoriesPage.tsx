@@ -299,6 +299,7 @@ useEffect(() => {
     }
 
     (async () => {
+      const DELAYS = [3000, 8000, 20000];
       try {
         if (!cached?.length) setLoadingCats(true);
         setErr(null);
@@ -309,17 +310,24 @@ useEffect(() => {
       } catch {
         if (!live) return;
         if (cached?.length) { if (live) setLoadingCats(false); return; } // already showing cache
-        // retry after 3 s — backend is on paid plan (no sleep), just a transient failure
-        await new Promise((r) => setTimeout(r, 3000));
-        if (!live) return;
-        try {
-          const all = await getCategories();
+        // Retry up to 3 times with increasing delays before surfacing the error
+        let lastErr: any = null;
+        for (const delay of DELAYS) {
+          await new Promise((r) => setTimeout(r, delay));
           if (!live) return;
-          setCats(all || []);
-          if (all?.length) cacheWrite(CACHE_CATS_KEY, all);
-        } catch (e2: any) {
-          if (!live) return;
-          if (!cached?.length) setErr(e2?.response?.data?.message || "Could not load categories.");
+          try {
+            const all = await getCategories();
+            if (!live) return;
+            setCats(all || []);
+            if (all?.length) cacheWrite(CACHE_CATS_KEY, all);
+            lastErr = null;
+            break;
+          } catch (e: any) {
+            lastErr = e;
+          }
+        }
+        if (lastErr && live && !cached?.length) {
+          setErr(lastErr?.response?.data?.message || "Could not load categories.");
         }
       } finally {
         if (live) setLoadingCats(false);
@@ -1146,7 +1154,7 @@ useEffect(() => {
             </>
           )}
 
-          {!allMode && selectedParentId && !selParent && (
+          {!allMode && selectedParentId && !selParent && !err && (
             <section className="card pad muted">Loading category…</section>
           )}
 
