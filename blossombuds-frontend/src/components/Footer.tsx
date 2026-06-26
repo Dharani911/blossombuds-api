@@ -127,7 +127,7 @@ export default function Footer() {
           <div className="bbf-copy">
             © {year} Blossom Buds Floral Artistry
             <br />
-            <span className="bbf-credit">Crafted &amp; built by Dharani Perumal Samy</span>
+            <span className="bbf-credit">Crafted &amp; built by <a href="https://dsgn-by-dharani.vercel.app/" target="_blank" rel="noopener noreferrer" className="bbf-credit-link">Dharani Perumal Samy</a></span>
           </div>
           <div className="bbf-bottomLinks">
             <FooterLink to="/pages/privacy">Privacy</FooterLink>
@@ -284,6 +284,8 @@ const styles = `
 }
 .bbf-bottomLinks{ display:flex; gap:12px; flex-wrap: wrap; }
 .bbf-copy{ opacity:.95; }
+.bbf-credit-link{ color:inherit; text-decoration:underline; text-underline-offset:2px; opacity:.8; transition:opacity .18s ease; }
+.bbf-credit-link:hover{ opacity:1; }
 
 /* Tablet */
 @media (max-width: 960px){
