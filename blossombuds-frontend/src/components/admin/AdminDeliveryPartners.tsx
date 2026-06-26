@@ -198,7 +198,7 @@ export default function AdminDeliveryPartners() {
               <div className="dp-thead">
                 <div>Partner</div>
                 <div>Status</div>
-                <div style={{ textAlign: "right" }}>Actions</div>
+                <div className="dp-actions-heading">Actions</div>
               </div>
               {filtered.map(p => (
                 <div className="dp-row" key={p.id ?? p.code}>
@@ -357,7 +357,10 @@ const css = `
 .dp-muted{ opacity:.75; font-size:13px; color:var(--dp-subtle); margin-top:4px; }
 .dp-hd-left{ flex:1; }
 .dp-hd-right{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-
+.dp-actions-heading{
+  text-align:right;
+  padding-right:2px;
+}
 /* ─────────────── SEARCH ─────────────── */
 .dp-search input{
   height:42px; border:1px solid var(--dp-ink); border-radius:14px; padding:0 16px;
@@ -423,12 +426,15 @@ const css = `
 }
 
 /* ─────────────── TABLE ─────────────── */
-.dp-table{ display:grid; max-height:400px; overflow-y:auto; }
+.dp-table{
+  display:grid;
+  overflow:visible;
+}
 .dp-thead, .dp-row{
   display:grid;
-  grid-template-columns: minmax(260px, 1.7fr) minmax(180px, 1fr) 120px minmax(180px, auto);
-  gap:16px;
-  padding:14px 20px;
+  grid-template-columns: minmax(320px, 1.7fr) minmax(140px, .6fr) minmax(310px, auto);
+  gap:24px;
+  padding:16px 20px;
   align-items:center;
 }
 .dp-thead{
@@ -474,7 +480,13 @@ const css = `
 }
 
 /* ─────────────── ACTIONS ─────────────── */
-.dp-act{ display:flex; gap:8px; justify-content:flex-end; }
+.dp-act{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:8px;
+  white-space:nowrap;
+}
 
 /* ─────────────── EMPTY STATE ─────────────── */
 .dp-empty{ padding:48px 24px; text-align:center; color:var(--dp-text); }
@@ -574,9 +586,9 @@ const css = `
 /* ─────────────── RESPONSIVE ─────────────── */
 @media (max-width: 1024px){
   .dp-thead, .dp-row{
-    grid-template-columns: minmax(220px, 1.5fr) minmax(160px, 1fr) 110px minmax(170px, auto);
-    gap:12px;
-    padding:12px 16px;
+    grid-template-columns: minmax(240px, 1.5fr) minmax(120px, .55fr) minmax(285px, auto);
+    gap:16px;
+    padding:14px 16px;
   }
 }
 @media (max-width: 768px){
