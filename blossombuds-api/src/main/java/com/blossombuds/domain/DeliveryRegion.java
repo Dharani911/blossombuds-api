@@ -30,7 +30,7 @@ public class DeliveryRegion {
     private Boolean active = Boolean.TRUE;
 
     /** IDs of states belonging to this region. */
-    @ElementCollection
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(
             name = "delivery_region_states",
             joinColumns = @JoinColumn(name = "region_id")
