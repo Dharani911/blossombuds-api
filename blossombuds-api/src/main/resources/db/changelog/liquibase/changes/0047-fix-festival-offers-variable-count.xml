@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+          http://www.liquibase.org/xml/ns/dbchangelog
+          https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+        The festival_offers template was approved by Meta with 2 body variables ({{1}} name,
+        {{2}} offer text). The link/{{3}} was not included in the approved body — the shop
+        button uses a static URL. Correct variable_count and body_preview to match.
+    -->
+    <changeSet id="0047-01-fix-festival-offers-variable-count" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="1">
+                SELECT COUNT(*) FROM whatsapp_templates
+                WHERE provider_template_name = 'festival_offers'
+                AND variable_count = 3
+            </sqlCheck>
+        </preConditions>
+        <update tableName="whatsapp_templates">
+            <column name="variable_count" valueNumeric="2"/>
+            <column name="body_preview" value="Hi {{1}}, celebrate the festive season with Blossom Buds! {{2}} 🌸 Discover our fresh, handcrafted floral arrangements for every occasion."/>
+            <column name="modified_by" value="system"/>
+            <column name="modified_at" valueComputed="NOW()"/>
+            <where>provider_template_name = 'festival_offers'</where>
+        </update>
+        <rollback>
+            <update tableName="whatsapp_templates">
+                <column name="variable_count" valueNumeric="3"/>
+                <column name="body_preview" value="Hi {{1}}, celebrate the festive season with Blossom Buds! Enjoy {{2}} on our floral collections this season. Shop now: {{3}}"/>
+                <column name="modified_by" value="system"/>
+                <column name="modified_at" valueComputed="NOW()"/>
+                <where>provider_template_name = 'festival_offers'</where>
+            </update>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

@@ -370,7 +370,6 @@ public class WhatsAppCampaignService {
         if ("festival_offers".equalsIgnoreCase(templateName)) {
             variables.add(name);
             variables.add(isBlank(offerText) ? "exclusive discounts" : offerText);
-            variables.add(isBlank(link) ? "https://www.blossom-buds-floral-artistry.com/categories" : link);
             return variables;
         }
 
