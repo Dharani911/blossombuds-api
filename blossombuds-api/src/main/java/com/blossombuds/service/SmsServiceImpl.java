@@ -56,7 +56,7 @@ public class SmsServiceImpl implements SmsService {
 
     @Override
     public void sendLoginOtp(String phone, String otpCode) {
-        send(TMPL_LOGIN_OTP, phone, Map.of("numeric", otpCode));
+        send(TMPL_LOGIN_OTP, phone, Map.of("number", otpCode));
     }
 
     @Override
