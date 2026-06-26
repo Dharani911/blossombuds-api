@@ -31,10 +31,10 @@
     <changeSet id="0041-01-seed-template-expo-outreach" author="dharani">
         <preConditions onFail="MARK_RAN">
             <sqlCheck expectedResult="0">
-                SELECT COUNT(*) FROM bb_app.whatsapp_templates WHERE provider_template_name = 'expo_outreach'
+                SELECT COUNT(*) FROM whatsapp_templates WHERE provider_template_name = 'expo_outreach'
             </sqlCheck>
         </preConditions>
-        <insert tableName="whatsapp_templates" schemaName="bb_app">
+        <insert tableName="whatsapp_templates">
             <column name="name"                   value="Expo Outreach"/>
             <column name="provider_template_name" value="expo_outreach"/>
             <column name="category"               value="MARKETING"/>
@@ -48,7 +48,7 @@
             <column name="modified_at"            valueComputed="NOW()"/>
         </insert>
         <rollback>
-            DELETE FROM bb_app.whatsapp_templates WHERE provider_template_name = 'expo_outreach';
+            DELETE FROM whatsapp_templates WHERE provider_template_name = 'expo_outreach';
         </rollback>
     </changeSet>
 
