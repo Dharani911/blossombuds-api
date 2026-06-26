@@ -9,9 +9,10 @@ import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 @Slf4j
 @Component
+@ConditionalOnProperty(name = "app.cache.redis.enabled", havingValue = "true")
 public class RedisProbe {
 
     @Value("${spring.data.redis.url:}")

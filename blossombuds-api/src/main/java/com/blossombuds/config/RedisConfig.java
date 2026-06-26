@@ -24,13 +24,14 @@ import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSeriali
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.SerializationException;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
-
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import java.time.Duration;
 import java.util.Map;
 
 /** Redis cache configuration for Spring Cache with safe JSON serialization and cache-versioning. */
 @Configuration
 @EnableCaching
+@ConditionalOnProperty(name = "app.cache.redis.enabled", havingValue = "true")
 @Slf4j
 public class RedisConfig implements CachingConfigurer {
     @Value("${spring.data.redis.url:}")
