@@ -115,6 +115,9 @@ public class WhatsAppWebhookService {
             event.setCreatedAt(OffsetDateTime.now());
             messageEventRepository.save(event);
 
+            log.info("[WHATSAPP][WEBHOOK][STATUS_EVENT] wamid={} recipient={} status={} errorCode={} errorMessage={}",
+                    providerMessageId, maskPhone(phone), providerStatus, errorCode, errorMessage);
+
             updateRecipientStatus(providerMessageId, providerStatus, errorMessage);
         }
     }

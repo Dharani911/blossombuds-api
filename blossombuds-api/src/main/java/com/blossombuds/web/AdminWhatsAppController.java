@@ -126,7 +126,20 @@ public class AdminWhatsAppController {
     @PostMapping(value = "/upload-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String, String> uploadCampaignImage(@RequestParam("file") MultipartFile file) throws IOException {
         String contentType = file.getContentType() != null ? file.getContentType() : "image/jpeg";
-        String ext = contentType.contains("png") ? "png" : contentType.contains("webp") ? "webp" : "jpg";
+        if (!MediaType.IMAGE_JPEG_VALUE.equalsIgnoreCase(contentType)
+                && !MediaType.IMAGE_PNG_VALUE.equalsIgnoreCase(contentType)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "WhatsApp campaign header image must be JPEG or PNG. WebP is not supported."
+            );
+        }
+        if (file.getSize() > 5L * 1024 * 1024) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "WhatsApp campaign header image must be 5 MB or smaller."
+            );
+        }
+        String ext = MediaType.IMAGE_PNG_VALUE.equalsIgnoreCase(contentType) ? "png" : "jpg";
         String filename = UUID.randomUUID() + "." + ext;
         String key = "ui/whatsapp-campaigns/" + filename;
 

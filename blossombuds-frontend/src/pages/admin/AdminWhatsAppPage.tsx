@@ -511,7 +511,7 @@ async function handleDisablePreference(id: number) {
                   <Field label="Header image (required)">
                     <input
                       type="file"
-                      accept="image/jpeg,image/png,image/webp"
+                      accept="image/jpeg,image/png"
                       className="whatsapp-input"
                       onChange={handleImageUpload}
                       disabled={imageUploading}
