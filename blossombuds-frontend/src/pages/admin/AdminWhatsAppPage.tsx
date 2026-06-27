@@ -216,6 +216,12 @@ const [preferenceCustomerId, setPreferenceCustomerId] = useState("");
       return;
     }
 
+    const IMAGE_HEADER_TEMPLATES = ["new_arrivals_campaign", "festival_offers", "expo_outreach"];
+    if (IMAGE_HEADER_TEMPLATES.includes(providerTemplateName) && !imageUrl.trim()) {
+      setMessage("A header image is required for this template. Please upload an image before creating the campaign.");
+      return;
+    }
+
     const payload: CreateWhatsAppCampaignRequest = {
       title,
       templateId: Number(templateId),
@@ -394,9 +400,12 @@ async function handleDisablePreference(id: number) {
         <main className="whatsapp-layout">
           <section className="whatsapp-card">
             <div className="whatsapp-card-header">
-              <h2 className="whatsapp-card-title">Create campaign</h2>
+              <h2 className="whatsapp-card-title">
+                <span className="whatsapp-step-chip">1</span>
+                Create campaign
+              </h2>
               <p className="whatsapp-card-subtitle">
-                Start with one manual test recipient before using the full opted-in audience.
+                Fill in the details below and click <strong>Create Campaign</strong>. No messages are sent yet — that's Step 3.
               </p>
             </div>
 
@@ -455,6 +464,11 @@ async function handleDisablePreference(id: number) {
                   )}
                 </select>
               </Field>
+              <p className="whatsapp-audience-hint">
+                {audienceType === "MANUAL" && "Send to one specific phone number. Use this first to test your message."}
+                {audienceType === "ALL_OPTED_IN" && "Send to all customers who have agreed to receive WhatsApp messages from you."}
+                {audienceType === "EXPO_CONTACTS" && "Send to leads collected at events. Only works with the expo_outreach template."}
+              </p>
 
               {audienceType === "MANUAL" && (
                 <div className="whatsapp-section-box whatsapp-section-box-muted">
@@ -482,37 +496,41 @@ async function handleDisablePreference(id: number) {
               <div className="whatsapp-section-box">
                 {(providerTemplateName === "new_arrivals_campaign" ||
                   providerTemplateName === "festival_offers") && (
-                  <>
-                    <Field label="Marketing link">
-                      <input
-                        className="whatsapp-input"
-                        value={link}
-                        onChange={(e) => setLink(e.target.value)}
-                      />
-                    </Field>
-                    <Field label="Header image (required if template has an image header)">
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        className="whatsapp-input"
-                        onChange={handleImageUpload}
-                        disabled={imageUploading}
-                      />
-                      {imageUploading && (
-                        <p className="whatsapp-card-subtitle">Uploading image...</p>
-                      )}
-                      {imagePreview && !imageUploading && (
-                        <img
-                          src={imagePreview}
-                          alt="Campaign header preview"
-                          className="whatsapp-image-preview"
-                        />
-                      )}
-                    </Field>
-                  </>
+                  <Field label="Marketing link">
+                    <input
+                      className="whatsapp-input"
+                      value={link}
+                      onChange={(e) => setLink(e.target.value)}
+                    />
+                  </Field>
                 )}
 
-                {providerTemplateName === "festival_offers" && (
+                {(providerTemplateName === "new_arrivals_campaign" ||
+                  providerTemplateName === "festival_offers" ||
+                  providerTemplateName === "expo_outreach") && (
+                  <Field label="Header image (required)">
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="whatsapp-input"
+                      onChange={handleImageUpload}
+                      disabled={imageUploading}
+                    />
+                    {imageUploading && (
+                      <p className="whatsapp-card-subtitle">Uploading image...</p>
+                    )}
+                    {imagePreview && !imageUploading && (
+                      <img
+                        src={imagePreview}
+                        alt="Campaign header preview"
+                        className="whatsapp-image-preview"
+                      />
+                    )}
+                  </Field>
+                )}
+
+                {(providerTemplateName === "festival_offers" ||
+                  providerTemplateName === "expo_outreach") && (
                   <Field label="Offer / discount text">
                     <input
                       className="whatsapp-input"
@@ -541,81 +559,23 @@ async function handleDisablePreference(id: number) {
                 disabled={loading}
                 onClick={handleCreateCampaign}
               >
-                {loading ? "Working..." : "Create Campaign"}
+                {loading ? "Working…" : "Create Campaign (Draft)"}
               </button>
-              <div className="whatsapp-mini-panel">
-                <div className="whatsapp-mini-panel-head">
-                  <div>
-                    <h3>Opted-in test contacts</h3>
-                    <p>Use these contacts when testing the ALL_OPTED_IN audience.</p>
-                  </div>
-                  <span>{preferences.length}</span>
-                </div>
-
-                <div className="whatsapp-form-grid">
-                  <Field label="Phone number">
-                    <input
-                      className="whatsapp-input"
-                      placeholder="Example: 918123456789"
-                      value={preferencePhone}
-                      onChange={(e) => setPreferencePhone(e.target.value)}
-                    />
-                  </Field>
-
-                  <Field label="Customer ID optional">
-                    <input
-                      className="whatsapp-input"
-                      placeholder="Optional"
-                      value={preferenceCustomerId}
-                      onChange={(e) => setPreferenceCustomerId(e.target.value)}
-                    />
-                  </Field>
-
-                  <button
-                    className="whatsapp-btn whatsapp-btn-outline"
-                    disabled={loading}
-                    onClick={handleAddPreference}
-                  >
-                    Add Test Contact
-                  </button>
-                </div>
-
-                <div className="whatsapp-preference-list">
-                  {preferences.map((preference) => (
-                    <div className="whatsapp-preference-item" key={preference.id}>
-                      <div>
-                        <strong>{preference.phone}</strong>
-                        <small>
-                          {preference.customerId ? `Customer #${preference.customerId}` : "Manual contact"}
-                        </small>
-                      </div>
-
-                      <button
-                        className="whatsapp-btn whatsapp-btn-danger"
-                        disabled={loading}
-                        onClick={() => handleDisablePreference(preference.id)}
-                      >
-                        Disable
-                      </button>
-                    </div>
-                  ))}
-
-                  {preferences.length === 0 && (
-                    <div className="whatsapp-empty-small">
-                      No opted-in test contacts yet.
-                    </div>
-                  )}
-                </div>
-              </div>
+              <p className="whatsapp-create-hint">
+                This saves a draft — no messages are sent. Go to <strong>Campaign history</strong> on the right and click <strong>Send</strong> when ready.
+              </p>
             </div>
           </section>
 
           <section className="whatsapp-main-stack">
             <section className="whatsapp-card">
               <div className="whatsapp-card-header">
-                <h2 className="whatsapp-card-title">Campaign history</h2>
+                <h2 className="whatsapp-card-title">
+                  <span className="whatsapp-step-chip">2</span>
+                  Review &amp; Send
+                </h2>
                 <p className="whatsapp-card-subtitle">
-                  Review created campaigns, send dry-runs, and inspect recipients.
+                  Click <strong>View</strong> to inspect recipients, then <strong>Send</strong> to dispatch the campaign.
                 </p>
               </div>
 
@@ -675,7 +635,7 @@ async function handleDisablePreference(id: number) {
                           <td colSpan={8}>
                             <div className="whatsapp-empty">
                               <strong>No campaigns yet</strong>
-                              Create your first manual dry-run campaign.
+                              Create your first campaign using the form on the left.
                             </div>
                           </td>
                         </tr>
@@ -689,10 +649,10 @@ async function handleDisablePreference(id: number) {
             <section className="whatsapp-card">
               <div className="whatsapp-card-header">
                 <h2 className="whatsapp-card-title">
-                  Recipients {selectedCampaignId ? `#${selectedCampaignId}` : ""}
+                  Recipients{selectedCampaignId ? ` — Campaign #${selectedCampaignId}` : ""}
                 </h2>
                 <p className="whatsapp-card-subtitle">
-                  Track individual phone status, provider message IDs, and delivery errors.
+                  Click <strong>View</strong> on a campaign above to see individual delivery status.
                 </p>
               </div>
 
@@ -720,10 +680,10 @@ async function handleDisablePreference(id: number) {
                           </td>
                           <td>
                             <div className="whatsapp-provider-id">
-                              {recipient.providerMessageId || "-"}
+                              {recipient.providerMessageId || "—"}
                             </div>
                           </td>
-                          <td>{recipient.errorMessage || "-"}</td>
+                          <td>{recipient.errorMessage || "—"}</td>
                         </tr>
                       ))}
 
@@ -731,8 +691,8 @@ async function handleDisablePreference(id: number) {
                         <tr>
                           <td colSpan={5}>
                             <div className="whatsapp-empty">
-                              <strong>No recipients selected</strong>
-                              Click View on a campaign to inspect recipients.
+                              <strong>No recipients loaded</strong>
+                              Click View on a campaign above to inspect its recipients.
                             </div>
                           </td>
                         </tr>
@@ -743,125 +703,212 @@ async function handleDisablePreference(id: number) {
               </div>
             </section>
           </section>
+        </main>
 
-          {/* ── Expo Contacts ─────────────────────────────── */}
-          <section className="whatsapp-section">
-            <div className="whatsapp-section-header">
-              <h2 className="whatsapp-section-title">Expo Contacts</h2>
+        {/* ── Test contacts — full-width below the grid ── */}
+        <section className="whatsapp-section">
+          <div className="whatsapp-section-header">
+            <div>
+              <h2 className="whatsapp-section-title">Test contacts</h2>
               <p className="whatsapp-section-desc">
-                Import phone numbers collected at expos or events. These contacts receive
-                campaigns via the <strong>EXPO_CONTACTS</strong> audience type using the
-                <strong> expo_outreach</strong> template (which includes an opt-out instruction).
-                Phones already registered as customers are automatically skipped.
+                Add your own phone number here to receive a test message before sending to all customers.
+                When the audience is set to <strong>All opted-in customers</strong>, messages are sent to every phone in this list.
               </p>
             </div>
+            <span className="whatsapp-section-count">
+              {preferences.length} contact{preferences.length !== 1 ? "s" : ""}
+            </span>
+          </div>
 
-            {/* Import form */}
-            <div className="whatsapp-card" style={{ marginBottom: 16 }}>
-              <div className="whatsapp-card-header">Import contacts</div>
-              <div className="whatsapp-card-body" style={{ display: "grid", gap: 12 }}>
-                <Field label="Source / batch label (e.g. EXPO_JUN_2026)">
+          <div className="whatsapp-contacts-row">
+            <div className="whatsapp-card">
+              <div className="whatsapp-card-header">
+                <h2 className="whatsapp-card-title">Add contact</h2>
+              </div>
+              <div className="whatsapp-card-body whatsapp-form-grid">
+                <Field label="Phone number">
                   <input
                     className="whatsapp-input"
-                    value={importSource}
-                    onChange={e => setImportSource(e.target.value)}
-                    placeholder="EXPO_JUN_2026"
+                    placeholder="Example: 918123456789"
+                    value={preferencePhone}
+                    onChange={(e) => setPreferencePhone(e.target.value)}
                   />
                 </Field>
-                <Field label="Phone numbers — one per line, optionally followed by a comma and name">
-                  <textarea
+                <Field label="Customer ID (optional)">
+                  <input
                     className="whatsapp-input"
-                    rows={6}
-                    value={importText}
-                    onChange={e => setImportText(e.target.value)}
-                    placeholder={"9876543210, Priya\n9123456789\n+91 98001 23456, Ravi Kumar"}
-                    style={{ resize: "vertical", fontFamily: "monospace", fontSize: 13 }}
+                    placeholder="Leave blank if unknown"
+                    value={preferenceCustomerId}
+                    onChange={(e) => setPreferenceCustomerId(e.target.value)}
                   />
                 </Field>
-                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                  <button
-                    className="whatsapp-btn whatsapp-btn-primary"
-                    onClick={handleImportContacts}
-                    disabled={importBusy || !importText.trim()}
-                  >
-                    {importBusy ? "Importing…" : "Import"}
-                  </button>
-                  {importResult && (
-                    <span style={{ fontSize: 13, color: "#166534" }}>
-                      ✓ {importResult.imported} imported
-                      {importResult.skippedRegistered > 0 && `, ${importResult.skippedRegistered} skipped (registered customer)`}
-                      {importResult.skippedDuplicate > 0 && `, ${importResult.skippedDuplicate} skipped (duplicate)`}
-                    </span>
+                <button
+                  className="whatsapp-btn whatsapp-btn-outline"
+                  disabled={loading}
+                  onClick={handleAddPreference}
+                >
+                  Add Test Contact
+                </button>
+              </div>
+            </div>
+
+            <div className="whatsapp-card whatsapp-contacts-list-card">
+              <div className="whatsapp-card-header">
+                <h2 className="whatsapp-card-title">Saved contacts ({preferences.length})</h2>
+              </div>
+              <div className="whatsapp-card-body">
+                <div className="whatsapp-preference-list" style={{ maxHeight: "none" }}>
+                  {preferences.map((preference) => (
+                    <div className="whatsapp-preference-item" key={preference.id}>
+                      <div>
+                        <strong>{preference.phone}</strong>
+                        <small>
+                          {preference.customerId ? `Customer #${preference.customerId}` : "Manual contact"}
+                        </small>
+                      </div>
+                      <button
+                        className="whatsapp-btn whatsapp-btn-danger"
+                        disabled={loading}
+                        onClick={() => handleDisablePreference(preference.id)}
+                      >
+                        Disable
+                      </button>
+                    </div>
+                  ))}
+                  {preferences.length === 0 && (
+                    <div className="whatsapp-empty-small">
+                      No test contacts yet. Add your phone number on the left to get started.
+                    </div>
                   )}
                 </div>
               </div>
             </div>
+          </div>
+        </section>
 
-            {/* Contacts list */}
-            <div className="whatsapp-card">
-              <div className="whatsapp-card-header">
-                All contacts ({contacts.filter(c => c.optedIn).length} opted-in
-                / {contacts.filter(c => !c.optedIn).length} opted-out)
-              </div>
-              <div className="whatsapp-card-body">
-                <div className="whatsapp-table-wrap">
-                  <table className="whatsapp-table">
-                    <thead>
-                      <tr>
-                        <th>Phone</th>
-                        <th>Name</th>
-                        <th>Source</th>
-                        <th>Status</th>
-                        <th>Opted-out at</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {contacts.map(c => (
-                        <tr key={c.id} style={{ opacity: c.optedIn ? 1 : 0.5 }}>
-                          <td>{c.phone}</td>
-                          <td>{c.name || "—"}</td>
-                          <td>{c.source || "—"}</td>
-                          <td>
-                            <StatusBadge status={c.optedIn ? "OPTED_IN" : "OPTED_OUT"} />
-                          </td>
-                          <td>{c.optedOutAt ? new Date(c.optedOutAt).toLocaleDateString() : "—"}</td>
-                          <td>
-                            {c.optedIn && (
-                              <button
-                                className="whatsapp-btn whatsapp-btn-sm"
-                                onClick={async () => {
-                                  await deactivateWhatsAppContact(c.id);
-                                  await loadData();
-                                }}
-                              >
-                                Opt out
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                      {contacts.length === 0 && (
-                        <tr>
-                          <td colSpan={6}>
-                            <div className="whatsapp-empty">
-                              <strong>No contacts imported yet</strong>
-                              Use the import form above to add expo leads.
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+        {/* ── Expo Contacts — full-width ── */}
+        <section className="whatsapp-section">
+          <div className="whatsapp-section-header">
+            <div>
+              <h2 className="whatsapp-section-title">Expo contacts</h2>
+              <p className="whatsapp-section-desc">
+                Import phone numbers collected at expos or events. These contacts receive campaigns via the{" "}
+                <strong>Expo contacts</strong> audience using the <strong>expo_outreach</strong> template
+                (which includes an opt-out instruction). Registered customers are automatically skipped.
+              </p>
+            </div>
+          </div>
+
+          <div className="whatsapp-card" style={{ marginBottom: 16 }}>
+            <div className="whatsapp-card-header">
+              <h2 className="whatsapp-card-title">Import contacts</h2>
+              <p className="whatsapp-card-subtitle">One phone number per line. Optionally add a name after a comma.</p>
+            </div>
+            <div className="whatsapp-card-body" style={{ display: "grid", gap: 12 }}>
+              <Field label="Source / batch label (e.g. EXPO_JUN_2026)">
+                <input
+                  className="whatsapp-input"
+                  value={importSource}
+                  onChange={e => setImportSource(e.target.value)}
+                  placeholder="EXPO_JUN_2026"
+                />
+              </Field>
+              <Field label="Phone numbers — one per line, optionally followed by a comma and name">
+                <textarea
+                  className="whatsapp-input"
+                  rows={6}
+                  value={importText}
+                  onChange={e => setImportText(e.target.value)}
+                  placeholder={"9876543210, Priya\n9123456789\n+91 98001 23456, Ravi Kumar"}
+                  style={{ resize: "vertical", fontFamily: "monospace", fontSize: 13 }}
+                />
+              </Field>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <button
+                  className="whatsapp-btn whatsapp-btn-primary"
+                  onClick={handleImportContacts}
+                  disabled={importBusy || !importText.trim()}
+                >
+                  {importBusy ? "Importing…" : "Import"}
+                </button>
+                {importResult && (
+                  <span style={{ fontSize: 13, color: "#166534" }}>
+                    ✓ {importResult.imported} imported
+                    {importResult.skippedRegistered > 0 && `, ${importResult.skippedRegistered} skipped (registered customer)`}
+                    {importResult.skippedDuplicate > 0 && `, ${importResult.skippedDuplicate} skipped (duplicate)`}
+                  </span>
+                )}
               </div>
             </div>
-          </section>
-        </main>
+          </div>
+
+          <div className="whatsapp-card">
+            <div className="whatsapp-card-header">
+              <h2 className="whatsapp-card-title">
+                All contacts
+                <span className="whatsapp-section-count" style={{ marginLeft: 10, fontSize: 13 }}>
+                  {contacts.filter(c => c.optedIn).length} opted-in / {contacts.filter(c => !c.optedIn).length} opted-out
+                </span>
+              </h2>
+            </div>
+            <div className="whatsapp-card-body">
+              <div className="whatsapp-table-wrap">
+                <table className="whatsapp-table">
+                  <thead>
+                    <tr>
+                      <th>Phone</th>
+                      <th>Name</th>
+                      <th>Source</th>
+                      <th>Status</th>
+                      <th>Opted-out at</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {contacts.map(c => (
+                      <tr key={c.id} style={{ opacity: c.optedIn ? 1 : 0.5 }}>
+                        <td>{c.phone}</td>
+                        <td>{c.name || "—"}</td>
+                        <td>{c.source || "—"}</td>
+                        <td>
+                          <StatusBadge status={c.optedIn ? "OPTED_IN" : "OPTED_OUT"} />
+                        </td>
+                        <td>{c.optedOutAt ? new Date(c.optedOutAt).toLocaleDateString() : "—"}</td>
+                        <td>
+                          {c.optedIn && (
+                            <button
+                              className="whatsapp-btn whatsapp-btn-sm"
+                              onClick={async () => {
+                                await deactivateWhatsAppContact(c.id);
+                                await loadData();
+                              }}
+                            >
+                              Opt out
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {contacts.length === 0 && (
+                      <tr>
+                        <td colSpan={6}>
+                          <div className="whatsapp-empty">
+                            <strong>No contacts imported yet</strong>
+                            Use the import form above to add expo leads.
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   );
-  }
+}
 
 /** Reusable form field wrapper for WhatsApp admin inputs. */
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

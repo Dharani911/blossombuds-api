@@ -39,10 +39,18 @@ public class CustomerService {
     @PreAuthorize("hasRole('ADMIN')")
     public Customer createCustomer(CustomerDto dto, String actor) {
         if (dto == null) throw new IllegalArgumentException("CustomerDto is required");
+
+        String email = (dto.getEmail() != null && !dto.getEmail().isBlank()) ? dto.getEmail().trim() : null;
+        String phone = (dto.getPhone() != null && !dto.getPhone().isBlank()) ? dto.getPhone().trim() : null;
+
+        if (email == null && phone == null) {
+            throw new IllegalArgumentException("Either email or phone is required");
+        }
+
         Customer c = new Customer();
         c.setName(dto.getFullName());
-        c.setEmail(dto.getEmail());
-        c.setPhone(dto.getPhone());
+        c.setEmail(email);
+        c.setPhone(phone);
         c.setActive(dto.getActive() != null ? dto.getActive() : Boolean.TRUE);
         Customer saved = customerRepo.save(c);
         log.info("[CUSTOMER][CREATE] Customer created: id={}, email={}", saved.getId(), saved.getEmail());
@@ -60,8 +68,14 @@ public class CustomerService {
                 .orElseThrow(() -> new IllegalArgumentException("Customer not found: " + customerId));
 
         if (dto.getFullName() != null) c.setName(dto.getFullName());
-        if (dto.getEmail() != null)    c.setEmail(dto.getEmail());
-        if (dto.getPhone() != null)    c.setPhone(dto.getPhone());
+        if (dto.getEmail() != null) {
+            String email = dto.getEmail().isBlank() ? null : dto.getEmail().trim();
+            c.setEmail(email);
+        }
+        if (dto.getPhone() != null) {
+            String phone = dto.getPhone().isBlank() ? null : dto.getPhone().trim();
+            c.setPhone(phone);
+        }
         if (dto.getActive() != null)   c.setActive(dto.getActive());
         log.info("[CUSTOMER][UPDATE] Customer updated: id={}, email={}", c.getId(), c.getEmail());
         return c;

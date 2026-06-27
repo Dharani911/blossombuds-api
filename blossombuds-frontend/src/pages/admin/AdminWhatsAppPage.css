@@ -635,6 +635,117 @@
   }
 }
 
+/* ── Step chip (numbered badge in card headers) ── */
+.whatsapp-step-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: #0f172a;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+  margin-right: 8px;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+/* ── Audience hint text below the audience select ── */
+.whatsapp-audience-hint {
+  margin: -8px 0 0;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+/* ── Hint below Create Campaign button ── */
+.whatsapp-create-hint {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* ── Full-width sections below the main 2-col grid ── */
+.whatsapp-section {
+  margin-top: 22px;
+}
+
+.whatsapp-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.whatsapp-section-title {
+  margin: 0 0 5px;
+  color: #0f172a;
+  font-size: 17px;
+  font-weight: 850;
+  letter-spacing: -0.02em;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  text-transform: none;
+}
+
+.whatsapp-section-desc {
+  margin: 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.6;
+  max-width: 780px;
+}
+
+.whatsapp-section-count {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 5px 12px;
+  background: #dcfce7;
+  color: #166534;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Test contacts two-column layout ── */
+.whatsapp-contacts-row {
+  display: grid;
+  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.whatsapp-contacts-list-card {
+  min-width: 0;
+}
+
+/* ── Small button variant (used in tables) ── */
+.whatsapp-btn-sm {
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #fff1f2;
+  color: #be123c;
+  border: none;
+  cursor: pointer;
+  transition: 0.15s ease;
+}
+
+.whatsapp-btn-sm:hover {
+  background: #ffe4e6;
+}
+
 @media (max-width: 760px) {
   .whatsapp-page {
     padding: 16px;
@@ -653,6 +764,10 @@
   }
 
   .whatsapp-two {
+    grid-template-columns: 1fr;
+  }
+
+  .whatsapp-contacts-row {
     grid-template-columns: 1fr;
   }
   .whatsapp-page h1,

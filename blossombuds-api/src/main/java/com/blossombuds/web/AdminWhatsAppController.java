@@ -1,8 +1,6 @@
 package com.blossombuds.web;
 
-import com.amazonaws.HttpMethod;
 import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.GeneratePresignedUrlRequest;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.blossombuds.domain.WhatsAppContact;
@@ -23,7 +21,6 @@ import org.springframework.web.server.ResponseStatusException;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -42,8 +39,8 @@ public class AdminWhatsAppController {
     @Value("${cloudflare.r2.bucket}")
     private String bucketName;
 
-    // 7-day presigned URL — sufficient for campaign image to remain accessible during send
-    private static final long IMAGE_PRESIGN_TTL_MS = 7L * 24 * 60 * 60 * 1000;
+    @Value("${app.backend.baseUrl}")
+    private String backendBaseUrl;
 
     /** Lists active WhatsApp templates available for campaign creation. */
     @GetMapping("/templates")
@@ -125,12 +122,13 @@ public class AdminWhatsAppController {
         private List<WhatsAppCampaignService.ContactEntry> contacts;
     }
 
-    /** Uploads a campaign header image to R2 and returns a 7-day presigned URL for Meta to fetch. */
+    /** Uploads a campaign header image to R2 and returns a stable public URL for Meta to fetch. */
     @PostMapping(value = "/upload-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String, String> uploadCampaignImage(@RequestParam("file") MultipartFile file) throws IOException {
         String contentType = file.getContentType() != null ? file.getContentType() : "image/jpeg";
         String ext = contentType.contains("png") ? "png" : contentType.contains("webp") ? "webp" : "jpg";
-        String key = "ui/whatsapp-campaigns/" + UUID.randomUUID() + "." + ext;
+        String filename = UUID.randomUUID() + "." + ext;
+        String key = "ui/whatsapp-campaigns/" + filename;
 
         byte[] bytes = file.getBytes();
         ObjectMetadata meta = new ObjectMetadata();
@@ -141,11 +139,7 @@ public class AdminWhatsAppController {
             r2Client.putObject(new PutObjectRequest(bucketName, key, in, meta));
         }
 
-        Date expiry = new Date(System.currentTimeMillis() + IMAGE_PRESIGN_TTL_MS);
-        GeneratePresignedUrlRequest presignReq = new GeneratePresignedUrlRequest(bucketName, key)
-                .withMethod(HttpMethod.GET)
-                .withExpiration(expiry);
-
-        return Map.of("url", r2Client.generatePresignedUrl(presignReq).toString());
+        String publicUrl = backendBaseUrl + "/api/public/whatsapp-campaign/" + filename;
+        return Map.of("url", publicUrl);
     }
 }

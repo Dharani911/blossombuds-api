@@ -44,7 +44,7 @@ type Currency = "INR";
 type CustomerPick = { id: number; name?: string; fullName?: string; email?: string; phone?: string };
 type CustomerDto = { id?: number; fullName: string; email?: string; phone?: string; active?: boolean };
 
-type ProductPick = { id: number; name: string; price: number };
+type ProductPick = { id: number; name: string; price: number; slug?: string };
 
 type OptionValueLite = { id: number; valueLabel: string; priceDelta?: number | null };
 type ProductOptionLite = { id: number; name: string; values: OptionValueLite[] };
@@ -90,8 +90,9 @@ function deriveUnitPrice(basePrice: number, selected?: SelectedValue[] | null): 
 // ─────────────────────────────────────────────────────────────────────────────
 // Minimal admin helpers
 // ─────────────────────────────────────────────────────────────────────────────
-async function listActivePartners(): Promise<DeliveryPartnerLite[]> {
-  const res = await authFetch("/api/partners/visible");
+async function listActivePartners(stateId?: number): Promise<DeliveryPartnerLite[]> {
+  const url = stateId ? `/api/partners/visible?stateId=${stateId}` : `/api/partners/visible`;
+  const res = await authFetch(url);
   if (!res.ok) throw new Error(await res.text());
   return (await res.json()) ?? [];
 }
@@ -159,16 +160,31 @@ export default function CreateOrderPage() {
 
   async function createNewCustomer() {
     if (!newCust.fullName?.trim()) { setToast({ kind: "bad", msg: "Enter full name" }); return; }
-    if (!newCust.email && !newCust.phone) { setToast({ kind: "bad", msg: "Provide email or phone" }); return; }
+
+    const emailVal = newCust.email?.trim() || undefined;
+    const phoneVal = newCust.phone?.trim() || undefined;
+
+    if (!emailVal && !phoneVal) {
+      setToast({ kind: "bad", msg: "Provide email or phone" });
+      return;
+    }
+    if (phoneVal) {
+      const digits = phoneVal.replace(/^\+91/, "");
+      if (!/^[6-9]\d{9}$/.test(digits)) {
+        setToast({ kind: "bad", msg: "Phone must be a valid 10-digit Indian mobile number (starts with 6–9)" });
+        return;
+      }
+    }
+
     try {
       const saved = await adminCreateCustomer({
         fullName: newCust.fullName.trim(),
-        email: newCust.email?.trim(),
-        phone: newCust.phone?.trim(),
+        email: emailVal,
+        phone: phoneVal,
         active: true,
       });
       setCustomer(saved);
-      setCustQuery(`${saved.id} — ${saved.fullName || "Customer"}`);
+      setCustQuery(`${saved.id} — ${saved.name || "Customer"}`);
       setNewCustOpen(false);
       setToast({ kind: "ok", msg: "Customer created" });
       setAddrList([]);
@@ -336,7 +352,6 @@ export default function CreateOrderPage() {
     if (!naName.trim()) { setNaErr("Recipient name is required."); return; }
     if (!naPhone.trim()) { setNaErr("Phone number is required."); return; }
     if (!naLine1.trim()) { setNaErr("Address line 1 is required."); return; }
-    if (!naLine2.trim()) { setNaErr("Address line 2 is required."); return; }
     if (!naPincode.trim()) { setNaErr("Pincode / ZIP is required."); return; }
 
     if (isDomestic) {
@@ -438,6 +453,7 @@ export default function CreateOrderPage() {
       id: p.id,
       name: p.name,
       price: Number(p.price ?? 0),
+      slug: p.slug ?? undefined,
     }));
 
     setProdSuggests(mapped);
@@ -614,13 +630,25 @@ export default function CreateOrderPage() {
   const [shippingLoading, setShippingLoading] = useState(false);
   const [shippingErr, setShippingErr] = useState<string | null>(null);
 
+  // Re-fetch partners whenever the selected address state changes, matching checkout behaviour.
+  // If the current partner is not in the filtered list for the new state, reset the selection.
   useEffect(() => {
+    if (isIntl) return;
     let live = true;
     (async () => {
-      try { const p = await listActivePartners(); if (live) setPartners(p || []); } catch { }
+      try {
+        const stateId = typeof selectedAddress?.stateId === "number" ? selectedAddress.stateId : undefined;
+        const list = await listActivePartners(stateId);
+        if (!live) return;
+        setPartners(list || []);
+        if (partnerId !== "" && !(list || []).some(p => p.id === Number(partnerId))) {
+          setPartnerId("");
+        }
+      } catch { }
     })();
     return () => { live = false; };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isIntl, selectedAddress?.stateId]);
 
   // Keep buffer in sync if fee recalculates
   useEffect(() => {
@@ -824,7 +852,7 @@ export default function CreateOrderPage() {
         // OrderItemDto fields expected by backend
         productId: l.product.id,
         productName: l.product.name,
-        productSlug: String(l.product.id),  // or a real slug if you have it
+        productSlug: l.product.slug || String(l.product.id),
         quantity: qty,
         unitPrice: unit,
         lineTotal: qty * unit,
@@ -935,11 +963,11 @@ export default function CreateOrderPage() {
                 <input value={newCust.fullName} onChange={e => setNewCust(c => ({ ...c, fullName: e.target.value }))} />
               </label>
               <label>
-                <div className="lab">Email (optional)</div>
+                <div className="lab">Email (optional if phone given)</div>
                 <input type="email" value={newCust.email || ""} onChange={e => setNewCust(c => ({ ...c, email: e.target.value }))} placeholder="customer@example.com" />
               </label>
               <label>
-                <div className="lab">Phone *</div>
+                <div className="lab">Mobile number (optional if email given)</div>
                 <div className="phone-field">
                   <span className="phone-prefix">+91</span>
                   <input
@@ -955,7 +983,7 @@ export default function CreateOrderPage() {
                 </div>
               </label>
             </div>
-            <div className="muted" style={{ marginTop: 6 }}>Either email or phone is required.</div>
+            <div className="muted" style={{ marginTop: 6 }}>At least one of email or mobile number is required.</div>
             <div className="end-row">
               <button className="ghost as-btn" onClick={() => setNewCustOpen(false)}>Cancel</button>
               <button className="btn primary" onClick={createNewCustomer}>Save customer</button>
