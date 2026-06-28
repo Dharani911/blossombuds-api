@@ -52,6 +52,9 @@ public class CustomerService {
         c.setEmail(email);
         c.setPhone(phone);
         c.setActive(dto.getActive() != null ? dto.getActive() : Boolean.TRUE);
+        // Admin-created accounts bypass OTP verification — mark both flags true
+        if (email != null) c.setEmailVerified(true);
+        if (phone != null) c.setPhoneVerified(true);
         Customer saved = customerRepo.save(c);
         log.info("[CUSTOMER][CREATE] Customer created: id={}, email={}", saved.getId(), saved.getEmail());
         return saved;

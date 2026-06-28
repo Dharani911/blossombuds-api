@@ -81,17 +81,21 @@ public class CustomerAuthService {
         }
         // Uniqueness: phone must be unused (check against normalized form)
         String normalizedPhone = isBlank(phone) ? phone : normalizePhone(phone);
-        if (!isBlank(normalizedPhone)) {
-            customers.findByPhone(normalizedPhone).ifPresent(c -> {
-                throw new IllegalArgumentException("Phone already registered");
-            });
+        // Allow re-registration if existing account has never verified their phone (phoneVerified=false).
+        Customer existingByPhone = !isBlank(normalizedPhone)
+                ? customers.findByPhone(normalizedPhone).orElse(null)
+                : null;
+        if (existingByPhone != null && Boolean.TRUE.equals(existingByPhone.getPhoneVerified())) {
+            throw new IllegalArgumentException("Phone already registered");
         }
 
-        // Create customer
-        Customer c = new Customer();
+        // Create customer, or reuse an existing unverified account for the same phone
+        Customer c = existingByPhone != null ? existingByPhone : new Customer();
         c.setName(name);
-        c.setEmail(email);
-        c.setPhone(normalizedPhone);
+        if (existingByPhone == null) {
+            c.setEmail(email);
+            c.setPhone(normalizedPhone);
+        }
         c.setPasswordHash(isBlank(rawPassword)
                 ? encoder.encode(java.util.UUID.randomUUID().toString())
                 : encoder.encode(rawPassword));
@@ -610,8 +614,8 @@ public class CustomerAuthService {
 
         // Silent non-existence: don't reveal whether the phone is registered
         Customer c = customers.findByPhone(phone).orElse(null);
-        if (c == null) {
-            log.info("[CUSTOMER][PHONE_LOGIN_OTP] Phone not registered, returning silently");
+        if (c == null || !Boolean.TRUE.equals(c.getPhoneVerified())) {
+            log.info("[CUSTOMER][PHONE_LOGIN_OTP] Phone not registered or not yet verified, returning silently");
             return;
         }
 
@@ -648,6 +652,10 @@ public class CustomerAuthService {
 
         Customer customer = customers.findByPhone(phone)
                 .orElseThrow(() -> new IllegalArgumentException("No account found for this phone number"));
+
+        if (!Boolean.TRUE.equals(customer.getPhoneVerified())) {
+            throw new IllegalArgumentException("No account found for this phone number");
+        }
 
         AuthOtpToken token = otpRepo
                 .findTopByDestinationAndChannelAndPurposeOrderByCreatedAtDesc(

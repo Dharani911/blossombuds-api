@@ -60,6 +60,10 @@ const [preferenceCustomerId, setPreferenceCustomerId] = useState("");
   const [importBusy, setImportBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [savedContactsModalOpen, setSavedContactsModalOpen] = useState(false);
+  const [savedContactsSearch, setSavedContactsSearch] = useState("");
+  const [expoContactsModalOpen, setExpoContactsModalOpen] = useState(false);
+  const [expoContactsSearch, setExpoContactsSearch] = useState("");
 
   const selectedTemplate = useMemo(
     () => templates.find((t) => t.id === Number(templateId)),
@@ -77,11 +81,32 @@ const [preferenceCustomerId, setPreferenceCustomerId] = useState("");
 
   const providerTemplateName = selectedTemplate?.providerTemplateName || "";
 
+  const filteredPreferences = useMemo(
+    () => preferences.filter(p =>
+      !savedContactsSearch ||
+      p.phone.includes(savedContactsSearch)
+    ),
+    [preferences, savedContactsSearch]
+  );
+
+  const filteredContacts = useMemo(
+    () => contacts.filter(c =>
+      !expoContactsSearch ||
+      c.phone.includes(expoContactsSearch) ||
+      (c.name || "").toLowerCase().includes(expoContactsSearch.toLowerCase()) ||
+      (c.source || "").toLowerCase().includes(expoContactsSearch.toLowerCase())
+    ),
+    [contacts, expoContactsSearch]
+  );
+
+  const isExpoTemplate = (name: string) =>
+    name === "expo_outreach" || name === "expo_outreach_v2";
+
   // Auto-select the correct audience whenever the template changes.
-  // expo_outreach → EXPO_CONTACTS; everything else → ALL_OPTED_IN (MANUAL stays as-is if already chosen).
+  // expo templates → EXPO_CONTACTS; everything else → ALL_OPTED_IN (MANUAL stays as-is if already chosen).
   React.useEffect(() => {
     if (!providerTemplateName) return;
-    if (providerTemplateName === "expo_outreach") {
+    if (isExpoTemplate(providerTemplateName)) {
       setAudienceType("EXPO_CONTACTS");
     } else {
       setAudienceType(prev => prev === "EXPO_CONTACTS" ? "ALL_OPTED_IN" : prev);
@@ -216,7 +241,7 @@ const [preferenceCustomerId, setPreferenceCustomerId] = useState("");
       return;
     }
 
-    const IMAGE_HEADER_TEMPLATES = ["new_arrivals_campaign", "festival_offers", "expo_outreach"];
+    const IMAGE_HEADER_TEMPLATES = ["new_arrivals_campaign", "festival_offers", "expo_outreach", "expo_outreach_v2"];
     if (IMAGE_HEADER_TEMPLATES.includes(providerTemplateName) && !imageUrl.trim()) {
       setMessage("A header image is required for this template. Please upload an image before creating the campaign.");
       return;
@@ -456,10 +481,10 @@ async function handleDisablePreference(id: number) {
                   onChange={(e) => setAudienceType(e.target.value as "MANUAL" | "ALL_OPTED_IN" | "EXPO_CONTACTS")}
                 >
                   <option value="MANUAL">Manual test recipient</option>
-                  {providerTemplateName !== "expo_outreach" && (
+                  {!isExpoTemplate(providerTemplateName) && (
                     <option value="ALL_OPTED_IN">All opted-in customers</option>
                   )}
-                  {providerTemplateName === "expo_outreach" && (
+                  {isExpoTemplate(providerTemplateName) && (
                     <option value="EXPO_CONTACTS">Expo contacts</option>
                   )}
                 </select>
@@ -467,7 +492,7 @@ async function handleDisablePreference(id: number) {
               <p className="whatsapp-audience-hint">
                 {audienceType === "MANUAL" && "Send to one specific phone number. Use this first to test your message."}
                 {audienceType === "ALL_OPTED_IN" && "Send to all customers who have agreed to receive WhatsApp messages from you."}
-                {audienceType === "EXPO_CONTACTS" && "Send to leads collected at events. Only works with the expo_outreach template."}
+                {audienceType === "EXPO_CONTACTS" && "Send to leads collected at events. Only works with expo outreach templates."}
               </p>
 
               {audienceType === "MANUAL" && (
@@ -507,7 +532,7 @@ async function handleDisablePreference(id: number) {
 
                 {(providerTemplateName === "new_arrivals_campaign" ||
                   providerTemplateName === "festival_offers" ||
-                  providerTemplateName === "expo_outreach") && (
+                  isExpoTemplate(providerTemplateName)) && (
                   <Field label="Header image (required)">
                     <input
                       type="file"
@@ -530,7 +555,7 @@ async function handleDisablePreference(id: number) {
                 )}
 
                 {(providerTemplateName === "festival_offers" ||
-                  providerTemplateName === "expo_outreach") && (
+                  isExpoTemplate(providerTemplateName)) && (
                   <Field label="Offer / discount text">
                     <input
                       className="whatsapp-input"
@@ -580,7 +605,7 @@ async function handleDisablePreference(id: number) {
               </div>
 
               <div className="whatsapp-card-body">
-                <div className="whatsapp-table-wrap">
+                <div className="whatsapp-table-wrap" style={{ maxHeight: 290, overflowY: "auto" }}>
                   <table className="whatsapp-table">
                     <thead>
                       <tr>
@@ -657,7 +682,7 @@ async function handleDisablePreference(id: number) {
               </div>
 
               <div className="whatsapp-card-body">
-                <div className="whatsapp-table-wrap">
+                <div className="whatsapp-table-wrap" style={{ maxHeight: 290, overflowY: "auto" }}>
                   <table className="whatsapp-table">
                     <thead>
                       <tr>
@@ -754,33 +779,18 @@ async function handleDisablePreference(id: number) {
 
             <div className="whatsapp-card whatsapp-contacts-list-card">
               <div className="whatsapp-card-header">
-                <h2 className="whatsapp-card-title">Saved contacts ({preferences.length})</h2>
+                <h2 className="whatsapp-card-title">Saved contacts</h2>
               </div>
-              <div className="whatsapp-card-body">
-                <div className="whatsapp-preference-list" style={{ maxHeight: "none" }}>
-                  {preferences.map((preference) => (
-                    <div className="whatsapp-preference-item" key={preference.id}>
-                      <div>
-                        <strong>{preference.phone}</strong>
-                        <small>
-                          {preference.customerId ? `Customer #${preference.customerId}` : "Manual contact"}
-                        </small>
-                      </div>
-                      <button
-                        className="whatsapp-btn whatsapp-btn-danger"
-                        disabled={loading}
-                        onClick={() => handleDisablePreference(preference.id)}
-                      >
-                        Disable
-                      </button>
-                    </div>
-                  ))}
-                  {preferences.length === 0 && (
-                    <div className="whatsapp-empty-small">
-                      No test contacts yet. Add your phone number on the left to get started.
-                    </div>
-                  )}
-                </div>
+              <div className="whatsapp-card-body" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 14, color: "#6b7280" }}>
+                  {preferences.length} contact{preferences.length !== 1 ? "s" : ""} saved
+                </span>
+                <button
+                  className="whatsapp-btn whatsapp-btn-outline"
+                  onClick={() => { setSavedContactsSearch(""); setSavedContactsModalOpen(true); }}
+                >
+                  View All ({preferences.length})
+                </button>
               </div>
             </div>
           </div>
@@ -793,7 +803,7 @@ async function handleDisablePreference(id: number) {
               <h2 className="whatsapp-section-title">Expo contacts</h2>
               <p className="whatsapp-section-desc">
                 Import phone numbers collected at expos or events. These contacts receive campaigns via the{" "}
-                <strong>Expo contacts</strong> audience using the <strong>expo_outreach</strong> template
+                <strong>Expo contacts</strong> audience using the <strong>expo_outreach_v2</strong> template
                 (which includes an opt-out instruction). Registered customers are automatically skipped.
               </p>
             </div>
@@ -843,69 +853,119 @@ async function handleDisablePreference(id: number) {
           </div>
 
           <div className="whatsapp-card">
-            <div className="whatsapp-card-header">
-              <h2 className="whatsapp-card-title">
-                All contacts
-                <span className="whatsapp-section-count" style={{ marginLeft: 10, fontSize: 13 }}>
-                  {contacts.filter(c => c.optedIn).length} opted-in / {contacts.filter(c => !c.optedIn).length} opted-out
-                </span>
-              </h2>
-            </div>
-            <div className="whatsapp-card-body">
-              <div className="whatsapp-table-wrap">
-                <table className="whatsapp-table">
-                  <thead>
-                    <tr>
-                      <th>Phone</th>
-                      <th>Name</th>
-                      <th>Source</th>
-                      <th>Status</th>
-                      <th>Opted-out at</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {contacts.map(c => (
-                      <tr key={c.id} style={{ opacity: c.optedIn ? 1 : 0.5 }}>
-                        <td>{c.phone}</td>
-                        <td>{c.name || "—"}</td>
-                        <td>{c.source || "—"}</td>
-                        <td>
-                          <StatusBadge status={c.optedIn ? "OPTED_IN" : "OPTED_OUT"} />
-                        </td>
-                        <td>{c.optedOutAt ? new Date(c.optedOutAt).toLocaleDateString() : "—"}</td>
-                        <td>
-                          {c.optedIn && (
-                            <button
-                              className="whatsapp-btn whatsapp-btn-sm"
-                              onClick={async () => {
-                                await deactivateWhatsAppContact(c.id);
-                                await loadData();
-                              }}
-                            >
-                              Opt out
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                    {contacts.length === 0 && (
-                      <tr>
-                        <td colSpan={6}>
-                          <div className="whatsapp-empty">
-                            <strong>No contacts imported yet</strong>
-                            Use the import form above to add expo leads.
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+            <div className="whatsapp-card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <h2 className="whatsapp-card-title">All contacts</h2>
+                <p className="whatsapp-card-subtitle">
+                  {contacts.filter(c => c.optedIn).length} opted-in · {contacts.filter(c => !c.optedIn).length} opted-out
+                </p>
               </div>
+              <button
+                className="whatsapp-btn whatsapp-btn-outline"
+                onClick={() => { setExpoContactsSearch(""); setExpoContactsModalOpen(true); }}
+              >
+                View All Contacts ({contacts.length})
+              </button>
             </div>
           </div>
         </section>
       </div>
+
+      {/* ── Saved contacts modal ── */}
+      <WhatsAppModal
+        open={savedContactsModalOpen}
+        onClose={() => setSavedContactsModalOpen(false)}
+        title={`Saved contacts (${preferences.length})`}
+      >
+        <input
+          className="whatsapp-input"
+          placeholder="Search by phone…"
+          value={savedContactsSearch}
+          onChange={e => setSavedContactsSearch(e.target.value)}
+          style={{ marginBottom: 12 }}
+        />
+        <div className="whatsapp-preference-list">
+          {filteredPreferences.map(p => (
+            <div className="whatsapp-preference-item" key={p.id}>
+              <div>
+                <strong>{p.phone}</strong>
+                <small>{p.customerId ? `Customer #${p.customerId}` : "Manual contact"}</small>
+              </div>
+              <button
+                className="whatsapp-btn whatsapp-btn-danger"
+                disabled={loading}
+                onClick={() => handleDisablePreference(p.id)}
+              >
+                Disable
+              </button>
+            </div>
+          ))}
+          {filteredPreferences.length === 0 && (
+            <div className="whatsapp-empty-small">
+              {savedContactsSearch ? "No contacts match your search." : "No test contacts yet."}
+            </div>
+          )}
+        </div>
+      </WhatsAppModal>
+
+      {/* ── Expo contacts modal ── */}
+      <WhatsAppModal
+        open={expoContactsModalOpen}
+        onClose={() => setExpoContactsModalOpen(false)}
+        title={`Expo contacts (${contacts.filter(c => c.optedIn).length} opted-in · ${contacts.filter(c => !c.optedIn).length} opted-out)`}
+      >
+        <input
+          className="whatsapp-input"
+          placeholder="Search by phone, name or source…"
+          value={expoContactsSearch}
+          onChange={e => setExpoContactsSearch(e.target.value)}
+          style={{ marginBottom: 12 }}
+        />
+        <div className="whatsapp-table-wrap" style={{ maxHeight: 420, overflowY: "auto" }}>
+          <table className="whatsapp-table">
+            <thead>
+              <tr>
+                <th>Phone</th>
+                <th>Name</th>
+                <th>Source</th>
+                <th>Status</th>
+                <th>Opted-out at</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredContacts.map(c => (
+                <tr key={c.id} style={{ opacity: c.optedIn ? 1 : 0.5 }}>
+                  <td>{c.phone}</td>
+                  <td>{c.name || "—"}</td>
+                  <td>{c.source || "—"}</td>
+                  <td><StatusBadge status={c.optedIn ? "OPTED_IN" : "OPTED_OUT"} /></td>
+                  <td>{c.optedOutAt ? new Date(c.optedOutAt).toLocaleDateString() : "—"}</td>
+                  <td>
+                    {c.optedIn && (
+                      <button
+                        className="whatsapp-btn whatsapp-btn-sm"
+                        onClick={async () => { await deactivateWhatsAppContact(c.id); await loadData(); }}
+                      >
+                        Opt out
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {filteredContacts.length === 0 && (
+                <tr>
+                  <td colSpan={6}>
+                    <div className="whatsapp-empty">
+                      {expoContactsSearch ? "No contacts match your search." : "No contacts imported yet."}
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </WhatsAppModal>
     </div>
   );
 }
@@ -958,6 +1018,32 @@ function StatusBadge({ status }: { status: string }) {
 
   return <span className={className}>{normalized}</span>;
 }
+/** Generic modal overlay for WhatsApp CRM lists. */
+function WhatsAppModal({
+  open,
+  onClose,
+  title,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
+  if (!open) return null;
+  return (
+    <div className="wa-modal-overlay" onClick={onClose}>
+      <div className="wa-modal" onClick={e => e.stopPropagation()}>
+        <div className="wa-modal-header">
+          <h3 className="wa-modal-title">{title}</h3>
+          <button className="wa-modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="wa-modal-body">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 /** Small readiness indicator for WhatsApp integration settings. */
 function StatusDot({ label, ok }: { label: string; ok: boolean }) {
   return (

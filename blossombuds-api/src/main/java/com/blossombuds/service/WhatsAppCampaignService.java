@@ -388,7 +388,7 @@ public class WhatsAppCampaignService {
             return variables;
         }
 
-        if ("expo_outreach".equalsIgnoreCase(templateName)) {
+        if ("expo_outreach".equalsIgnoreCase(templateName) || "expo_outreach_v2".equalsIgnoreCase(templateName)) {
             variables.add(name);
             variables.add(isBlank(offerText) ? "Check out our latest floral collections!" : offerText);
             return variables;
@@ -454,11 +454,12 @@ public class WhatsAppCampaignService {
     private void validateAudienceTemplateCompatibility(String providerTemplateName, String audienceType) {
         if ("MANUAL".equalsIgnoreCase(audienceType)) return;
 
-        boolean isExpoTemplate = "expo_outreach".equalsIgnoreCase(providerTemplateName);
+        boolean isExpoTemplate = "expo_outreach".equalsIgnoreCase(providerTemplateName)
+                || "expo_outreach_v2".equalsIgnoreCase(providerTemplateName);
 
         if (isExpoTemplate && !"EXPO_CONTACTS".equalsIgnoreCase(audienceType)) {
             throw new IllegalArgumentException(
-                "The \"expo_outreach\" template can only be sent to Expo Contacts, not to registered customers.");
+                "The \"" + providerTemplateName + "\" template can only be sent to Expo Contacts, not to registered customers.");
         }
 
         if (!isExpoTemplate && "EXPO_CONTACTS".equalsIgnoreCase(audienceType)) {

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+          http://www.liquibase.org/xml/ns/dbchangelog
+          https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+        expo_outreach_v2 template — replacement for expo_outreach after the June 2026 re-edit
+        caused Meta to suspend delivery of the original template.
+
+        Meta template structure (must match exactly what is approved in WhatsApp Business Manager):
+          Header : IMAGE (variable — uploaded per campaign)
+          Body   :
+            Hi {{1}},
+
+            {{2}} 🌸
+
+            Discover our fresh, handcrafted floral arrangements for every occasion.
+
+            For support, reach us on WhatsApp: +91 88073 92855.
+
+            Reply STOP to unsubscribe from future messages.
+          Footer : Blossom Buds Floral Artistry
+          Button : "Shop Now" — static URL → https://www.blossom-buds-floral-artistry.com
+
+        Variables: {{1}} customer name, {{2}} offer / event description text
+    -->
+    <changeSet id="0048-01-seed-template-expo-outreach-v2" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM whatsapp_templates WHERE provider_template_name = 'expo_outreach_v2'
+            </sqlCheck>
+        </preConditions>
+        <insert tableName="whatsapp_templates">
+            <column name="name"                   value="Expo Outreach v2"/>
+            <column name="provider_template_name" value="expo_outreach_v2"/>
+            <column name="category"               value="MARKETING"/>
+            <column name="language_code"          value="en"/>
+            <column name="body_preview"           value="Hi {{1}}, {{2}} 🌸 Discover our fresh, handcrafted floral arrangements for every occasion. Reply STOP to unsubscribe."/>
+            <column name="variable_count"         valueNumeric="2"/>
+            <column name="active"                 valueBoolean="true"/>
+            <column name="created_by"             value="system"/>
+            <column name="created_at"             valueComputed="NOW()"/>
+            <column name="modified_by"            value="system"/>
+            <column name="modified_at"            valueComputed="NOW()"/>
+        </insert>
+        <rollback>
+            DELETE FROM whatsapp_templates WHERE provider_template_name = 'expo_outreach_v2';
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

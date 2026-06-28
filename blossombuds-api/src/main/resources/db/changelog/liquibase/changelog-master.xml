@@ -57,4 +57,5 @@
     <include file="db/changelog/liquibase/changes/0045-migrate-fixed-fees.xml"/>
     <include file="db/changelog/liquibase/changes/0046-seed-delivery-regions.xml"/>
     <include file="db/changelog/liquibase/changes/0047-fix-festival-offers-variable-count.xml"/>
+    <include file="db/changelog/liquibase/changes/0048-seed-expo-outreach-v2-template.xml"/>
 </databaseChangeLog>
