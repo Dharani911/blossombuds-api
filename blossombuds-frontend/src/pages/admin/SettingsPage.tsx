@@ -862,7 +862,7 @@ const css = `
   white-space: nowrap;
 }
 
-.ghost {
+.set-wrap .ghost {
   height: 36px;
   padding: 0 14px;
   border-radius: 10px;
@@ -875,33 +875,33 @@ const css = `
   transition: all 0.15s ease;
 }
 
-.ghost:hover {
+.set-wrap .ghost:hover {
   background: #fafafa;
   border-color: rgba(0,0,0,0.15);
   transform: translateY(-1px);
 }
 
-.ghost.sm {
+.set-wrap .ghost.sm {
   height: 32px;
   padding: 0 12px;
   font-size: 12px;
 }
 
-.ghost.ok {
+.set-wrap .ghost.ok {
   border-color: rgba(67,233,123,0.4);
   color: #065f46;
 }
 
-.ghost.ok:hover {
+.set-wrap .ghost.ok:hover {
   background: rgba(67,233,123,0.08);
 }
 
-.ghost.bad {
+.set-wrap .ghost.bad {
   border-color: rgba(198,40,40,0.3);
   color: #c62828;
 }
 
-.ghost.bad:hover {
+.set-wrap .ghost.bad:hover {
   background: rgba(198,40,40,0.06);
 }
 

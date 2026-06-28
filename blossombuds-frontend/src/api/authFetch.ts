@@ -28,15 +28,10 @@ export async function authFetch(path: string, init: RequestInit = {}) {
     credentials: "include",
   });
 
-  if (res.status === 401) {
-    const err: any = new Error("Unauthorized");
-    err.status = 401;
-    throw err;
-  }
-  if (res.status === 403) {
-    const err: any = new Error("Forbidden");
-    err.status = 403;
-    throw err;
+  if (res.status === 401 || res.status === 403) {
+    const next = encodeURIComponent(window.location.pathname + window.location.search);
+    window.location.replace(`/admin/login?expired=1&next=${next}`);
+    return res; // navigation already triggered; caller won't proceed
   }
 
   return res;

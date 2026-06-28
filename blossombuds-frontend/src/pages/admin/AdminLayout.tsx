@@ -55,7 +55,7 @@ export default function AdminLayout() {
 
   return (
     <div
-      className="adml"
+      className={"adml" + (collapsed ? " adml--collapsed" : "")}
       style={
         {
           // shared CSS vars for sticky offsets
@@ -125,7 +125,7 @@ export default function AdminLayout() {
       </aside>
 
       {/* Main content */}
-      <main className={"adml-main" + (collapsed ? " collapsed" : "")}>
+      <main className="adml-main">
         {/* <div className="crumbs">
           <div className="trail">
             {location.pathname.replace("/admin","").split("/").filter(Boolean).length === 0
@@ -189,9 +189,9 @@ const css = `
 .brand-name{ display:flex; flex-direction:column; line-height:1; }
 .brand-name strong{ font-weight:900; letter-spacing:.2px; }
 .brand-name span{ font-size:12px; opacity:.85; }
-.ghost{ background:#fff; border:1px solid var(--ad-ink); border-radius:12px; height:40px; width:40px; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; }
-.ghost:hover{ box-shadow:0 12px 28px rgba(0,0,0,.12); transform: translateY(-1px); }
-.burger{ display:none; }
+.adml .ghost{ background:#fff; border:1px solid var(--ad-ink); border-radius:12px; height:40px; width:40px; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; padding:0; box-sizing:border-box; }
+.adml .ghost:hover{ box-shadow:0 12px 28px rgba(0,0,0,.12); transform: translateY(-1px); }
+.adml .burger{ display:none; }
 .logout{
   height:40px; display:inline-flex; align-items:center; gap:8px; padding:0 12px;
   border:none; border-radius:12px; cursor:pointer; background:var(--ad-accent); color:#fff; font-weight:900;
@@ -235,7 +235,7 @@ const css = `
 
 /* Collapse behavior (desktop) */
 .adml-side.collapsed{ width: 84px; }
-.adml-main.collapsed{ grid-template-columns: 84px 1fr; }
+.adml.adml--collapsed{ grid-template-columns: 84px 1fr; }
 
 /* Mobile overlay */
 @media (max-width: 1100px){
@@ -265,6 +265,6 @@ const css = `
   backdrop-filter: none;
 }
 
-.trail{ max-width: 1200px; margin:0 auto; font-size:12px; font-weight:800; opacity:.9; }
-.adml-body{ max-width: 1200px; margin: 12px auto 24px; padding: 0 12px; }
+.trail{ max-width: 1440px; margin:0 auto; font-size:12px; font-weight:800; opacity:.9; }
+.adml-body{ max-width: 1440px; margin: 12px auto 24px; padding: 0 20px; }
 `;

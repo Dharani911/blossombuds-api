@@ -1108,6 +1108,11 @@ function OrderDrawer({
                   </div>
 
                   <div>
+                    <span className="lbl">Delivery Partner</span>
+                    <span>{(order as any).courierName || "—"}</span>
+                  </div>
+
+                  <div>
                     <span className="lbl">Coupon</span>
                     <span>{(order as any).couponCode || "—"}</span>
                   </div>
@@ -1517,7 +1522,7 @@ const css = `
   box-shadow: 0 4px 12px rgba(100,116,139,0.3);
 }
 
-.actions { display: flex; justify-content: flex-end; }
+.ord-wrap .actions { display: flex; justify-content: flex-end; }
 
 /* Column alignment */
 .trow>:nth-child(3), .thead>:nth-child(3) { text-align: right; }
@@ -1548,7 +1553,7 @@ const css = `
 .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 .btn.sm { height: 34px; padding: 0 14px; border-radius: 10px; font-size: 13px; }
 
-.ghost {
+.ord-wrap .ghost {
   height: 38px;
   padding: 0 14px;
   border-radius: 10px;
@@ -1560,7 +1565,7 @@ const css = `
   transition: all 0.2s ease;
 }
 
-.ghost:hover {
+.ord-wrap .ghost:hover {
   background: ${PRIMARY};
   color: white;
   border-color: ${PRIMARY};
@@ -1568,8 +1573,8 @@ const css = `
   box-shadow: 0 4px 12px rgba(74,79,65,0.2);
 }
 
-.ghost:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-.ghost.sm { height: 32px; padding: 0 12px; font-size: 13px; }
+.ord-wrap .ghost:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.ord-wrap .ghost.sm { height: 32px; padding: 0 12px; font-size: 13px; }
 
 /* ═══════════════════════════ TOAST ═══════════════════════════ */
 .toast {

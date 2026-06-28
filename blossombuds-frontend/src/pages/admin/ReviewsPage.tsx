@@ -568,7 +568,7 @@ select:focus {
   box-shadow: 0 10px 28px rgba(240,93,139,0.4);
 }
 
-.ghost {
+.rev-wrap .ghost {
   height: 34px;
   padding: 0 12px;
   border-radius: 10px;
@@ -581,12 +581,12 @@ select:focus {
   transition: all 0.15s ease;
 }
 
-.ghost:hover {
+.rev-wrap .ghost:hover {
   background: #fafafa;
   border-color: rgba(0,0,0,0.15);
 }
 
-.ghost.sm {
+.rev-wrap .ghost.sm {
   height: 30px;
   padding: 0 10px;
   border-radius: 8px;

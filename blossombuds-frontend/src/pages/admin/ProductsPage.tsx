@@ -1924,7 +1924,7 @@ const css = `
   box-shadow: 0 12px 32px rgba(240,93,139,0.4);
 }
 
-.ghost {
+.prod-wrap .ghost {
   height: 38px;
   padding: 0 14px;
   border: 1px solid ${INK};
@@ -1936,27 +1936,27 @@ const css = `
   transition: all 0.15s ease;
 }
 
-.ghost:hover {
+.prod-wrap .ghost:hover {
   background: #fafafa;
   border-color: rgba(0,0,0,0.15);
 }
 
-.ghost.bad {
+.prod-wrap .ghost.bad {
   color: #c62828;
   border-color: rgba(198,40,40,0.25);
 }
 
-.ghost.bad:hover {
+.prod-wrap .ghost.bad:hover {
   background: rgba(198,40,40,0.06);
 }
 
-.ghost.small {
+.prod-wrap .ghost.small {
   height: 30px;
   padding: 0 10px;
   font-size: 12px;
 }
 
-.ghost.sm {
+.prod-wrap .ghost.sm {
   height: 32px;
   padding: 0 12px;
   font-size: 13px;
@@ -2181,7 +2181,7 @@ const css = `
 }
 
 /* ═══════════════════════════ ACTIONS COLUMN ═══════════════════════════ */
-.actions {
+.prod-wrap .actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -2189,7 +2189,7 @@ const css = `
   align-items: center;
 }
 
-.actions .ghost {
+.prod-wrap .actions .ghost {
   height: 34px;
   padding: 0 12px;
 }

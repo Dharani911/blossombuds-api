@@ -1199,7 +1199,7 @@ const css = `
   font-size: 11px;
 }
 
-.actions {
+.cat-wrap .actions {
   display: flex;
   gap: 12px;
   align-items: center;
@@ -1563,7 +1563,7 @@ const css = `
   box-shadow: 0 12px 32px rgba(240,93,139,0.4);
 }
 
-.ghost {
+.cat-wrap .ghost {
   height: 34px;
   padding: 0 12px;
   border-radius: 10px;
@@ -1576,22 +1576,22 @@ const css = `
   transition: all 0.15s ease;
 }
 
-.ghost:hover {
+.cat-wrap .ghost:hover {
   background: #fafafa;
   border-color: rgba(0,0,0,0.15);
 }
 
-.ghost.bad {
+.cat-wrap .ghost.bad {
   border-color: rgba(198,40,40,0.3);
   color: #c62828;
 }
 
-.ghost.bad:hover {
+.cat-wrap .ghost.bad:hover {
   background: rgba(198,40,40,0.06);
 }
 
-.ghost.sm,
-.btn.sm {
+.cat-wrap .ghost.sm,
+.cat-wrap .btn.sm {
   height: 30px;
   padding: 0 10px;
   border-radius: 8px;

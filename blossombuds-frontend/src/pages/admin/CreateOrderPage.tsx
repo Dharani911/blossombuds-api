@@ -1456,13 +1456,13 @@ const css = `
 .as-btn span{ overflow: hidden; text-overflow: ellipsis; }
 
 /* buttons */
-.ghost{
+.wrap .ghost{
   min-height:34px; padding:0 12px; border:1px solid ${INK};
   background:#fff; border-radius:10px; cursor:pointer; color:${PRIMARY};
   line-height:32px; text-decoration:none; width:auto;
 }
-.ghost.sm{ min-height:28px; line-height:26px; font-size:12.5px; padding:0 10px; }
-.ghost:hover{ box-shadow:0 8px 20px rgba(0,0,0,.08); transform: translateY(-1px); }
+.wrap .ghost.sm{ min-height:28px; line-height:26px; font-size:12.5px; padding:0 10px; }
+.wrap .ghost:hover{ box-shadow:0 8px 20px rgba(0,0,0,.08); transform: translateY(-1px); }
 
 /* cards */
 .card{ border:1px solid ${INK}; border-radius:14px; background:#fff; overflow: visible; box-shadow:0 12px 36px rgba(0,0,0,.08); }
@@ -1579,7 +1579,7 @@ const css = `
 .coupon-btns{ align-self:flex-start; margin-top:22px; }
 
 .total{ font-size:20px; font-weight:900; }
-.actions{ display:grid; gap:8px; margin-top:6px; }
+.wrap .actions{ display:grid; gap:8px; margin-top:6px; }
 .btn{
   min-height:42px; border:none; border-radius:12px; font-weight:900; cursor:pointer;
   transition: transform .12s ease, box-shadow .12s ease, background .12s ease;

@@ -774,7 +774,7 @@ const CSS = `
 .titles p { margin: 4px 0 0; color: ${BRAND.textLight}; font-size: 15px; }
 
 /* CONTROLS */
-.actions { display: flex; align-items: center; gap: 16px; }
+.analytics-page .actions { display: flex; align-items: center; gap: 16px; }
 .range-toggle {
   background: white; padding: 5px; border-radius: 50px; display: flex;
   box-shadow: 0 4px 12px rgba(0,0,0,0.03);
