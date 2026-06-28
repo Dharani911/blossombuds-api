@@ -153,6 +153,22 @@ public class CustomerService {
                 districtRepository.findById(dto.getDistrictId())
                         .orElseThrow(() -> new IllegalArgumentException("District not found: " + dto.getDistrictId()));
 
+        // Dedup: if an active address with the same physical location already exists, return it
+        String normLine1 = dto.getLine1() != null ? dto.getLine1().trim() : "";
+        String normLine2 = dto.getLine2() != null ? dto.getLine2().trim() : "";
+        String normPincode = dto.getPincode() != null ? dto.getPincode().trim() : "";
+        List<Address> dupes = addressRepo.findActiveByLocation(customerId, normLine1, normLine2, normPincode, dto.getDistrictId());
+        if (!dupes.isEmpty()) {
+            Address dup = dupes.get(0);
+            if (Boolean.TRUE.equals(dto.getIsDefault()) && !Boolean.TRUE.equals(dup.getIsDefault())) {
+                dup.setIsDefault(true);
+                addressRepo.save(dup);
+                unsetOtherDefaults(customerId, dup.getId());
+            }
+            log.info("[ADDRESS][DEDUP] Returning existing address id={} for customerId={}", dup.getId(), customerId);
+            return toAddressView(dup, nameOf(dup.getCountry()), nameOf(dup.getState()), nameOf(dup.getDistrict()));
+        }
+
         Address a = new Address();
         a.setCustomer(c);
         a.setName(dto.getName());

@@ -647,7 +647,9 @@ useEffect(() => {
           const a = await listAddresses(Number(user.id));
           if (!alive) return;
           setAddrList(a || []);
-          setSelectedAddrId(null); // don't auto-select — user must choose an address
+          // Auto-select the default address; user can change via the sheet
+          const def = (a || []).find(addr => addr.isDefault && addr.countryId === resolvedIndiaId);
+          setSelectedAddrId(def?.id ?? null);
         } catch (e: any) {
           if (!alive) return;
           setErr(e?.response?.data?.message || e?.message || "Could not load addresses.");
@@ -930,7 +932,7 @@ const grandTotal = useMemo(() => {
     const selectedAddress = domesticAddresses.find(a => a.id === selectedAddrId) || null;
     if (!selectedAddress) { setErr("Please add/select an Indian address."); return; }
     if (!isValidIndianPhone(selectedAddress.phone || "")) {
-      setErr("The phone number on your selected address is invalid. Please edit the address and enter a valid 10-digit Indian mobile number.");
+      setErr("Invalid phone number on this address. Please enter a valid 10-digit mobile number (e.g. 98765 43210).");
       return;
     }
     if (!partnerId) { setErr("Please select a delivery partner."); return; }
@@ -1435,6 +1437,17 @@ const grandTotal = useMemo(() => {
                       <button
                         className="ghost"
                         onClick={() => {
+                          setEditAddr(selectedAddress);
+                          setModalContext(international ? "intl" : "domestic");
+                          setNewAddrOpen(true);
+                        }}
+                        disabled={loginCta}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="ghost"
+                        onClick={() => {
                           setManageMode(false);
                           setSelectSheetOpen(true);
                         }}
@@ -1451,10 +1464,30 @@ const grandTotal = useMemo(() => {
                       </button>
                     </div>
                   </div>
+                ) : domesticAddresses.length > 0 ? (
+                  <div className="cur">
+                    <div>You have {domesticAddresses.length} saved address{domesticAddresses.length > 1 ? "es" : ""}. Select one to continue.</div>
+                    <div className="btns">
+                      <button
+                        className="ghost"
+                        onClick={() => { setManageMode(false); setSelectSheetOpen(true); }}
+                        disabled={loginCta}
+                      >
+                        Select address
+                      </button>
+                      <button
+                        className="ghost"
+                        onClick={() => openNewAddress("domestic")}
+                        disabled={loginCta || !INDIA_ID}
+                      >
+                        New
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   <div className="cur">
                     <div>
-                      {loginCta ? "Login to manage addresses." : "No Indian addresses."}
+                      {loginCta ? "Login to manage addresses." : "No saved addresses."}
                     </div>
                     <div className="btns">
                       <button

@@ -142,7 +142,12 @@ public class CustomerAuthService {
                 pref.setOptedIn(waOptIn);
                 pref.setSmsOptedIn(smsOptIn);
                 pref.setSource("SIGNUP");
-                pref.setLastConsentText("I agree to receive order updates and promotions via WhatsApp/SMS");
+                String consentText = (waOptIn && smsOptIn)
+                        ? "I agree to receive order updates and promotions via WhatsApp and SMS"
+                        : waOptIn
+                            ? "I agree to receive order updates and promotions via WhatsApp"
+                            : "I agree to receive order updates via SMS";
+                pref.setLastConsentText(consentText);
                 if (waOptIn)  pref.setOptedInAt(OffsetDateTime.now());
                 if (smsOptIn) pref.setSmsOptedInAt(OffsetDateTime.now());
                 pref.setActive(true);

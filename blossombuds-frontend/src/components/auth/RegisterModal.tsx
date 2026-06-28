@@ -41,9 +41,9 @@ export default function RegisterModal() {
   const [phoneResendBusy, setPhoneResendBusy] = useState(false);
   const [phoneResendMsg, setPhoneResendMsg] = useState<string | null>(null);
 
-  // Communication consent (phone path)
+  // Communication consent (phone path) — both default true; user may uncheck
   const [smsOptIn, setSmsOptIn] = useState(true);
-  const [waOptIn, setWaOptIn] = useState(false);
+  const [waOptIn, setWaOptIn] = useState(true);
 
   const sheetRef = useRef<HTMLDivElement>(null);
 
