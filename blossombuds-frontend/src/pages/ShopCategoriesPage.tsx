@@ -203,7 +203,7 @@ const openProduct = (productId: number) => {
       pathname: location.pathname,
       search: `?${params.toString()}`,
     },
-    { replace: false }
+    { replace: false, preventScrollReset: true }
   );
 };
 const childrenByParent = useMemo(() => {
@@ -271,13 +271,14 @@ const closeQuickView = () => {
       pathname: location.pathname,
       search: nextSearch ? `?${nextSearch}` : "",
     },
-    { replace: true }
+    { replace: true, preventScrollReset: true }
   );
 };
 
   // categories: parents (top-level)
   const parents = useMemo(() => (cats || []).filter((c) => c.parentId == null && c.active !== false), [cats]);
 const [isMobile, setIsMobile] = useState(false);
+const mobStickyRef = useRef<HTMLDivElement>(null);
 
 useEffect(() => {
   const mq = window.matchMedia("(max-width: 980px)");
@@ -286,6 +287,44 @@ useEffect(() => {
   mq.addEventListener?.("change", onChange);
   return () => mq.removeEventListener?.("change", onChange);
 }, []);
+
+// Keep the fixed-bar spacer height in sync with the actual bar height
+useEffect(() => {
+  const el = mobStickyRef.current;
+  if (!el) return;
+  const sync = () => {
+    const ph = document.getElementById("mob-sticky-ph");
+    if (ph) ph.style.height = `${el.offsetHeight}px`;
+  };
+  sync();
+  const ro = new ResizeObserver(sync);
+  ro.observe(el);
+  return () => ro.disconnect();
+}, [isMobile]);
+
+// Pin the fixed bar flush below the nav header (accounts for TopBanner loading async)
+useEffect(() => {
+  if (!isMobile) return;
+  const el = mobStickyRef.current;
+  if (!el) return;
+  const updateTop = () => {
+    const hdr = document.querySelector<HTMLElement>(".hx");
+    if (!hdr) return;
+    el.style.top = `${Math.max(0, hdr.getBoundingClientRect().bottom)}px`;
+  };
+  updateTop();
+  // Re-check whenever the app shell changes size (TopBanner loads late and pushes header down)
+  const appWrap = document.querySelector<HTMLElement>(".app-wrap");
+  const ro = appWrap ? new ResizeObserver(updateTop) : null;
+  ro?.observe(appWrap!);
+  window.addEventListener("scroll", updateTop, { passive: true });
+  window.addEventListener("resize", updateTop);
+  return () => {
+    ro?.disconnect();
+    window.removeEventListener("scroll", updateTop);
+    window.removeEventListener("resize", updateTop);
+  };
+}, [isMobile]);
 
   // load all categories — seed from localStorage cache instantly, then refresh in background
   useEffect(() => {
@@ -885,6 +924,7 @@ useEffect(() => {
 
         {/* RIGHT content */}
         <main className="content">
+          <div className="mob-sticky" ref={mobStickyRef}>
           <div className="topbar">
             {isMobile && (
               <button className="drawer-btn" onClick={() => setDrawerOpen(true)} type="button">
@@ -1019,6 +1059,9 @@ useEffect(() => {
               </div>
             )}
           </div>
+
+          </div>{/* /mob-sticky */}
+          {isMobile && <div id="mob-sticky-ph" aria-hidden="true" style={{ flexShrink: 0 }} />}
 
           <div className="kwrow" aria-label="Quick keywords">
             {KEYWORDS.map((k) => (
@@ -1394,7 +1437,30 @@ const css = `
 @media (max-width: 980px){
   .shell{ grid-template-columns: 1fr; }
   .menu{ display:none !important; }
+  .mob-sticky{
+    position:fixed;
+    top:68px;
+    left:0; right:0;
+    z-index:50;
+    background:#FAF7E7;
+    padding:8px 12px 10px;
+    border-bottom:1px solid rgba(0,0,0,.07);
+    box-shadow:0 2px 8px rgba(0,0,0,.07);
+  }
 }
+@media (min-width: 981px){
+  .mob-sticky{
+    position:sticky;
+    top:76px;
+    z-index:8;
+    background:var(--bb-bg,#FAF7E7);
+    padding-bottom:6px;
+    margin-bottom:6px;
+    border-bottom:1px solid rgba(0,0,0,.06);
+    box-shadow:0 2px 8px rgba(0,0,0,.05);
+  }
+}
+.mob-sticky .topbar{ margin-bottom:0; }
 
 /* Cards & base */
 .card{ background:#fff; border:1px solid rgba(0,0,0,.08); border-radius:14px; box-shadow:0 10px 28px rgba(0,0,0,.08); overflow:hidden; }

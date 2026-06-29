@@ -85,8 +85,10 @@ useEffect(() => {
     setNotifyEmail(sessionEmail);
   }
 }, [sessionEmail, notifyEmail]);
-  // 🔒 Lock background scroll while modal is open
+  // 🔒 Lock background scroll while modal is open; restore scroll position on close
   useEffect(() => {
+    const savedScrollY = window.scrollY;
+
     const prevHtml = document.documentElement.style.overflow;
     const prevBody = document.body.style.overflow;
     const prevPos = document.body.style.position;
@@ -99,6 +101,7 @@ useEffect(() => {
       document.documentElement.style.overflow = prevHtml || "";
       document.body.style.overflow = prevBody || "";
       document.body.style.position = prevPos || "";
+      window.scrollTo({ top: savedScrollY, behavior: "instant" });
     };
   }, []);
 

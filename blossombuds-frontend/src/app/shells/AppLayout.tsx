@@ -63,7 +63,7 @@ const css = `
   min-height: 100vh;
   min-height: 100dvh;
   width: 100%;                 /* ✅ ensure root can’t exceed viewport */
-  overflow-x: hidden;          /* ✅ hard-stop horizontal leaks */
+  overflow-x: clip;            /* clip: no scroll container created, position:sticky still works */
   display: grid;
   grid-template-columns: minmax(0, 1fr);       /* constrain column to viewport width */
   grid-template-rows: auto auto auto 1fr auto; /* TopBanner, Header, VerifyBanner, main, footer */
@@ -86,7 +86,7 @@ const css = `
   margin: 0 auto;
   min-height: 0;               /* prevent vertical overflow issues on mobile */
   min-width: 0;                /* ✅ allow flex child to shrink within viewport */
-  overflow-x: hidden;          /* ✅ extra guard for rogue wide children */
+  overflow-x: clip;            /* clip: no scroll container created, position:sticky still works */
   transition: filter .2s ease;
 }
 .app-main.blurred{ filter: blur(6px); }
