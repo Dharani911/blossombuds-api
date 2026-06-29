@@ -617,15 +617,8 @@ public class CustomerAuthService {
         String phone = normalizePhone(safeTrim(phoneRaw));
         if (isBlank(phone)) throw new IllegalArgumentException("Phone is required");
 
-        Customer c = customers.findByPhone(phone).orElse(null);
-        if (c == null) {
-            log.info("[CUSTOMER][PHONE_LOGIN_OTP] Phone not registered: {}", phone);
-            throw new IllegalArgumentException("This phone number is not registered. Please sign up first.");
-        }
-        if (!Boolean.TRUE.equals(c.getPhoneVerified())) {
-            log.info("[CUSTOMER][PHONE_LOGIN_OTP] Phone not yet verified for customerId={}", c.getId());
-            throw new IllegalArgumentException("This phone number is not yet verified. Please complete phone verification first.");
-        }
+        Customer c = customers.findByPhone(phone)
+                .orElseThrow(() -> new IllegalArgumentException("This phone number is not registered. Please sign up first."));
 
         // Rate limit: max one OTP per 60 seconds
         otpRepo.findTopByDestinationAndChannelAndPurposeOrderByCreatedAtDesc(
@@ -637,12 +630,11 @@ public class CustomerAuthService {
                     }
                 });
 
-        // Issue OTP inside the transaction — SMS failure will roll it back so the
-        // rate-limit slot is not consumed and the user can retry immediately.
+        // Issue OTP — unverified accounts are allowed through; verifyPhoneLoginOtp will mark them verified on success
         String otp = issuePhoneOtp(c.getId(), phone, OtpPurpose.LOGIN);
         smsService.sendLoginOtp(phone, otp);
 
-        log.info("[CUSTOMER][PHONE_LOGIN_OTP] Login OTP issued for customerId={}", c.getId());
+        log.info("[CUSTOMER][PHONE_LOGIN_OTP] Login OTP issued for customerId={} (phoneVerified={})", c.getId(), c.getPhoneVerified());
     }
 
     /**
@@ -660,10 +652,6 @@ public class CustomerAuthService {
 
         Customer customer = customers.findByPhone(phone)
                 .orElseThrow(() -> new IllegalArgumentException("No account found for this phone number"));
-
-        if (!Boolean.TRUE.equals(customer.getPhoneVerified())) {
-            throw new IllegalArgumentException("No account found for this phone number");
-        }
 
         AuthOtpToken token = otpRepo
                 .findTopByDestinationAndChannelAndPurposeOrderByCreatedAtDesc(
@@ -686,6 +674,12 @@ public class CustomerAuthService {
 
         token.setConsumedAt(OffsetDateTime.now());
         clearOtpFailures(phone);
+
+        if (!Boolean.TRUE.equals(customer.getPhoneVerified())) {
+            customer.setPhoneVerified(true);
+            customers.save(customer);
+            log.info("[CUSTOMER][PHONE_LOGIN_OTP] Phone verified via login OTP for customerId={}", customer.getId());
+        }
 
         log.info("[CUSTOMER][PHONE_LOGIN_OTP] Phone login verified for customerId={}", customer.getId());
 
