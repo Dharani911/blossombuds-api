@@ -81,21 +81,21 @@ public class CustomerAuthService {
         }
         // Uniqueness: phone must be unused (check against normalized form)
         String normalizedPhone = isBlank(phone) ? phone : normalizePhone(phone);
-        // Allow re-registration if existing account has never verified their phone (phoneVerified=false).
-        Customer existingByPhone = !isBlank(normalizedPhone)
-                ? customers.findByPhone(normalizedPhone).orElse(null)
-                : null;
-        if (existingByPhone != null && Boolean.TRUE.equals(existingByPhone.getPhoneVerified())) {
-            throw new IllegalArgumentException("Phone already registered");
+        if (!isBlank(normalizedPhone)) {
+            Customer existingByPhone = customers.findByPhone(normalizedPhone).orElse(null);
+            if (existingByPhone != null) {
+                if (Boolean.TRUE.equals(existingByPhone.getPhoneVerified())) {
+                    throw new IllegalArgumentException("This phone number is already registered. Please log in instead.");
+                } else {
+                    throw new IllegalArgumentException("This phone number is already registered but not yet verified. Please log in and verify your number.");
+                }
+            }
         }
 
-        // Create customer, or reuse an existing unverified account for the same phone
-        Customer c = existingByPhone != null ? existingByPhone : new Customer();
+        Customer c = new Customer();
         c.setName(name);
-        if (existingByPhone == null) {
-            c.setEmail(email);
-            c.setPhone(normalizedPhone);
-        }
+        c.setEmail(email);
+        c.setPhone(normalizedPhone);
         c.setPasswordHash(isBlank(rawPassword)
                 ? encoder.encode(java.util.UUID.randomUUID().toString())
                 : encoder.encode(rawPassword));
@@ -617,11 +617,14 @@ public class CustomerAuthService {
         String phone = normalizePhone(safeTrim(phoneRaw));
         if (isBlank(phone)) throw new IllegalArgumentException("Phone is required");
 
-        // Silent non-existence: don't reveal whether the phone is registered
         Customer c = customers.findByPhone(phone).orElse(null);
-        if (c == null || !Boolean.TRUE.equals(c.getPhoneVerified())) {
-            log.info("[CUSTOMER][PHONE_LOGIN_OTP] Phone not registered or not yet verified, returning silently");
-            return;
+        if (c == null) {
+            log.info("[CUSTOMER][PHONE_LOGIN_OTP] Phone not registered: {}", phone);
+            throw new IllegalArgumentException("This phone number is not registered. Please sign up first.");
+        }
+        if (!Boolean.TRUE.equals(c.getPhoneVerified())) {
+            log.info("[CUSTOMER][PHONE_LOGIN_OTP] Phone not yet verified for customerId={}", c.getId());
+            throw new IllegalArgumentException("This phone number is not yet verified. Please complete phone verification first.");
         }
 
         // Rate limit: max one OTP per 60 seconds
