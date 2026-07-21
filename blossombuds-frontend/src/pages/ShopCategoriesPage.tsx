@@ -37,6 +37,27 @@ function cacheWrite<T>(key: string, data: T): void {
     localStorage.setItem(key, JSON.stringify({ d: data, t: Date.now() }));
   } catch { /* quota exceeded — silently ignore */ }
 }
+
+/* Retries a single page fetch a few times with backoff before giving up on it,
+   so one transient blip doesn't have to nuke everything already loaded. */
+async function fetchPageWithRetry(
+  page: number,
+  size: number,
+  attempts = 3
+): Promise<PageResp<Product>> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await listProductsPage(page, size);
+    } catch (e) {
+      lastErr = e;
+      if (i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, 800 * (i + 1)));
+      }
+    }
+  }
+  throw lastErr;
+}
 /* ----------------------------- Keywords (search-only) ----------------------------- */
 const KEYWORDS: { label: string; value: string }[] = [
   { label: "Malli", value: "malli" },
@@ -483,75 +504,66 @@ useEffect(() => {
       setLoadingAll(true);
       const allFetched: Product[] = [];
       let replacedCache = false;
+      let pageFailed = false;
 
-      try {
-        const size = 60;
-        const maxPages = 20;
-        const seen = new Set<number>();
+      const size = 60;
+      const maxPages = 20;
+      const seen = new Set<number>();
 
-        for (let page = 0; page < maxPages; page++) {
-          if (!live) return;
-
-          const resp = await listProductsPage(page, size);
-          const rows = (resp?.content || []) as Product[];
-          if (!rows.length) break;
-
-          const batch: Product[] = [];
-          for (const p of rows as any[]) {
-            const v = p?.visible ?? p?.isVisible ?? null;
-            const isVisible = v === true || v == null;
-            const isActive = p?.active !== false;
-            if (!isActive || !isVisible) continue;
-            if (!p?.id || seen.has(p.id)) continue;
-            seen.add(p.id);
-            batch.push(p as Product);
-            allFetched.push(p as Product);
-          }
-
-          if (!live) return;
-          if (batch.length) {
-            if (!replacedCache) {
-              // First fresh batch: replace stale cache data entirely
-              setAllProducts(batch);
-              replacedCache = true;
-            } else {
-              setAllProducts((prev) => [...prev, ...batch]);
-            }
-          }
-
-          if (rows.length < size) break;
-        }
-
-        // Persist fresh complete list to cache
-        if (allFetched.length) cacheWrite(CACHE_PRODS_KEY, allFetched);
-
-      } catch {
+      for (let page = 0; page < maxPages; page++) {
         if (!live) return;
-        if (cached?.length) {
-          // Already showing cached data — silently stop, don't show error
-          if (live) setLoadingAll(false);
-          return;
-        }
-        // No cache — retry once after 3 s
-        await new Promise((r) => setTimeout(r, 3000));
-        if (!live) return;
+
+        let resp: PageResp<Product>;
         try {
-          const resp2 = await listProductsPage(0, 60);
-          const rows2 = (resp2?.content || []) as Product[];
-          const batch2 = rows2.filter((p: any) => {
-            const v = p?.visible ?? p?.isVisible ?? null;
-            return p?.active !== false && v !== false && p?.id;
-          });
-          if (live && batch2.length) {
-            setAllProducts(batch2 as Product[]);
-            cacheWrite(CACHE_PRODS_KEY, batch2 as Product[]);
-          }
+          resp = await fetchPageWithRetry(page, size);
         } catch {
-          if (live) setProductErr("Could not load products. Check your connection and try again.");
+          // This page never came back even after retries — stop paging, but
+          // keep whatever earlier pages already loaded instead of wiping them.
+          pageFailed = true;
+          break;
         }
-      } finally {
-        if (live) setLoadingAll(false);
+
+        const rows = (resp?.content || []) as Product[];
+        if (!rows.length) break;
+
+        const batch: Product[] = [];
+        for (const p of rows as any[]) {
+          const v = p?.visible ?? p?.isVisible ?? null;
+          const isVisible = v === true || v == null;
+          const isActive = p?.active !== false;
+          if (!isActive || !isVisible) continue;
+          if (!p?.id || seen.has(p.id)) continue;
+          seen.add(p.id);
+          batch.push(p as Product);
+          allFetched.push(p as Product);
+        }
+
+        if (!live) return;
+        if (batch.length) {
+          if (!replacedCache) {
+            // First fresh batch: replace stale cache data entirely
+            setAllProducts(batch);
+            replacedCache = true;
+          } else {
+            setAllProducts((prev) => [...prev, ...batch]);
+          }
+        }
+
+        if (rows.length < size) break;
       }
+
+      if (!live) return;
+
+      // Persist whatever fresh data we did get to cache
+      if (allFetched.length) cacheWrite(CACHE_PRODS_KEY, allFetched);
+
+      // Only surface a hard error when we truly have nothing to show —
+      // no fresh batch landed and there was no cache to fall back on.
+      if (pageFailed && !replacedCache && !cached?.length) {
+        setProductErr("Could not load products. Check your connection and try again.");
+      }
+
+      setLoadingAll(false);
     }
 
     loadAllProgressive();
@@ -1156,27 +1168,41 @@ useEffect(() => {
                       (async () => {
                         const size = 60;
                         const seen = new Set<number>();
-                        try {
-                          for (let page = 0; page < 20; page++) {
-                            const resp = await listProductsPage(page, size);
-                            const rows = (resp?.content || []) as Product[];
-                            if (!rows.length) break;
-                            const batch: Product[] = [];
-                            for (const p of rows as any[]) {
-                              const v = p?.visible ?? p?.isVisible ?? null;
-                              if ((p?.active === false) || (v === false)) continue;
-                              if (!p?.id || seen.has(p.id)) continue;
-                              seen.add(p.id);
-                              batch.push(p as Product);
-                            }
-                            if (batch.length) setAllProducts((prev) => [...prev, ...batch]);
-                            if (rows.length < size) break;
+                        const fetched: Product[] = [];
+                        let gotAny = false;
+                        let pageFailed = false;
+
+                        for (let page = 0; page < 20; page++) {
+                          let resp: PageResp<Product>;
+                          try {
+                            resp = await fetchPageWithRetry(page, size);
+                          } catch {
+                            pageFailed = true;
+                            break;
                           }
-                        } catch {
-                          setProductErr("Could not load products. Check your connection and try again.");
-                        } finally {
-                          setLoadingAll(false);
+                          const rows = (resp?.content || []) as Product[];
+                          if (!rows.length) break;
+                          const batch: Product[] = [];
+                          for (const p of rows as any[]) {
+                            const v = p?.visible ?? p?.isVisible ?? null;
+                            if ((p?.active === false) || (v === false)) continue;
+                            if (!p?.id || seen.has(p.id)) continue;
+                            seen.add(p.id);
+                            batch.push(p as Product);
+                            fetched.push(p as Product);
+                          }
+                          if (batch.length) {
+                            setAllProducts((prev) => [...prev, ...batch]);
+                            gotAny = true;
+                          }
+                          if (rows.length < size) break;
                         }
+
+                        if (fetched.length) cacheWrite(CACHE_PRODS_KEY, fetched);
+                        if (pageFailed && !gotAny) {
+                          setProductErr("Could not load products. Check your connection and try again.");
+                        }
+                        setLoadingAll(false);
                       })();
                     }}
                   >
