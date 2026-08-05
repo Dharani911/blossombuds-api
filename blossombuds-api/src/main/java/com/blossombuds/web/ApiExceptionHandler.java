@@ -15,6 +15,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.OffsetDateTime;
@@ -67,6 +68,17 @@ public class ApiExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<?> handleIllegalArg(IllegalArgumentException ex, HttpServletRequest req) {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage(), req, null);
+    }
+
+    /** Explicit @ResponseStatus rejections (e.g. ResponseStatusException(BAD_REQUEST, "...")).
+     * Without this handler, Spring's default error handling suppresses the reason text
+     * from the response body (server.error.include-message defaults to "never"), so callers
+     * relying on response.data.message would only ever see a generic fallback. */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<?> handleResponseStatus(ResponseStatusException ex, HttpServletRequest req) {
+        HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
+        if (status == null) status = HttpStatus.INTERNAL_SERVER_ERROR;
+        return build(status, ex.getReason(), req, null);
     }
 
     /* ---------- 401 / 403 ---------- */

@@ -79,6 +79,14 @@ public class CustomerWhatsAppPreferenceController {
             pref.setPhone(normalizePhone(request.getPhone()));
         }
 
+        // The DB column is NOT NULL. A first-time save with no phone on the request and none
+        // on the customer's account (e.g. Google OAuth signups) would otherwise fail at the
+        // database with a constraint violation — reject it up front with an actionable message.
+        if (isBlank(pref.getPhone())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Add a phone number to your profile before enabling WhatsApp or SMS updates");
+        }
+
         // WhatsApp channel
         if (request.getWhatsappOptedIn() != null) {
             boolean optIn = request.getWhatsappOptedIn();

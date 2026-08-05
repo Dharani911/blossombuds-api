@@ -153,8 +153,8 @@ export default function ProfilePage() {
       const updated = await saveCommunicationPreference(cust.id, { ...next, phone: cust.phone ?? undefined });
       setPrefs(updated);
       toasts.push("Preferences saved", "ok");
-    } catch {
-      toasts.push("Could not save preferences", "bad");
+    } catch (e: any) {
+      toasts.push(e?.response?.data?.message || "Could not save preferences", "bad");
     } finally {
       setSavingPrefs(false);
     }

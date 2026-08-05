@@ -269,6 +269,17 @@ const selectedChildren = useMemo(() => {
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [loadingAll, setLoadingAll] = useState(false);
 
+  // Incremental "All Products" paging state. Refs (not state) because they're
+  // read/written from inside async loops without needing to trigger re-renders.
+  const seenIdsRef = useRef<Set<number>>(new Set());
+  const allFetchedRef = useRef<Product[]>([]);
+  const nextPageRef = useRef(0);
+  const hasMoreRef = useRef(true);
+  const fullyLoadedRef = useRef(false); // true once the entire catalog has been paged in (search/filter active)
+  const loadingMoreRef = useRef(false); // guards against overlapping loadMore/loadRemaining calls
+  const loadGenRef = useRef(0); // bumped on every loadInitial() so stale async work can detect it's superseded
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
   // UI states
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -480,97 +491,180 @@ useEffect(() => {
     return rows;
   }, []);
 
-  // Load ALL products progressively — seed from localStorage cache first so the
-  // grid is never blank. Fresh data replaces cache in the background.
-  useEffect(() => {
-    let live = true;
+  // 100/page keeps today's ~500-product catalog to 5 pages instead of 9, while staying
+  // moderate enough not to bloat a single request if the catalog grows substantially later —
+  // scroll-gating (PRODS_INITIAL_PAGES) already caps the page-load burst independent of catalog size.
+  const PRODS_PAGE_SIZE = 100;
+  const PRODS_MAX_PAGES = 20;
+  const PRODS_INITIAL_PAGES = 2; // how many pages to eagerly fetch before switching to scroll/search-triggered loading
 
-    async function loadAllProgressive() {
-      if (!allMode) return;
+  /** Fetches + dedupes one page. Never throws — a persistently-failing page reads as "no more data". */
+  const loadOnePage = useCallback(async (page: number): Promise<{ batch: Product[]; isLast: boolean; failed: boolean }> => {
+    let resp: PageResp<Product>;
+    try {
+      resp = await fetchPageWithRetry(page, PRODS_PAGE_SIZE);
+    } catch {
+      return { batch: [], isLast: true, failed: true };
+    }
+    const rows = (resp?.content || []) as Product[];
+    const batch: Product[] = [];
+    for (const p of rows as any[]) {
+      const v = p?.visible ?? p?.isVisible ?? null;
+      const isVisible = v === true || v == null;
+      const isActive = p?.active !== false;
+      if (!isActive || !isVisible) continue;
+      if (!p?.id || seenIdsRef.current.has(p.id)) continue;
+      seenIdsRef.current.add(p.id);
+      batch.push(p as Product);
+    }
+    return { batch, isLast: rows.length < PRODS_PAGE_SIZE, failed: false };
+  }, []);
 
-      setProductErr(null);
+  /** Initial load: seed from cache instantly, then fetch just the first couple of pages. */
+  const loadInitial = useCallback(async () => {
+    const gen = ++loadGenRef.current;
+    const stale = () => loadGenRef.current !== gen;
 
-      // ── 1. Seed from cache immediately (instant render, no blank grid) ──
-      const cached = cacheRead<Product[]>(CACHE_PRODS_KEY, CACHE_PRODS_TTL);
-      if (cached?.length) {
-        setAllProducts(cached);
-        setLoadingAll(false); // don't show spinner if we already have content
-      } else {
-        setAllProducts([]);
-        setLoadingAll(true);
-      }
+    setProductErr(null);
+    seenIdsRef.current = new Set();
+    allFetchedRef.current = [];
+    nextPageRef.current = 0;
+    hasMoreRef.current = true;
+    fullyLoadedRef.current = false;
 
-      // ── 2. Fetch fresh data in background ──────────────────────────────
-      setLoadingAll(true);
-      const allFetched: Product[] = [];
-      let replacedCache = false;
-      let pageFailed = false;
-
-      const size = 60;
-      const maxPages = 20;
-      const seen = new Set<number>();
-
-      for (let page = 0; page < maxPages; page++) {
-        if (!live) return;
-
-        let resp: PageResp<Product>;
-        try {
-          resp = await fetchPageWithRetry(page, size);
-        } catch {
-          // This page never came back even after retries — stop paging, but
-          // keep whatever earlier pages already loaded instead of wiping them.
-          pageFailed = true;
-          break;
-        }
-
-        const rows = (resp?.content || []) as Product[];
-        if (!rows.length) break;
-
-        const batch: Product[] = [];
-        for (const p of rows as any[]) {
-          const v = p?.visible ?? p?.isVisible ?? null;
-          const isVisible = v === true || v == null;
-          const isActive = p?.active !== false;
-          if (!isActive || !isVisible) continue;
-          if (!p?.id || seen.has(p.id)) continue;
-          seen.add(p.id);
-          batch.push(p as Product);
-          allFetched.push(p as Product);
-        }
-
-        if (!live) return;
-        if (batch.length) {
-          if (!replacedCache) {
-            // First fresh batch: replace stale cache data entirely
-            setAllProducts(batch);
-            replacedCache = true;
-          } else {
-            setAllProducts((prev) => [...prev, ...batch]);
-          }
-        }
-
-        if (rows.length < size) break;
-      }
-
-      if (!live) return;
-
-      // Persist whatever fresh data we did get to cache
-      if (allFetched.length) cacheWrite(CACHE_PRODS_KEY, allFetched);
-
-      // Only surface a hard error when we truly have nothing to show —
-      // no fresh batch landed and there was no cache to fall back on.
-      if (pageFailed && !replacedCache && !cached?.length) {
-        setProductErr("Could not load products. Check your connection and try again.");
-      }
-
+    const cached = cacheRead<Product[]>(CACHE_PRODS_KEY, CACHE_PRODS_TTL);
+    if (cached?.length) {
+      setAllProducts(cached);
       setLoadingAll(false);
+    } else {
+      setAllProducts([]);
+      setLoadingAll(true);
+    }
+    setLoadingAll(true);
+
+    let combined: Product[] = [];
+    let replacedCache = false;
+    let anyFailed = false;
+
+    for (let i = 0; i < PRODS_INITIAL_PAGES; i++) {
+      if (stale()) return;
+      const page = nextPageRef.current;
+      const { batch, isLast, failed } = await loadOnePage(page);
+      if (stale()) return;
+
+      if (failed) {
+        anyFailed = true;
+        hasMoreRef.current = false;
+        break;
+      }
+
+      nextPageRef.current = page + 1;
+      allFetchedRef.current = allFetchedRef.current.concat(batch);
+      combined = combined.concat(batch);
+      if (batch.length) {
+        if (!replacedCache) {
+          setAllProducts(combined);
+          replacedCache = true;
+        } else {
+          setAllProducts((prev) => [...prev, ...batch]);
+        }
+      }
+
+      if (isLast) {
+        hasMoreRef.current = false;
+        break;
+      }
     }
 
-    loadAllProgressive();
-    return () => {
-      live = false;
-    };
-  }, [allMode]);
+    if (stale()) return;
+    if (allFetchedRef.current.length) cacheWrite(CACHE_PRODS_KEY, allFetchedRef.current);
+
+    // Only surface a hard error when we truly have nothing to show.
+    if (anyFailed && !replacedCache && !cached?.length) {
+      setProductErr("Could not load products. Check your connection and try again.");
+    }
+    setLoadingAll(false);
+  }, [loadOnePage]);
+
+  /** Scroll-triggered: fetch exactly the next page. */
+  const loadMore = useCallback(async () => {
+    if (!hasMoreRef.current || loadingMoreRef.current || fullyLoadedRef.current) return;
+    const gen = loadGenRef.current;
+    loadingMoreRef.current = true;
+    setLoadingAll(true);
+
+    const page = nextPageRef.current;
+    const { batch, isLast, failed } = await loadOnePage(page);
+    if (loadGenRef.current === gen) {
+      if (!failed) {
+        nextPageRef.current = page + 1;
+        allFetchedRef.current = allFetchedRef.current.concat(batch);
+        if (batch.length) setAllProducts((prev) => [...prev, ...batch]);
+        if (allFetchedRef.current.length) cacheWrite(CACHE_PRODS_KEY, allFetchedRef.current);
+      }
+      if (failed || isLast) hasMoreRef.current = false;
+      setLoadingAll(false);
+    }
+    loadingMoreRef.current = false;
+  }, [loadOnePage]);
+
+  /** Search/filter is active locally (only meaningful in allMode — see filter UI) — load the rest of the catalog
+   *  so search/min/max price cover everything, not just what's scrolled into view yet. */
+  const loadRemainingForSearch = useCallback(async () => {
+    if (fullyLoadedRef.current || loadingMoreRef.current) return;
+    if (!hasMoreRef.current) { fullyLoadedRef.current = true; return; }
+
+    const gen = loadGenRef.current;
+    loadingMoreRef.current = true;
+    setLoadingAll(true);
+
+    while (hasMoreRef.current && nextPageRef.current < PRODS_MAX_PAGES) {
+      if (loadGenRef.current !== gen) { loadingMoreRef.current = false; return; }
+      const page = nextPageRef.current;
+      const { batch, isLast, failed } = await loadOnePage(page);
+      if (loadGenRef.current !== gen) { loadingMoreRef.current = false; return; }
+
+      if (failed) { hasMoreRef.current = false; break; }
+      nextPageRef.current = page + 1;
+      allFetchedRef.current = allFetchedRef.current.concat(batch);
+      if (batch.length) setAllProducts((prev) => [...prev, ...batch]);
+      if (isLast) { hasMoreRef.current = false; break; }
+    }
+
+    if (allFetchedRef.current.length) cacheWrite(CACHE_PRODS_KEY, allFetchedRef.current);
+    fullyLoadedRef.current = true;
+    loadingMoreRef.current = false;
+    setLoadingAll(false);
+  }, [loadOnePage]);
+
+  // Kick off the initial (small) load whenever we enter "All Products" mode.
+  useEffect(() => {
+    if (!allMode) return;
+    loadInitial();
+  }, [allMode, loadInitial]);
+
+  // A search term or price filter means the user wants to search/filter the WHOLE catalog,
+  // not just whatever has scrolled into view so far — page in the rest, once.
+  useEffect(() => {
+    if (!allMode) return;
+    const filtersActive = q.trim() !== "" || minPrice !== "" || maxPrice !== "";
+    if (filtersActive) loadRemainingForSearch();
+  }, [allMode, q, minPrice, maxPrice, loadRemainingForSearch]);
+
+  // Infinite scroll: fetch the next page once the sentinel below the grid comes into view.
+  useEffect(() => {
+    if (!allMode) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) loadMore();
+      },
+      { rootMargin: "600px 0px" }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [allMode, loadMore]);
 
 
 
@@ -1149,6 +1243,8 @@ useEffect(() => {
                       <div className="sk-card" key={`sk-${i}`} />
                     ))}
                 </div>
+                {/* Loading more of the catalog fires when this scrolls into view */}
+                <div ref={sentinelRef} aria-hidden style={{ height: 1 }} />
               </section>
 
               {productErr && !loadingAll && allProducts.length === 0 && (
@@ -1162,48 +1258,7 @@ useEffect(() => {
                       whiteSpace: "nowrap", flexShrink: 0,
                     }}
                     onClick={() => {
-                      setProductErr(null);
-                      setAllProducts([]);
-                      setLoadingAll(true);
-                      (async () => {
-                        const size = 60;
-                        const seen = new Set<number>();
-                        const fetched: Product[] = [];
-                        let gotAny = false;
-                        let pageFailed = false;
-
-                        for (let page = 0; page < 20; page++) {
-                          let resp: PageResp<Product>;
-                          try {
-                            resp = await fetchPageWithRetry(page, size);
-                          } catch {
-                            pageFailed = true;
-                            break;
-                          }
-                          const rows = (resp?.content || []) as Product[];
-                          if (!rows.length) break;
-                          const batch: Product[] = [];
-                          for (const p of rows as any[]) {
-                            const v = p?.visible ?? p?.isVisible ?? null;
-                            if ((p?.active === false) || (v === false)) continue;
-                            if (!p?.id || seen.has(p.id)) continue;
-                            seen.add(p.id);
-                            batch.push(p as Product);
-                            fetched.push(p as Product);
-                          }
-                          if (batch.length) {
-                            setAllProducts((prev) => [...prev, ...batch]);
-                            gotAny = true;
-                          }
-                          if (rows.length < size) break;
-                        }
-
-                        if (fetched.length) cacheWrite(CACHE_PRODS_KEY, fetched);
-                        if (pageFailed && !gotAny) {
-                          setProductErr("Could not load products. Check your connection and try again.");
-                        }
-                        setLoadingAll(false);
-                      })();
+                      loadInitial();
                     }}
                   >
                     Retry
