@@ -67,7 +67,22 @@ public class WhatsAppWebhookController {
 
         String rawPayload = new String(rawPayloadBytes, StandardCharsets.UTF_8);
         log.info("[WHATSAPP][WEBHOOK][EVENT] Received WhatsApp webhook payload");
-        whatsAppWebhookService.processWebhookPayload(rawPayload);
+
+        // Always acknowledge with 200, even if processing blows up.
+        //
+        // processWebhookPayload persists the raw event before parsing, and that save sits outside
+        // its internal try/catch — so a transient database problem (pool exhaustion, a Supabase
+        // pooler hiccup) propagated out of here as a 500. Meta retries a failing callback and then
+        // *disables the webhook subscription*, at which point delivery statuses stop arriving
+        // entirely and every campaign recipient is frozen at SENT with no way to tell what happened.
+        // Losing one payload is far cheaper than losing the subscription; the payload is logged so
+        // it can be replayed by hand if needed.
+        try {
+            whatsAppWebhookService.processWebhookPayload(rawPayload);
+        } catch (Exception e) {
+            log.error("[WHATSAPP][WEBHOOK][ERROR] Failed to process payload, acknowledging anyway to keep the "
+                    + "subscription alive: {} | payload={}", e.toString(), rawPayload, e);
+        }
         return ResponseEntity.ok("EVENT_RECEIVED");
     }
 

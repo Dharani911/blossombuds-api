@@ -1,6 +1,7 @@
 package com.blossombuds.service;
 
 import com.blossombuds.domain.Setting;
+import com.blossombuds.domain.WhatsAppContact;
 import com.blossombuds.domain.WhatsAppMessageEvent;
 import com.blossombuds.repository.CustomerWhatsAppPreferenceRepository;
 import com.blossombuds.repository.WhatsAppCampaignRecipientRepository;
@@ -152,8 +153,139 @@ public class WhatsAppWebhookService {
             if ("STOP".equalsIgnoreCase(bodyText)) {
                 handleStop(phone);
             } else {
-                sendAutoReply(phone);
+                // Record the interaction before replying. This is what makes the contact reachable
+                // by a future marketing campaign — see captureInboundContact.
+                boolean justOptedIn = captureInboundContact(phone, profileNameFor(value, phone), bodyText);
+                sendAutoReply(phone, justOptedIn);
             }
+        }
+    }
+
+    /**
+     * Meta sends the sender's WhatsApp display name in a `contacts` array alongside `messages`,
+     * keyed by wa_id. Returns "" when absent — the name is a nicety, never required.
+     */
+    private String profileNameFor(JsonNode value, String phone) {
+        JsonNode contacts = value.path("contacts");
+        if (!contacts.isArray() || phone == null) return "";
+        for (JsonNode contact : contacts) {
+            if (phone.equals(text(contact, "wa_id"))) {
+                return contact.path("profile").path("name").asText("").trim();
+            }
+        }
+        return "";
+    }
+
+    /**
+     * Creates or refreshes a whatsapp_contacts row for anyone who messages the business number.
+     *
+     * This is the capture half of the expo QR flow: a lead scans the code, WhatsApp opens with the
+     * opt-in sentence pre-filled, they send it, and they land here — phone, display name and an
+     * inbound timestamp, with no manual list to type up afterwards.
+     *
+     * Stamping lastInboundAt is the important part. Meta drops MARKETING templates to recipients
+     * who have never interacted with the sending number (131049), so this timestamp is what
+     * distinguishes a contact a campaign can actually reach from one it cannot.
+     *
+     * Opt-in is deliberately conservative: messaging a business is consent to be *replied to*, not
+     * blanket consent to marketing. A contact is only opted in when the message matches the opt-in
+     * phrase from the QR link (configurable via the whatsapp.optin.phrase setting). Anyone else —
+     * a support question, say — is recorded as reachable but left opted out, and an existing
+     * opt-out is never silently reversed.
+     *
+     * @return true when this message just opted the contact in for the first time — the caller
+     *         uses it to send a welcome rather than the standard "this number is send-only" reply.
+     */
+    private boolean captureInboundContact(String phone, String profileName, String bodyText) {
+        if (phone == null || phone.isBlank()) return false;
+
+        String e164 = phone.startsWith("+") ? phone : "+" + phone.replaceAll("[^0-9]", "");
+        OffsetDateTime now = OffsetDateTime.now();
+        boolean isOptInMessage = matchesOptInPhrase(bodyText);
+
+        boolean justOptedIn = false;
+
+        try {
+            // A registered customer is tracked through their preference row, not the expo contacts
+            // table. Stamp it so the ALL_OPTED_IN audience can tell reachable customers from the
+            // rest, and return early — creating a whatsapp_contacts row for someone who already
+            // has an account would only produce a duplicate the expo audience then has to skip.
+            var preference = preferenceRepository.findByPhoneAndActiveTrue(e164)
+                    .or(() -> preferenceRepository.findByPhoneAndActiveTrue(e164.substring(1)));
+            if (preference.isPresent()) {
+                var pref = preference.get();
+                pref.setLastInboundAt(now);
+                pref.setModifiedBy("webhook-inbound");
+                pref.setModifiedAt(now);
+                preferenceRepository.save(pref);
+                log.info("[WHATSAPP][INBOUND][CAPTURE] Marked registered customer reachable phone={}",
+                        maskPhone(phone));
+                return false; // already a customer — no welcome, they did not just opt in here
+            }
+
+            WhatsAppContact contact = whatsAppContactRepository.findByPhone(e164)
+                    .or(() -> whatsAppContactRepository.findByPhone(e164.substring(1)))
+                    .orElse(null);
+
+            if (contact == null) {
+                contact = new WhatsAppContact();
+                contact.setPhone(e164);
+                contact.setSource("WHATSAPP_INBOUND");
+                contact.setOptedIn(isOptInMessage);
+                contact.setActive(Boolean.TRUE);
+                contact.setCreatedBy("webhook-inbound");
+                contact.setCreatedAt(now);
+                if (!profileName.isBlank()) contact.setName(profileName);
+                justOptedIn = isOptInMessage;
+                log.info("[WHATSAPP][INBOUND][CAPTURE] New contact from inbound message phone={} optedIn={}",
+                        maskPhone(phone), isOptInMessage);
+            } else {
+                // Fill in a name we never had, but never overwrite one an admin curated.
+                if (!profileName.isBlank() && (contact.getName() == null || contact.getName().isBlank())) {
+                    contact.setName(profileName);
+                }
+                // Re-opt-in only on an explicit opt-in message, so a STOP is not undone by a
+                // subsequent "where is my order?".
+                if (isOptInMessage && !Boolean.TRUE.equals(contact.getOptedIn())) {
+                    contact.setOptedIn(Boolean.TRUE);
+                    contact.setActive(Boolean.TRUE);
+                    contact.setOptedOutAt(null);
+                    justOptedIn = true;
+                    log.info("[WHATSAPP][INBOUND][OPT_IN] Contact re-opted in via inbound phrase phone={}",
+                            maskPhone(phone));
+                }
+            }
+
+            contact.setLastInboundAt(now);
+            contact.setModifiedBy("webhook-inbound");
+            contact.setModifiedAt(now);
+            whatsAppContactRepository.save(contact);
+            return justOptedIn;
+        } catch (Exception e) {
+            // Never let contact capture break webhook processing — the delivery-status half of
+            // this webhook matters more than the bookkeeping.
+            log.warn("[WHATSAPP][INBOUND][CAPTURE] Failed to capture contact for phone={}: {}",
+                    maskPhone(phone), e.toString());
+            return false;
+        }
+    }
+
+    /** True when an inbound message matches the configured opt-in phrase (case-insensitive). */
+    private boolean matchesOptInPhrase(String bodyText) {
+        if (bodyText == null || bodyText.isBlank()) return false;
+        String phrase = settingValue("whatsapp.optin.phrase", "like updates");
+        return phrase != null && !phrase.isBlank()
+                && bodyText.toLowerCase().contains(phrase.toLowerCase());
+    }
+
+    /** Reads a setting with a fallback, tolerating a missing row. */
+    private String settingValue(String key, String fallback) {
+        try {
+            Setting s = settingsService.get(key);
+            if (s == null || s.getValue() == null || s.getValue().isBlank()) return fallback;
+            return s.getValue();
+        } catch (Exception e) {
+            return fallback;
         }
     }
 
@@ -161,9 +293,11 @@ public class WhatsAppWebhookService {
      * Schedules an auto-reply to fire AFTER the enclosing transaction commits,
      * so the HTTP call to Meta API does not hold the DB connection open.
      */
-    private void sendAutoReply(String phone) {
+    private void sendAutoReply(String phone, boolean justOptedIn) {
         String mainNumber = mainWhatsAppNumber();
-        if (mainNumber.isBlank()) {
+        // A welcome does not reference the support number, so it can still be sent when
+        // brand.whatsapp is unset. The standard reply cannot — it is entirely a redirect.
+        if (mainNumber.isBlank() && !justOptedIn) {
             log.debug("[WHATSAPP][AUTO_REPLY] brand.whatsapp not configured, skipping");
             return;
         }
@@ -186,9 +320,25 @@ public class WhatsAppWebhookService {
         }
         AUTO_REPLY_LAST_SENT.put(phone, now);
 
-        String waLink = "https://wa.me/" + mainNumber;
-        String message = "Hi! This number is used only for sending order updates and offers. "
-                + "For queries or support, please reach us directly here: " + waLink;
+        // Two different replies, because the first message means something different from the rest.
+        //
+        // A contact arriving through the expo QR has just asked to hear from us — greeting them with
+        // "this number is send-only, go away" is a poor welcome and pushes them off the very number
+        // whose engagement history makes them reachable by marketing. They get a welcome instead.
+        // Everyone messaging afterwards gets the redirect to the staffed support number, since this
+        // number is not monitored for conversations.
+        String message;
+        if (justOptedIn) {
+            message = settingValue("whatsapp.autoreply.welcome",
+                    "Hello and welcome to Blossom Buds Floral Artistry! 🌸 "
+                            + "You're all set — you'll receive our latest offers, new arrivals and "
+                            + "festival specials right here. Reply STOP at any time to unsubscribe.");
+        } else {
+            String waLink = "https://wa.me/" + mainNumber;
+            message = settingValue("whatsapp.autoreply.default",
+                    "Hi! This number is used only for sending order updates and offers. "
+                            + "For queries or support, please reach us directly here: " + waLink);
+        }
 
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             // Defer the HTTP call until after commit so the DB connection is released first.
@@ -294,6 +444,24 @@ public class WhatsAppWebhookService {
             return;
         }
 
+        // A wamid belongs either to a campaign recipient or to a transactional send. Log the
+        // transactional case explicitly: those have no recipient row, so before this the status
+        // was recorded raw and then silently dropped, leaving order confirmations with no
+        // observable outcome at all.
+        if (recipientRepository.findByProviderMessageId(providerMessageId).isEmpty()) {
+            messageEventRepository.findFirstByProviderMessageIdAndEventType(
+                            providerMessageId, "OUTBOUND_TRANSACTIONAL")
+                    .ifPresent(sent -> {
+                        if ("failed".equalsIgnoreCase(providerStatus)) {
+                            log.warn("[WHATSAPP][TXN][STATUS] {} FAILED wamid={} error={}",
+                                    sent.getProviderStatus(), providerMessageId, errorMessage);
+                        } else {
+                            log.info("[WHATSAPP][TXN][STATUS] {} {} wamid={}",
+                                    sent.getProviderStatus(), providerStatus, providerMessageId);
+                        }
+                    });
+        }
+
         recipientRepository.findByProviderMessageId(providerMessageId).ifPresent(recipient -> {
             OffsetDateTime now = OffsetDateTime.now();
 
@@ -331,10 +499,16 @@ public class WhatsAppWebhookService {
 
         campaignRepository.findByIdAndActiveTrue(campaignId).ifPresent(campaign -> {
             long total = recipientRepository.countByCampaignIdAndActiveTrue(campaignId);
-            long sent = recipientRepository.countByCampaignIdAndStatusAndActiveTrue(campaignId, "SENT");
             long failed = recipientRepository.countByCampaignIdAndStatusAndActiveTrue(campaignId, "FAILED");
             long delivered = recipientRepository.countByCampaignIdAndStatusAndActiveTrue(campaignId, "DELIVERED");
             long read = recipientRepository.countByCampaignIdAndStatusAndActiveTrue(campaignId, "READ");
+
+            // A recipient's status advances SENT -> DELIVERED -> READ on one column, so counting
+            // only status='SENT' made sentCount *fall* as delivery receipts arrived: a campaign
+            // that reached 100 people would drift to 40, then 5. "Sent" means "left our side", so
+            // everything downstream of SENT still counts as sent.
+            long sent = recipientRepository.countByCampaignIdAndStatusAndActiveTrue(campaignId, "SENT")
+                    + delivered + read;
 
             campaign.setTotalRecipients((int) total);
             campaign.setSentCount((int) sent);
