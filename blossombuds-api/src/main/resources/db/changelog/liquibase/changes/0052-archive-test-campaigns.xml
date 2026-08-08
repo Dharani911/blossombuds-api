@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+          http://www.liquibase.org/xml/ns/dbchangelog
+          http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.23.xsd">
+
+    <!--
+        Clears the WhatsApp campaigns accumulated while the CRM was being built and tested.
+
+        Soft delete, not DELETE. Every campaign query already filters on active = true, so these
+        disappear from the admin list exactly as if they had been deleted, while the record of what
+        was actually sent to real phone numbers survives. That record is worth keeping: several of
+        these campaigns did reach customers, and their recipient rows are the only evidence of who
+        received what. A DELETE would also have to cascade through whatsapp_campaign_recipients and
+        would leave the delivery-status webhooks with nothing to attach to.
+
+        Scoped by created_at so it only ever touches campaigns that existed before this release —
+        anything created afterwards is real and must not be caught by a re-run.
+    -->
+    <changeSet id="0052-01-archive-pre-release-test-campaigns" author="dharani">
+        <sql>
+UPDATE whatsapp_campaign_recipients
+SET active = false,
+    modified_by = 'migration-0052',
+    modified_at = NOW()
+WHERE active = true
+  AND campaign_id IN (
+      SELECT id FROM whatsapp_campaigns WHERE created_at &lt; TIMESTAMP '2026-08-09 00:00:00+00'
+  );
+
+UPDATE whatsapp_campaigns
+SET active = false,
+    modified_by = 'migration-0052',
+    modified_at = NOW()
+WHERE active = true
+  AND created_at &lt; TIMESTAMP '2026-08-09 00:00:00+00';
+        </sql>
+        <rollback>
+            <!-- Restores everything this changeset archived, identifiable by the modified_by tag. -->
+            <sql>
+UPDATE whatsapp_campaigns SET active = true WHERE modified_by = 'migration-0052';
+UPDATE whatsapp_campaign_recipients SET active = true WHERE modified_by = 'migration-0052';
+            </sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>
