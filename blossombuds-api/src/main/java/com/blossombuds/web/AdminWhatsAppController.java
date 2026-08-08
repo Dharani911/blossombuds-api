@@ -5,8 +5,11 @@ import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.blossombuds.domain.WhatsAppContact;
 import com.blossombuds.dto.WhatsAppDtos;
+import com.blossombuds.repository.CustomerWhatsAppPreferenceRepository;
 import com.blossombuds.repository.WhatsAppContactRepository;
+import com.blossombuds.domain.Setting;
 import com.blossombuds.service.MarketingConsentMigrationService;
+import com.blossombuds.service.SettingsService;
 import com.blossombuds.service.WhatsAppCampaignService;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +25,8 @@ import org.springframework.web.server.ResponseStatusException;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -35,7 +40,9 @@ public class AdminWhatsAppController {
 
     private final WhatsAppCampaignService whatsAppCampaignService;
     private final WhatsAppContactRepository whatsAppContactRepository;
+    private final CustomerWhatsAppPreferenceRepository preferenceRepository;
     private final MarketingConsentMigrationService marketingConsentMigrationService;
+    private final SettingsService settingsService;
     private final AmazonS3 r2Client;
 
     @Value("${cloudflare.r2.bucket}")
@@ -43,6 +50,54 @@ public class AdminWhatsAppController {
 
     @Value("${app.backend.baseUrl}")
     private String backendBaseUrl;
+
+    /**
+     * Reports whether the WhatsApp Cloud integration is configured, as booleans only.
+     *
+     * The admin UI previously derived this by fetching the whole settings table and inspecting
+     * the raw values client-side, which shipped the access token and verify token to the browser
+     * on every page load. Only the "is it set" answer is ever needed, so only that is sent.
+     */
+    @GetMapping("/integration-status")
+    public IntegrationStatusResponse integrationStatus() {
+        boolean cloudEnabled = "true".equalsIgnoreCase(settingValue("whatsapp.cloud.enabled"));
+        String apiVersion = settingValue("whatsapp.cloud.api_version");
+        boolean phoneNumberId = !settingValue("whatsapp.cloud.phone_number_id").isBlank();
+        boolean businessAccountId = !settingValue("whatsapp.cloud.business_account_id").isBlank();
+        boolean accessToken = !settingValue("whatsapp.cloud.access_token").isBlank();
+        boolean verifyToken = !settingValue("whatsapp.cloud.verify_token").isBlank();
+
+        return new IntegrationStatusResponse(
+                cloudEnabled,
+                apiVersion.isBlank() ? "v25.0" : apiVersion,
+                phoneNumberId,
+                businessAccountId,
+                accessToken,
+                verifyToken,
+                cloudEnabled && phoneNumberId && businessAccountId && accessToken && verifyToken
+        );
+    }
+
+    /** Reads a setting value, returning "" when absent so callers can treat missing as unset. */
+    private String settingValue(String key) {
+        try {
+            Setting setting = settingsService.get(key);
+            return setting == null || setting.getValue() == null ? "" : setting.getValue().trim();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /** WhatsApp Cloud readiness flags — booleans only, never credential values. */
+    public record IntegrationStatusResponse(
+            boolean cloudEnabled,
+            String apiVersion,
+            boolean phoneNumberIdConfigured,
+            boolean businessAccountIdConfigured,
+            boolean accessTokenConfigured,
+            boolean verifyTokenConfigured,
+            boolean readyForLive
+    ) {}
 
     /** Lists active WhatsApp templates available for campaign creation. */
     @GetMapping("/templates")
@@ -80,6 +135,19 @@ public class AdminWhatsAppController {
         );
     }
 
+    /** Removes a campaign from the admin list. Soft delete — history is retained. */
+    @DeleteMapping("/campaigns/{campaignId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteCampaign(@PathVariable Long campaignId) {
+        whatsAppCampaignService.deleteCampaign(campaignId);
+    }
+
+    /** Returns the message as a recipient would see it, with the placeholders filled in. */
+    @GetMapping("/campaigns/{campaignId}/preview")
+    public Map<String, String> previewCampaign(@PathVariable Long campaignId) {
+        return Map.of("preview", whatsAppCampaignService.renderPreview(campaignId));
+    }
+
     /** Lists recipients for a campaign. */
     @GetMapping("/campaigns/{campaignId}/recipients")
     public List<WhatsAppDtos.RecipientResponse> listRecipients(@PathVariable Long campaignId) {
@@ -94,6 +162,50 @@ public class AdminWhatsAppController {
     public List<WhatsAppContact> listContacts() {
         return whatsAppContactRepository.findAllByActiveTrueOrderByCreatedAtDesc();
     }
+
+    /**
+     * Reachability summary for the expo audience, plus the opt-in link to put behind a QR code.
+     *
+     * "Reachable" means the contact has messaged the business number at least once. Meta drops
+     * marketing templates to everyone else (error 131049), so this is the number that actually
+     * predicts how many messages will land — not the total contact count.
+     */
+    @GetMapping("/contacts/reachability")
+    public ContactReachabilityResponse contactReachability() {
+        long optedIn = whatsAppContactRepository.countByOptedInTrueAndActiveTrue();
+        long reachable = whatsAppContactRepository.countByOptedInTrueAndActiveTrueAndLastInboundAtIsNotNull();
+        long customersOptedIn = preferenceRepository.countByOptedInTrueAndActiveTrue();
+        long customersReachable = preferenceRepository.countByOptedInTrueAndActiveTrueAndLastInboundAtIsNotNull();
+
+        String number = settingValue("whatsapp.cloud.own_phone_number").replaceAll("[^0-9]", "");
+        String phrase = settingValue("whatsapp.optin.phrase");
+        if (phrase.isBlank()) phrase = "like updates";
+        String prefilled = "Hi, I'd " + phrase + " from Blossom Buds";
+
+        String optInLink = number.isBlank() ? ""
+                : "https://wa.me/" + number + "?text=" + URLEncoder.encode(prefilled, StandardCharsets.UTF_8);
+
+        return new ContactReachabilityResponse(
+                optedIn, reachable, optedIn - reachable,
+                customersOptedIn, customersReachable, customersOptedIn - customersReachable,
+                optInLink);
+    }
+
+    /**
+     * Reachability for both marketing audiences, and the opt-in deep link to encode as a QR code.
+     *
+     * The `customers*` figures cover the ALL_OPTED_IN audience: website consent does not make a
+     * customer reachable on WhatsApp, only messaging the business number does.
+     */
+    public record ContactReachabilityResponse(
+            long optedIn,
+            long reachable,
+            long unreachable,
+            long customersOptedIn,
+            long customersReachable,
+            long customersUnreachable,
+            String optInLink
+    ) {}
 
     /** Imports a batch of external contacts, skipping registered customers and duplicates. */
     @PostMapping("/contacts/import")

@@ -17,9 +17,11 @@ import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /** HTTP endpoints for site settings (key/value). */
@@ -41,6 +43,11 @@ public class SettingsController {
     @PreAuthorize("hasRole('ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
     public Setting upsert(@Valid @RequestBody SettingDto dto, Authentication auth) {
+        // The admin UI receives secrets masked (see list()). Saving a row the admin never retyped
+        // would otherwise persist the mask over the real credential and silently break sending.
+        if (isSecretKey(dto.getKey()) && SECRET_MASK.equals(dto.getValue())) {
+            return settings.get(dto.getKey());
+        }
         return settings.upsert(dto, actor(auth));
     }
     // Reorder only: body is ["key1","key2", ...] in desired order
@@ -64,20 +71,39 @@ public class SettingsController {
     }
 
 
-    /** Get a setting by key (admin). */
+    /**
+     * Get a setting by key.
+     *
+     * Deliberately NOT admin-only: the public storefront reads individual keys anonymously
+     * (brand.whatsapp for the WhatsApp FAB, shipping.free_threshold and ui.topbanner_coupon
+     * for the top banner), so requiring ADMIN here breaks the site for logged-out visitors.
+     * Secrets are protected per-key instead — see {@link #isSecretKey}. Unauthenticated callers
+     * get 404 rather than 403 so this cannot be used to probe which secrets exist.
+     */
     @GetMapping("/{key}")
-    //@PreAuthorize("hasRole('ADMIN')")
-    public SettingView get(@PathVariable @NotBlank String key) {
+    public SettingView get(@PathVariable @NotBlank String key, Authentication auth) {
+        if (isSecretKey(key) && !isAdmin(auth)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Setting not found: " + key);
+        }
         var s = settings.get(key);
         return new SettingView(s.getKey(), s.getValue()); // no lazy relations
     }
 
-    /** List all active settings (admin). */
+    /**
+     * List active settings.
+     *
+     * <p>The storefront reads this bulk endpoint anonymously to render policy pages, so it stays
+     * public — but credential-bearing keys are filtered out for non-admins entirely (the same
+     * deny-list {@link #isSecretKey} used by {@link #get}). This is what stops the WhatsApp access
+     * token / app secret from being dumped to an unauthenticated caller. An admin token additionally
+     * sees the secret keys, with their values masked so a compromised session leaks nothing usable.
+     */
     @GetMapping
-    //@PreAuthorize("hasRole('ADMIN')")
-    public List<SettingView> list() {
+    public List<SettingView> list(Authentication auth) {
+        boolean admin = isAdmin(auth);
         return settings.list().stream()
-                .map(s -> new SettingView(s.getKey(), s.getValue()))
+                .filter(s -> admin || !isSecretKey(s.getKey()))
+                .map(s -> new SettingView(s.getKey(), maskIfSecret(s.getKey(), s.getValue())))
                 .toList();
     }
 
@@ -93,6 +119,37 @@ public class SettingsController {
     private String actor(Authentication auth) {
         return (auth != null && auth.getName() != null) ? auth.getName() : "system";
         // For admins authenticated via JWT, this will usually be their username.
+    }
+
+    /** Placeholder returned in place of secret values. Never persisted — see {@link #upsert}. */
+    static final String SECRET_MASK = "********";
+
+    /**
+     * Substrings that mark a settings key as holding a credential. Matched rather than listed
+     * exactly so a newly added secret (a payment key, another provider token) is protected by
+     * default instead of leaking until someone remembers to update an allow-list.
+     */
+    private static final List<String> SECRET_KEY_MARKERS = List.of(
+            "access_token", "verify_token", "auth_token", "authkey", "auth_key",
+            "api_key", "apikey", "secret", "password", "private_key", "credential");
+
+    /** True when a settings key holds a credential that must never reach an unauthenticated caller. */
+    static boolean isSecretKey(String key) {
+        if (key == null || key.isBlank()) return false;
+        String lower = key.toLowerCase(Locale.ROOT);
+        return SECRET_KEY_MARKERS.stream().anyMatch(lower::contains);
+    }
+
+    /** Replaces credential values with {@link #SECRET_MASK}; leaves everything else untouched. */
+    private static String maskIfSecret(String key, String value) {
+        if (!isSecretKey(key) || value == null || value.isBlank()) return value;
+        return SECRET_MASK;
+    }
+
+    /** True when the caller holds ROLE_ADMIN. */
+    private static boolean isAdmin(Authentication auth) {
+        return auth != null && auth.getAuthorities() != null && auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
     }
     public record PresignView(String key, String url, String contentType) {}
 

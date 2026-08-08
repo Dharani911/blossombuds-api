@@ -25,3 +25,13 @@ build/
 *.env
 .env*
 *.properties
+
+# Visual Studio
+.vs/
+
+# Local runtime output
+blossombuds-api/logs/
+LOG_DIR_IS_UNDEFINED/
+
+# Build artefacts that should not be versioned
+blossombuds-frontend.zip

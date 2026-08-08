@@ -31,6 +31,11 @@ export type WhatsAppCampaign = {
   alsoEmailPhoneless?: boolean;
   /** Id of the linked email campaign once sent, if alsoEmailPhoneless was enabled. */
   linkedEmailCampaignId?: number;
+  /** Outcome of that linked email send. Surfaced here because there is no separate
+   *  Email Marketing page any more. */
+  linkedEmailTotalRecipients?: number | null;
+  linkedEmailSentCount?: number | null;
+  linkedEmailFailedCount?: number | null;
 };
 
 /** One recipient inside a WhatsApp campaign. */
@@ -64,13 +69,39 @@ export type WhatsAppContact = {
   optedOutAt?: string;
   active: boolean;
   createdAt?: string;
+  /** When this contact last messaged the business number. Null means WhatsApp will almost
+   *  certainly drop a marketing message to them (Meta error 131049). */
+  lastInboundAt?: string | null;
 };
+
+/** How much of the expo audience WhatsApp will actually deliver to. */
+export type ContactReachability = {
+  /** Expo contacts (EXPO_CONTACTS audience). */
+  optedIn: number;
+  reachable: number;
+  unreachable: number;
+  /** Registered customers (ALL_OPTED_IN audience). Website consent does not make a customer
+   *  reachable on WhatsApp — only messaging the business number does. */
+  customersOptedIn: number;
+  customersReachable: number;
+  customersUnreachable: number;
+  /** Deep link to encode as a QR code at events — opens WhatsApp with the opt-in text pre-filled. */
+  optInLink: string;
+};
+
+/** Fetches expo audience reachability plus the opt-in deep link. */
+export async function getContactReachability(): Promise<ContactReachability> {
+  const res = await adminHttp.get<ContactReachability>("/api/admin/whatsapp/contacts/reachability");
+  return res.data;
+}
 
 /** Result returned after an import batch. */
 export type ImportContactsResult = {
   imported: number;
   skippedRegistered: number;
   skippedDuplicate: number;
+  /** Previously opted-out contacts brought back by this re-import. */
+  reactivated: number;
 };
 
 /** Request body for creating a WhatsApp campaign. */
@@ -90,6 +121,11 @@ export type CreateWhatsAppCampaignRequest = {
   /** When true, sending this campaign also auto-sends a matching email to customers with no
    *  phone on file. Only valid when audienceType is ALL_OPTED_IN. */
   alsoEmailPhoneless?: boolean;
+  /** Optional: restrict the send to contacts who have messaged the business number.
+   *  Defaults to false — campaigns go to everyone who opted in. No UI exposes this; it exists
+   *  for the case where a campaign comes back with mass 131049 failures and you want to retry
+   *  against the subset WhatsApp is most likely to deliver to. */
+  warmOnly?: boolean;
 };
 
 /** Fetches active WhatsApp templates. */
@@ -120,6 +156,19 @@ export async function sendWhatsAppCampaign(
   return res.data;
 }
 
+/** Removes a campaign from the list. The record is retained for audit, not destroyed. */
+export async function deleteWhatsAppCampaign(campaignId: number): Promise<void> {
+  await adminHttp.delete(`/api/admin/whatsapp/campaigns/${campaignId}`);
+}
+
+/** Fetches the message as a recipient would see it, with placeholders filled in. */
+export async function getWhatsAppCampaignPreview(campaignId: number): Promise<string> {
+  const res = await adminHttp.get<{ preview: string }>(
+    `/api/admin/whatsapp/campaigns/${campaignId}/preview`
+  );
+  return res.data.preview;
+}
+
 /** Fetches recipients for a WhatsApp campaign. */
 export async function getWhatsAppCampaignRecipients(
   campaignId: number
@@ -127,13 +176,7 @@ export async function getWhatsAppCampaignRecipients(
   const res = await adminHttp.get(`/api/admin/whatsapp/campaigns/${campaignId}/recipients`);
   return res.data;
 }
-/** Generic key/value setting returned by backend settings API. */
-export type AdminSetting = {
-  key: string;
-  value: string;
-};
-
-/** WhatsApp integration status derived from existing settings. */
+/** WhatsApp integration status — booleans only, resolved server-side. */
 export type WhatsAppIntegrationStatus = {
   cloudEnabled: boolean;
   apiVersion: string;
@@ -144,35 +187,15 @@ export type WhatsAppIntegrationStatus = {
   readyForLive: boolean;
 };
 
-/** Fetches WhatsApp integration status using the existing settings API. */
+/** Fetches WhatsApp integration status.
+ *  Previously this pulled the whole settings table and inspected raw values in the browser,
+ *  which meant the access token and verify token were sent to the client on every page load.
+ *  The backend now answers with configured/not-configured flags and never sends the values. */
 export async function getWhatsAppIntegrationStatus(): Promise<WhatsAppIntegrationStatus> {
-  const res = await adminHttp.get<AdminSetting[]>("/api/settings");
-  const settings = res.data || [];
-
-  const valueOf = (key: string) =>
-    settings.find((item) => item.key === key)?.value?.trim() || "";
-
-  const cloudEnabled = valueOf("whatsapp.cloud.enabled") === "true";
-  const apiVersion = valueOf("whatsapp.cloud.api_version") || "v25.0";
-  const phoneNumberId = valueOf("whatsapp.cloud.phone_number_id");
-  const businessAccountId = valueOf("whatsapp.cloud.business_account_id");
-  const accessToken = valueOf("whatsapp.cloud.access_token");
-  const verifyToken = valueOf("whatsapp.cloud.verify_token");
-
-  return {
-    cloudEnabled,
-    apiVersion,
-    phoneNumberIdConfigured: phoneNumberId.length > 0,
-    businessAccountIdConfigured: businessAccountId.length > 0,
-    accessTokenConfigured: accessToken.length > 0,
-    verifyTokenConfigured: verifyToken.length > 0,
-    readyForLive:
-      cloudEnabled &&
-      phoneNumberId.length > 0 &&
-      businessAccountId.length > 0 &&
-      accessToken.length > 0 &&
-      verifyToken.length > 0,
-  };
+  const res = await adminHttp.get<WhatsAppIntegrationStatus>(
+    "/api/admin/whatsapp/integration-status"
+  );
+  return res.data;
 }
 /** WhatsApp customer opt-in preference used for campaign audiences. */
 export type WhatsAppPreference = {
@@ -246,6 +269,8 @@ export type ConsentMigrationResult = {
   eligible: number;
   optedIn: number;
   emailFailed: number;
+  /** Opted in but never notified — no email address on file to send the policy notice to. */
+  noEmailOnFile: number;
 };
 
 /** Counts customers eligible for the one-time consent migration, without running it. */
