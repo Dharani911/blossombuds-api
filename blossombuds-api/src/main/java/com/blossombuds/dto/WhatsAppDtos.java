@@ -93,6 +93,16 @@ public class WhatsAppDtos {
 
         /** Id of the linked email campaign once sent, if alsoEmailPhoneless was enabled. */
         private Long linkedEmailCampaignId;
+
+        /** Recipients of the linked email campaign. Null when no email was sent.
+         *  Surfaced here because there is no standalone Email Marketing page to view them on. */
+        private Integer linkedEmailTotalRecipients;
+
+        /** Successful sends of the linked email campaign. */
+        private Integer linkedEmailSentCount;
+
+        /** Failed sends of the linked email campaign. */
+        private Integer linkedEmailFailedCount;
     }
 
     /** Response DTO for WhatsApp campaign recipient. */

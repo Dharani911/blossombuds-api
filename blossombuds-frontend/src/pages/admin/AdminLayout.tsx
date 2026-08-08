@@ -73,7 +73,6 @@ export default function AdminLayout() {
     { to: "/admin/reviews",    label: "Reviews",      icon: <IconReviews/> },
     { to: "/admin/customers",  label: "Customers",    icon: <IconUsers/> },
     { to: "/admin/whatsapp",   label: "WhatsApp CRM", icon: <IconWhatsApp/> },
-    { to: "/admin/email-marketing", label: "Email Marketing", icon: <IconMail/> },
     { to: "/admin/settings",   label: "Settings",     icon: <IconSettings/> },
   ];
 

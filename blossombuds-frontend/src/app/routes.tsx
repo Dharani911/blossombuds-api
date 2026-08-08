@@ -41,7 +41,6 @@ import SettingsPage from "../pages/admin/SettingsPage";
 import CustomersPage from "../pages/admin/CustomersPage";
 import CreateOrderPageAdmin from "../pages/admin/CreateOrderPage";
 import AdminWhatsAppPage from "../pages/admin/AdminWhatsAppPage";
-import AdminEmailMarketingPage from "../pages/admin/AdminEmailMarketingPage";
 
 
 
@@ -96,7 +95,6 @@ export default function AppRoutes() {
             <Route path="settings" element={<SettingsPage />} />
             <Route path="customers" element={<CustomersPage />} />
             <Route path="whatsapp" element={<AdminWhatsAppPage />} />
-            <Route path="email-marketing" element={<AdminEmailMarketingPage />} />
           </Route>
         </Route>
 
