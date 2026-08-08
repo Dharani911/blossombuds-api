@@ -41,4 +41,18 @@ public interface EmailService {
     void sendPaymentPendingReminder(String toEmail, String toName,
                                     String orderRef, java.math.BigDecimal grandTotal,
                                     String currency, String paymentLink);
+
+    /**
+     * Sends one marketing-campaign email synchronously (unlike every other method here, which
+     * is fire-and-forget @Async). Campaign sending needs a real per-recipient success/failure
+     * result to drive the admin recipient-status table, so this call blocks until the provider
+     * responds and reports the outcome instead of just logging it internally.
+     */
+    EmailSendResult sendMarketingEmailSync(String toEmail, String subject, String bodyWithMarkers);
+
+    /** Outcome of a synchronous email send. */
+    record EmailSendResult(boolean success, String errorMessage) {
+        public static EmailSendResult ok() { return new EmailSendResult(true, null); }
+        public static EmailSendResult failed(String errorMessage) { return new EmailSendResult(false, errorMessage); }
+    }
 }

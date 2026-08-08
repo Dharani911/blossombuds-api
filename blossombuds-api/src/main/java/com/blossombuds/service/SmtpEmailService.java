@@ -69,6 +69,9 @@ public class SmtpEmailService implements EmailService {
     /** Marker: {{A|Label|URL}}  -> HTML <a href="URL">Label</a> ; Plain: "Label" */
     private static final Pattern A_MARKER = Pattern.compile("\\{\\{A\\|([^|}]+)\\|([^}]+)}}");
 
+    /** Marker: {{IMG|URL}}  -> HTML <img src="URL"/> ; Plain: stripped (images can't render as text) */
+    private static final Pattern IMG_MARKER = Pattern.compile("\\{\\{IMG\\|([^}]+)}}");
+
     // Marker: {{A|Label|URL}}  -> HTML: 🔗 Label (blue) ; Plain: just "Label"
     // HTTP client reused for all calls
     private final HttpClient httpClient = HttpClient.newHttpClient();
@@ -80,7 +83,18 @@ public class SmtpEmailService implements EmailService {
     private String mailApiKey;
     private static String maskToHtml(String src) {
         if (src == null) return "";
-        Matcher m = A_MARKER.matcher(src);
+
+        Matcher imgMatcher = IMG_MARKER.matcher(src);
+        StringBuffer imgReplaced = new StringBuffer();
+        while (imgMatcher.find()) {
+            String url = escapeAttr(imgMatcher.group(1));
+            String repl = "<img src=\"" + url + "\" alt=\"\" "
+                    + "style=\"max-width:100%;display:block;border-radius:8px;margin:0 0 10px;\"/>";
+            imgMatcher.appendReplacement(imgReplaced, Matcher.quoteReplacement(repl));
+        }
+        imgMatcher.appendTail(imgReplaced);
+
+        Matcher m = A_MARKER.matcher(imgReplaced.toString());
         StringBuffer sb = new StringBuffer();
         while (m.find()) {
             String label = escape(m.group(1));
@@ -99,7 +113,8 @@ public class SmtpEmailService implements EmailService {
 
     private static String maskToPlain(String src) {
         if (src == null) return "";
-        return A_MARKER.matcher(src).replaceAll("$1"); // keep only the label in plain text
+        String withoutImages = IMG_MARKER.matcher(src).replaceAll(""); // images can't render as text
+        return A_MARKER.matcher(withoutImages).replaceAll("$1"); // keep only the label in plain text
     }
 
     /* ========================= Public API (implements EmailService) ========================= */
@@ -345,11 +360,17 @@ public class SmtpEmailService implements EmailService {
     /* ========================= Core sender (HTML + masked plain alternative) ========================= */
     @Async("mailExecutor")
     public void sendRichMasked(String toEmail, String subject, String maskedBodyWithMarkers) {
+        sendRichMaskedSync(toEmail, subject, maskedBodyWithMarkers);
+    }
+
+    /** Synchronous core sender shared by the fire-and-forget {@link #sendRichMasked} and by
+     *  {@link #sendMarketingEmailSync}, which needs the real outcome rather than a logged one. */
+    private EmailSendResult sendRichMaskedSync(String toEmail, String subject, String maskedBodyWithMarkers) {
         String plainMasked = maskToPlain(maskedBodyWithMarkers);
 
         if (mailApiKey == null || mailApiKey.isBlank()) {
             log.error("[EMAIL][SEND] mailApiKey not configured – cannot send email to='{}'", toEmail);
-            return;
+            return EmailSendResult.failed("Email provider not configured");
         }
 
         try {
@@ -378,14 +399,22 @@ public class SmtpEmailService implements EmailService {
             if (response.statusCode() >= 200 && response.statusCode() < 300) {
                 log.info("[EMAIL][SEND] HTTP email sent to='{}' subject='{}' status={}",
                         toEmail, subject, response.statusCode());
+                return EmailSendResult.ok();
             } else {
                 log.error("[EMAIL][SEND] HTTP provider error status={} body={}",
                         response.statusCode(), response.body());
+                return EmailSendResult.failed("Provider error " + response.statusCode());
             }
         } catch (Exception ex) {
             log.error("[EMAIL][SEND] Failed to send email via HTTP provider to='{}' subject='{}'",
                     toEmail, subject, ex);
+            return EmailSendResult.failed(ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage());
         }
+    }
+
+    @Override
+    public EmailSendResult sendMarketingEmailSync(String toEmail, String subject, String bodyWithMarkers) {
+        return sendRichMaskedSync(toEmail, subject, bodyWithMarkers);
     }
 
 

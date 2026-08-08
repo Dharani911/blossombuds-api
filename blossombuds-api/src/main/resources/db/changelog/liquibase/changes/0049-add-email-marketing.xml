@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+          http://www.liquibase.org/xml/ns/dbchangelog
+          http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.23.xsd">
+
+    <!-- =========================================================
+         1) Customer email marketing preference (opt-OUT model —
+            a customer is eligible by default unless unsubscribed)
+         ========================================================= -->
+    <changeSet id="0049-01-create-customer-email-preferences" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="customer_email_preferences"/>
+            </not>
+        </preConditions>
+
+        <createTable tableName="customer_email_preferences">
+            <column name="id" type="bigserial">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+
+            <column name="customer_id" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="email" type="varchar(320)">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="unsubscribed" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="unsubscribed_at" type="timestamptz"/>
+
+            <!-- one-click unsubscribe link token, generated on first campaign resolution -->
+            <column name="unsubscribe_token" type="varchar(64)">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="active" type="boolean" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="created_by" type="varchar(100)"/>
+            <column name="created_at" type="timestamptz" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="modified_by" type="varchar(100)"/>
+            <column name="modified_at" type="timestamptz" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addForeignKeyConstraint
+                baseTableName="customer_email_preferences"
+                baseColumnNames="customer_id"
+                referencedTableName="customers"
+                referencedColumnNames="id"
+                constraintName="fk_customer_email_preferences_customer"/>
+
+        <createIndex tableName="customer_email_preferences"
+                     indexName="ux_customer_email_preferences_customer"
+                     unique="true">
+            <column name="customer_id"/>
+        </createIndex>
+
+        <createIndex tableName="customer_email_preferences"
+                     indexName="ux_customer_email_preferences_token"
+                     unique="true">
+            <column name="unsubscribe_token"/>
+        </createIndex>
+
+        <createIndex tableName="customer_email_preferences"
+                     indexName="idx_customer_email_preferences_unsubscribed">
+            <column name="unsubscribed"/>
+        </createIndex>
+    </changeSet>
+
+    <!-- =========================================================
+         2) Email campaigns
+         ========================================================= -->
+    <changeSet id="0049-02-create-email-campaigns" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="email_campaigns"/>
+            </not>
+        </preConditions>
+
+        <createTable tableName="email_campaigns">
+            <column name="id" type="bigserial">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+
+            <column name="title" type="varchar(200)">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="subject" type="varchar(200)">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="body_text" type="text">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="status" type="varchar(40)" defaultValue="DRAFT">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="started_at" type="timestamptz"/>
+            <column name="completed_at" type="timestamptz"/>
+
+            <column name="total_recipients" type="integer" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="sent_count" type="integer" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="failed_count" type="integer" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="active" type="boolean" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="created_by" type="varchar(100)"/>
+            <column name="created_at" type="timestamptz" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="modified_by" type="varchar(100)"/>
+            <column name="modified_at" type="timestamptz" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex tableName="email_campaigns" indexName="idx_email_campaigns_status">
+            <column name="status"/>
+            <column name="active"/>
+        </createIndex>
+    </changeSet>
+
+    <!-- =========================================================
+         3) Email campaign recipients
+         ========================================================= -->
+    <changeSet id="0049-03-create-email-campaign-recipients" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="email_campaign_recipients"/>
+            </not>
+        </preConditions>
+
+        <createTable tableName="email_campaign_recipients">
+            <column name="id" type="bigserial">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+
+            <column name="campaign_id" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="customer_id" type="bigint"/>
+            <column name="email" type="varchar(320)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="recipient_name" type="varchar(200)"/>
+
+            <column name="status" type="varchar(40)" defaultValue="PENDING">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="error_message" type="text"/>
+
+            <column name="sent_at" type="timestamptz"/>
+            <column name="failed_at" type="timestamptz"/>
+
+            <column name="active" type="boolean" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+
+            <column name="created_by" type="varchar(100)"/>
+            <column name="created_at" type="timestamptz" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="modified_by" type="varchar(100)"/>
+            <column name="modified_at" type="timestamptz" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addForeignKeyConstraint
+                baseTableName="email_campaign_recipients"
+                baseColumnNames="campaign_id"
+                referencedTableName="email_campaigns"
+                referencedColumnNames="id"
+                constraintName="fk_email_campaign_recipients_campaign"/>
+
+        <addForeignKeyConstraint
+                baseTableName="email_campaign_recipients"
+                baseColumnNames="customer_id"
+                referencedTableName="customers"
+                referencedColumnNames="id"
+                constraintName="fk_email_campaign_recipients_customer"/>
+
+        <createIndex tableName="email_campaign_recipients"
+                     indexName="idx_email_campaign_recipients_campaign_status">
+            <column name="campaign_id"/>
+            <column name="status"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>
