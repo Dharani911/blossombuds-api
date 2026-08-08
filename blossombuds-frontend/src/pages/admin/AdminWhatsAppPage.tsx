@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import "./AdminWhatsAppPage.css";
 import QRCode from "qrcode";
+import bbLogo from "../../assets/BB_logo.png";
 import { Sensitive } from "../../components/admin/Sensitive";
 import {
-createManualWhatsAppPreference,
 disableWhatsAppPreference,
 getWhatsAppPreferences,
 type WhatsAppPreference,
@@ -12,6 +12,7 @@ type WhatsAppPreference,
   getWhatsAppCampaignPreview,
   deleteWhatsAppCampaign,
   getWhatsAppCampaigns,
+  getCampaignAudienceSummary,
   getWhatsAppTemplates,
   sendWhatsAppCampaign,
   getWhatsAppIntegrationStatus,
@@ -26,12 +27,14 @@ type WhatsAppPreference,
   type WhatsAppCampaign,
   type WhatsAppCampaignRecipient,
   type WhatsAppTemplate,
+  type CampaignAudienceSummary,
 } from "../../api/adminWhatsapp";
 
 /** Admin page for creating and sending WhatsApp CRM campaigns. */
 export default function AdminWhatsAppPage() {
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
   const [campaigns, setCampaigns] = useState<WhatsAppCampaign[]>([]);
+  const [audience, setAudience] = useState<CampaignAudienceSummary | null>(null);
   const [recipients, setRecipients] = useState<WhatsAppCampaignRecipient[]>([]);
   const [preview, setPreview] = useState<string>("");
   const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null);
@@ -57,12 +60,9 @@ const [integrationStatus, setIntegrationStatus] = useState<WhatsAppIntegrationSt
   const [paymentLink, setPaymentLink] = useState("https://www.blossom-buds-floral-artistry.com");
   const [notes, setNotes] = useState("");
 const [preferences, setPreferences] = useState<WhatsAppPreference[]>([]);
-const [preferencePhone, setPreferencePhone] = useState("");
-const [preferenceCustomerId, setPreferenceCustomerId] = useState("");
   const [contacts, setContacts] = useState<WhatsAppContact[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [savedContactsModalOpen, setSavedContactsModalOpen] = useState(false);
   const [savedContactsSearch, setSavedContactsSearch] = useState("");
   const [expoContactsSearch, setExpoContactsSearch] = useState("");
   const [reachability, setReachability] = useState<ContactReachability | null>(null);
@@ -75,7 +75,10 @@ const [preferenceCustomerId, setPreferenceCustomerId] = useState("");
   const stats = useMemo(() => {
     return {
       campaigns: campaigns.length,
-      recipients: campaigns.reduce((sum, c) => sum + (c.totalRecipients || 0), 0),
+      // "sent" and "failed" are cumulative message outcomes across all campaigns — a running total
+      // of activity, which is correct. We deliberately do NOT show a cumulative recipient total
+      // here: it summed each campaign's audience, so mailing the same people twice read as double
+      // the real reach. The distinct per-channel audience is shown from `audience` instead.
       sent: campaigns.reduce((sum, c) => sum + (c.sentCount || 0), 0),
       failed: campaigns.reduce((sum, c) => sum + (c.failedCount || 0), 0),
     };
@@ -127,7 +130,7 @@ const [preferenceCustomerId, setPreferenceCustomerId] = useState("");
 
   /** Loads templates, campaigns, settings status, opted-in contacts, and expo contacts. */
   async function loadData() {
-    const [templateResult, campaignResult, statusResult, preferenceResult, contactsResult, reachabilityResult] =
+    const [templateResult, campaignResult, statusResult, preferenceResult, contactsResult, reachabilityResult, audienceResult] =
       await Promise.allSettled([
         getWhatsAppTemplates(),
         getWhatsAppCampaigns(),
@@ -135,10 +138,15 @@ const [preferenceCustomerId, setPreferenceCustomerId] = useState("");
         getWhatsAppPreferences(),
         getWhatsAppContacts(),
         getContactReachability(),
+        getCampaignAudienceSummary(),
       ]);
 
     if (reachabilityResult.status === "fulfilled") {
       setReachability(reachabilityResult.value);
+    }
+
+    if (audienceResult.status === "fulfilled") {
+      setAudience(audienceResult.value);
     }
 
     if (templateResult.status === "fulfilled") {
@@ -324,35 +332,7 @@ const [preferenceCustomerId, setPreferenceCustomerId] = useState("");
       setLoading(false);
     }
   }
-/** Adds a manual WhatsApp opt-in contact for ALL_OPTED_IN campaign testing. */
-async function handleAddPreference() {
-  setMessage("");
-
-  if (!preferencePhone.trim()) {
-    setMessage("Phone number is required.");
-    return;
-  }
-
-  setLoading(true);
-
-  try {
-    await createManualWhatsAppPreference({
-      phone: preferencePhone.trim(),
-      customerId: preferenceCustomerId.trim() ? Number(preferenceCustomerId) : undefined,
-    });
-
-    setPreferencePhone("");
-    setPreferenceCustomerId("");
-    setMessage("Number added.");
-    await loadData();
-  } catch (err: any) {
-    setMessage(err?.response?.data?.message || "Could not add that number.");
-  } finally {
-    setLoading(false);
-  }
-}
-
-/** Disables a manual WhatsApp opt-in contact. */
+/** Removes a number from the opted-in list. */
 async function handleDisablePreference(id: number) {
   const confirmed = window.confirm("Remove this number from the opted-in list?");
   if (!confirmed) return;
@@ -419,7 +399,8 @@ async function handleDisablePreference(id: number) {
 
         <section className="whatsapp-stats">
           <StatCard label="Campaigns" value={stats.campaigns} />
-          <StatCard label="Recipients" value={stats.recipients} />
+          <StatCard label="WhatsApp opted-in" value={audience?.whatsAppOptedIn ?? "—"} />
+          <StatCard label="Email audience" value={audience?.emailAudience ?? "—"} />
           <StatCard label="Messages sent" value={stats.sent} />
           <StatCard label="Failed" value={stats.failed} danger />
         </section>
@@ -819,75 +800,71 @@ async function handleDisablePreference(id: number) {
                 </div>
               </div>
             </section>
+
+            {/* ── Opted-in customers — sits directly under the recipients table in the right
+                 column. Read-only: numbers arrive when a customer opts in, not by hand. ── */}
+            <section className="whatsapp-card">
+              <div className="whatsapp-card-header">
+                <h2 className="whatsapp-card-title">
+                  Opted-in customers ({preferences.length})
+                </h2>
+                <p className="whatsapp-card-subtitle">
+                  Everyone who receives the <strong>All opted-in customers</strong> audience. Numbers
+                  appear here automatically when a customer opts in.
+                </p>
+              </div>
+              <div className="whatsapp-card-body">
+                <input
+                  className="whatsapp-input"
+                  placeholder="Search by phone…"
+                  value={savedContactsSearch}
+                  onChange={(e) => setSavedContactsSearch(e.target.value)}
+                  style={{ marginBottom: 12 }}
+                />
+                <div className="whatsapp-table-wrap" style={{ maxHeight: 290, overflowY: "auto" }}>
+                  <table className="whatsapp-table">
+                    <thead>
+                      <tr>
+                        <th>Phone</th>
+                        <th>Linked customer</th>
+                        <th aria-label="Actions"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredPreferences.map((p) => (
+                        <tr key={p.id}>
+                          <Sensitive as="td" className="whatsapp-table-title">{p.phone}</Sensitive>
+                          <td>{p.customerId ? `Customer #${p.customerId}` : "—"}</td>
+                          <td style={{ textAlign: "right" }}>
+                            <button
+                              className="whatsapp-btn whatsapp-btn-danger"
+                              disabled={loading}
+                              onClick={() => handleDisablePreference(p.id)}
+                            >
+                              Remove
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {filteredPreferences.length === 0 && (
+                        <tr>
+                          <td colSpan={3}>
+                            <div className="whatsapp-empty">
+                              <strong>No opted-in customers</strong>
+                              {savedContactsSearch
+                                ? "No numbers match your search."
+                                : "Numbers appear here when customers opt in."}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
           </section>
         </main>
-
-        {/* ── Test contacts — full-width below the grid ── */}
-        <section className="whatsapp-section">
-          <div className="whatsapp-section-header">
-            <div>
-              <h2 className="whatsapp-section-title">Opted-in customer numbers</h2>
-              <p className="whatsapp-section-desc">
-                This is the list used by the <strong>All opted-in customers</strong> audience — every
-                number here receives those campaigns. You can also add your own number to receive a
-                copy before a real send.
-              </p>
-            </div>
-            <span className="whatsapp-section-count">
-              {preferences.length} contact{preferences.length !== 1 ? "s" : ""}
-            </span>
-          </div>
-
-          <div className="whatsapp-contacts-row">
-            <div className="whatsapp-card">
-              <div className="whatsapp-card-header">
-                <h2 className="whatsapp-card-title">Add a number</h2>
-              </div>
-              <div className="whatsapp-card-body whatsapp-form-grid">
-                <Field label="WhatsApp number">
-                  <input
-                    className="whatsapp-input"
-                    placeholder="Example: 918123456789"
-                    value={preferencePhone}
-                    onChange={(e) => setPreferencePhone(e.target.value)}
-                  />
-                </Field>
-                <Field label="Customer account number (optional)">
-                  <input
-                    className="whatsapp-input"
-                    placeholder="Leave blank if you are not sure"
-                    value={preferenceCustomerId}
-                    onChange={(e) => setPreferenceCustomerId(e.target.value)}
-                  />
-                </Field>
-                <button
-                  className="whatsapp-btn whatsapp-btn-outline"
-                  disabled={loading}
-                  onClick={handleAddPreference}
-                >
-                  Add number
-                </button>
-              </div>
-            </div>
-
-            <div className="whatsapp-card whatsapp-contacts-list-card">
-              <div className="whatsapp-card-header">
-                <h2 className="whatsapp-card-title">Numbers on this list</h2>
-              </div>
-              <div className="whatsapp-card-body" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 14, color: "#6b7280" }}>
-                  {preferences.length} contact{preferences.length !== 1 ? "s" : ""} saved
-                </span>
-                <button
-                  className="whatsapp-btn whatsapp-btn-outline"
-                  onClick={() => { setSavedContactsSearch(""); setSavedContactsModalOpen(true); }}
-                >
-                  View All ({preferences.length})
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
 
         {/* ── Event contacts: QR sign-up + who has joined ── */}
         <section className="whatsapp-section">
@@ -1032,66 +1009,63 @@ async function handleDisablePreference(id: number) {
         </section>
       </div>
 
-      {/* ── Saved contacts modal ── */}
-      <WhatsAppModal
-        open={savedContactsModalOpen}
-        onClose={() => setSavedContactsModalOpen(false)}
-        title={`Opted-in customer numbers (${preferences.length})`}
-      >
-        <input
-          className="whatsapp-input"
-          placeholder="Search by phone…"
-          value={savedContactsSearch}
-          onChange={e => setSavedContactsSearch(e.target.value)}
-          style={{ marginBottom: 12 }}
-        />
-        <div className="whatsapp-preference-list">
-          {filteredPreferences.map(p => (
-            <div className="whatsapp-preference-item" key={p.id}>
-              <Sensitive as="div">
-                <strong>{p.phone}</strong>
-                <small>{p.customerId ? `Customer #${p.customerId}` : "Added manually"}</small>
-              </Sensitive>
-              <button
-                className="whatsapp-btn whatsapp-btn-danger"
-                disabled={loading}
-                onClick={() => handleDisablePreference(p.id)}
-              >
-                Disable
-              </button>
-            </div>
-          ))}
-          {filteredPreferences.length === 0 && (
-            <div className="whatsapp-empty-small">
-              {savedContactsSearch ? "No contacts match your search." : "No numbers on this list yet."}
-            </div>
-          )}
-        </div>
-      </WhatsAppModal>
-
     </div>
   );
 }
 
 /**
- * The sign-up QR code for events.
+ * The sign-up QR code for events, with the Blossom Buds logo in the centre.
  *
  * Rendered client-side at 1024px so a printed copy stays sharp at A4 — scanning from a metre away
  * across a busy stall is the actual use case, and a screen-resolution export prints fuzzy.
  * Displayed smaller via CSS; the download keeps the full resolution.
+ *
+ * "H" error correction (30% recoverable) is used specifically because the centre logo covers part
+ * of the pattern — at the ~20% coverage below, an "H" code still scans reliably. The logo is a
+ * same-origin bundled asset, so drawing it does not taint the canvas and the PNG download still works.
  */
 function OptInQrCard({ link }: { link: string }) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const [error, setError] = React.useState("");
 
   React.useEffect(() => {
-    if (!link || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+    if (!link || !canvas) return;
     QRCode.toCanvas(
-      canvasRef.current,
+      canvas,
       link,
-      // "M" correction tolerates a smudged or partly obscured print without bloating the pattern.
-      { width: 1024, margin: 2, errorCorrectionLevel: "M" },
-      (err: Error | null | undefined) => setError(err ? "Could not create the QR code." : "")
+      { width: 1024, margin: 2, errorCorrectionLevel: "H" },
+      (err: Error | null | undefined) => {
+        if (err) { setError("Could not create the QR code."); return; }
+        setError("");
+        // qrcode.toCanvas sets the canvas's own inline style.width/height to the 1024px option,
+        // which overrides the React style and blows the QR up to the container width. Pin the
+        // on-screen size back to a small square here, after the library has written its style.
+        const DISPLAY_PX = 260;
+        canvas.style.width = `${DISPLAY_PX}px`;
+        canvas.style.height = `${DISPLAY_PX}px`;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        const img = new Image();
+        img.onload = () => {
+          const size = canvas.width * 0.2;              // logo ~20% of the QR (within "H" budget)
+          const pos = (canvas.width - size) / 2;
+          const pad = size * 0.14;                      // white quiet-zone around the logo
+          const x = pos - pad, y = pos - pad, w = size + pad * 2, h = size + pad * 2;
+          const r = w * 0.16;                           // rounded backdrop
+          ctx.fillStyle = "#ffffff";
+          ctx.beginPath();
+          ctx.moveTo(x + r, y);
+          ctx.arcTo(x + w, y, x + w, y + h, r);
+          ctx.arcTo(x + w, y + h, x, y + h, r);
+          ctx.arcTo(x, y + h, x, y, r);
+          ctx.arcTo(x, y, x + w, y, r);
+          ctx.closePath();
+          ctx.fill();
+          ctx.drawImage(img, pos, pos, size, size);
+        };
+        img.src = bbLogo;
+      }
     );
   }, [link]);
 
@@ -1119,7 +1093,9 @@ function OptInQrCard({ link }: { link: string }) {
           <canvas
             ref={canvasRef}
             aria-label="QR code that opens WhatsApp to join Blossom Buds updates"
-            style={{ width: 220, height: 220, border: "1px solid #e5e7eb", borderRadius: 8 }}
+            width={1024}
+            height={1024}
+            style={{ width: 260, height: 260, display: "block", border: "1px solid #e5e7eb", borderRadius: 8 }}
           />
         )}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
@@ -1152,7 +1128,7 @@ function StatCard({
   danger = false,
 }: {
   label: string;
-  value: number;
+  value: number | string;
   danger?: boolean;
 }) {
   return (

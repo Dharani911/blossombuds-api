@@ -138,7 +138,10 @@
 
 .whatsapp-stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* Fit all KPI cards on one row and let them shrink with the screen; wraps only when the
+     cards would get too narrow. (Five cards: Campaigns, WhatsApp opted-in, Email audience,
+     Messages sent, Failed.) */
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 14px;
   margin-top: 16px;
 }

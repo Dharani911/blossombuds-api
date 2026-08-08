@@ -38,6 +38,42 @@ class EmailCampaignServiceTest {
     }
 
     // ──────────────────────────────────────────────────────────────────────────
+    // countAudience — distinct reach, not cumulative sends
+    // ──────────────────────────────────────────────────────────────────────────
+
+    private Customer customer(long id) {
+        Customer c = new Customer();
+        c.setId(id);
+        c.setEmail("c" + id + "@example.com");
+        return c;
+    }
+
+    private CustomerEmailPreference unsub(long customerId) {
+        CustomerEmailPreference p = new CustomerEmailPreference();
+        p.setCustomerId(customerId);
+        p.setUnsubscribed(true);
+        return p;
+    }
+
+    @Test
+    void countAudience_isEligibleMinusUnsubscribed() {
+        when(customerRepository.findMarketingEmailEligible())
+                .thenReturn(List.of(customer(1), customer(2), customer(3)));
+        when(preferenceRepository.findByUnsubscribedTrue())
+                .thenReturn(List.of(unsub(2))); // customer 2 opted out
+
+        assertThat(service.countAudience()).isEqualTo(2L);
+    }
+
+    @Test
+    void countAudience_isZeroWhenNoneEligible() {
+        when(customerRepository.findMarketingEmailEligible()).thenReturn(List.of());
+        when(preferenceRepository.findByUnsubscribedTrue()).thenReturn(List.of());
+
+        assertThat(service.countAudience()).isEqualTo(0L);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
     // createCampaign — validation
     // ──────────────────────────────────────────────────────────────────────────
 

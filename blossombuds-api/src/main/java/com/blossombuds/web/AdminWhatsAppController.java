@@ -8,6 +8,7 @@ import com.blossombuds.dto.WhatsAppDtos;
 import com.blossombuds.repository.CustomerWhatsAppPreferenceRepository;
 import com.blossombuds.repository.WhatsAppContactRepository;
 import com.blossombuds.domain.Setting;
+import com.blossombuds.service.EmailCampaignService;
 import com.blossombuds.service.MarketingConsentMigrationService;
 import com.blossombuds.service.SettingsService;
 import com.blossombuds.service.WhatsAppCampaignService;
@@ -42,6 +43,7 @@ public class AdminWhatsAppController {
     private final WhatsAppContactRepository whatsAppContactRepository;
     private final CustomerWhatsAppPreferenceRepository preferenceRepository;
     private final MarketingConsentMigrationService marketingConsentMigrationService;
+    private final EmailCampaignService emailCampaignService;
     private final SettingsService settingsService;
     private final AmazonS3 r2Client;
 
@@ -205,6 +207,29 @@ public class AdminWhatsAppController {
             long customersReachable,
             long customersUnreachable,
             String optInLink
+    ) {}
+
+    /**
+     * Distinct audience sizes for the campaign dashboard.
+     *
+     * <p>These are the number of real <em>people</em> reachable on each channel right now, not a
+     * running total of past sends. The old dashboard summed every campaign's recipient count, so
+     * mailing the same 100 customers in two campaigns read as 200 — misleading. These figures do
+     * not double-count: {@code whatsAppOptedIn} is distinct customers opted in for WhatsApp, and
+     * {@code emailAudience} is distinct customers eligible for the email fallback (no phone, has an
+     * email) minus anyone unsubscribed.
+     */
+    @GetMapping("/campaigns/audience-summary")
+    public AudienceSummaryResponse audienceSummary() {
+        long whatsAppOptedIn = preferenceRepository.countByOptedInTrueAndActiveTrue();
+        long emailAudience = emailCampaignService.countAudience();
+        return new AudienceSummaryResponse(whatsAppOptedIn, emailAudience);
+    }
+
+    /** Distinct, de-duplicated audience sizes per channel (see {@link #audienceSummary()}). */
+    public record AudienceSummaryResponse(
+            long whatsAppOptedIn,
+            long emailAudience
     ) {}
 
     /** Imports a batch of external contacts, skipping registered customers and duplicates. */

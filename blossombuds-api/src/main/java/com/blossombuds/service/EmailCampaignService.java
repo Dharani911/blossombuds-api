@@ -87,6 +87,25 @@ public class EmailCampaignService {
         return campaignRepository.findByActiveTrueOrderByCreatedAtDesc();
     }
 
+    /**
+     * Distinct size of the marketing-email audience right now: customers eligible by the fixed rule
+     * (active, no phone, has an email) minus anyone who has unsubscribed. This is the number of
+     * real people who would receive an email campaign — unlike a cumulative sum of past sends,
+     * which double-counts anyone mailed more than once.
+     */
+    @Transactional(readOnly = true)
+    public long countAudience() {
+        Set<Long> unsubscribedCustomerIds = preferenceRepository.findByUnsubscribedTrue()
+                .stream()
+                .map(CustomerEmailPreference::getCustomerId)
+                .collect(Collectors.toSet());
+
+        return customerRepository.findMarketingEmailEligible()
+                .stream()
+                .filter(c -> !unsubscribedCustomerIds.contains(c.getId()))
+                .count();
+    }
+
     /** Looks up one campaign, used to surface a linked email's outcome on the WhatsApp campaign row. */
     @Transactional(readOnly = true)
     public java.util.Optional<EmailCampaign> findCampaign(Long campaignId) {

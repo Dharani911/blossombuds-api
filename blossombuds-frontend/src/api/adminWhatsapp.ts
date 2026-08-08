@@ -95,6 +95,20 @@ export async function getContactReachability(): Promise<ContactReachability> {
   return res.data;
 }
 
+/** Distinct people reachable on each channel right now — not a running total of past sends. */
+export type CampaignAudienceSummary = {
+  /** Distinct customers opted in for WhatsApp. */
+  whatsAppOptedIn: number;
+  /** Distinct customers eligible for the email fallback (no phone, has email), minus unsubscribed. */
+  emailAudience: number;
+};
+
+/** Fetches the distinct, de-duplicated audience size per channel for the dashboard header. */
+export async function getCampaignAudienceSummary(): Promise<CampaignAudienceSummary> {
+  const res = await adminHttp.get<CampaignAudienceSummary>("/api/admin/whatsapp/campaigns/audience-summary");
+  return res.data;
+}
+
 /** Result returned after an import batch. */
 export type ImportContactsResult = {
   imported: number;
