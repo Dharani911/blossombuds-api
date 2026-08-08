@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { formatIstDateTime, formatIstDate } from "../../utils/dates";
+import { Sensitive } from "../../components/admin/Sensitive";
 
 
 import {
@@ -745,11 +746,11 @@ export default function OrdersPage() {
               return (
                 <div className="trow" key={o.id}>
                   <div className="mono">BB{o.publicCode || `#${o.id}`}</div>
-                  <div className="customer" title={name}>
+                  <Sensitive as="div" className="customer" title={name}>
                     <span className="name ellipsis">{name}</span>
                     <span className="cidpill"> (ID: {any.customerId ?? "—"})</span>
-                  </div>
-                  <div><b>{fmtMoneyINR(any.grandTotal ?? any.grand_total ?? 0)}</b></div>
+                  </Sensitive>
+                  <div><Sensitive as="b">{fmtMoneyINR(any.grandTotal ?? any.grand_total ?? 0)}</Sensitive></div>
                   <div>
                     <span className={statusClass(sKey)}>
                       {safeText}
@@ -1070,41 +1071,41 @@ function OrderDrawer({
                 <section className="facts">
                   <div>
                     <span className="lbl">Customer</span>
-                    <span>{(order as any).shipName || (order as any).customerName || (order as any).customerId || "—"}</span>
+                    <Sensitive as="span">{(order as any).shipName || (order as any).customerName || (order as any).customerId || "—"}</Sensitive>
                   </div>
 
                   <div>
                     <span className="lbl">Grand Total</span>
-                    <span>{fmtMoneyINR((order as any).grandTotal ?? 0)}</span>
+                    <Sensitive as="span">{fmtMoneyINR((order as any).grandTotal ?? 0)}</Sensitive>
                   </div>
 
                   <div>
                     <span className="lbl">Items Subtotal</span>
-                    <span>{fmtMoneyINR((order as any).itemsSubtotal ?? 0)}</span>
+                    <Sensitive as="span">{fmtMoneyINR((order as any).itemsSubtotal ?? 0)}</Sensitive>
                   </div>
 
                   <div>
                     <span className="lbl">Discount</span>
-                    <span>-{fmtMoneyINR((order as any).discountTotal ?? 0)}</span>
+                    <Sensitive as="span">-{fmtMoneyINR((order as any).discountTotal ?? 0)}</Sensitive>
                   </div>
 
                   {hasGstBreakdown && (
                     <>
                       <div>
                         <span className="lbl">Taxable Amount</span>
-                        <span>{fmtMoneyINR((order as any).taxableAmount ?? 0)}</span>
+                        <Sensitive as="span">{fmtMoneyINR((order as any).taxableAmount ?? 0)}</Sensitive>
                       </div>
 
                       <div>
                         <span className="lbl">GST</span>
-                        <span>{fmtMoneyINR((order as any).gstAmount ?? 0)}</span>
+                        <Sensitive as="span">{fmtMoneyINR((order as any).gstAmount ?? 0)}</Sensitive>
                       </div>
                     </>
                   )}
 
                   <div>
                     <span className="lbl">Shipping</span>
-                    <span>{fmtMoneyINR((order as any).shippingFee ?? 0)}</span>
+                    <Sensitive as="span">{fmtMoneyINR((order as any).shippingFee ?? 0)}</Sensitive>
                   </div>
 
                   <div>
@@ -1119,7 +1120,7 @@ function OrderDrawer({
 
                   <div className="full">
                     <span className="lbl">Ship to</span>
-                    <span>{shipAddress || "—"}</span>
+                    <Sensitive as="span">{shipAddress || "—"}</Sensitive>
                   </div>
                 </section>
 
@@ -1223,8 +1224,8 @@ function OrderDrawer({
                             {it.optionsText && <div className="muted" style={{ fontSize: 12 }}>{it.optionsText}</div>}
                           </div>
                           <div>{it.quantity}</div>
-                          <div>{fmtMoneyINR(it.unitPrice || 0)}</div>
-                          <div>{fmtMoneyINR(it.lineTotal || 0)}</div>
+                          <Sensitive as="div">{fmtMoneyINR(it.unitPrice || 0)}</Sensitive>
+                          <Sensitive as="div">{fmtMoneyINR(it.lineTotal || 0)}</Sensitive>
                         </div>
                       ))}
                     </div>
@@ -1235,7 +1236,7 @@ function OrderDrawer({
                   <div className="ord-notes">
                     {notes
                       ? notes.split(/\r?\n/).map((line: string, i: number) => (
-                        <p key={i} className="ord-note-line">{line}</p>
+                        <Sensitive as="p" key={i} className="ord-note-line">{line}</Sensitive>
                       ))
                       : <div className="muted">No notes added by the customer.</div>}
                   </div>
@@ -1259,7 +1260,7 @@ function OrderDrawer({
                         <div className="trow" key={p.id}>
 
                           <div>{p.ref || "—"}</div>
-                          <div>{fmtMoneyINR(p.amount || 0)}</div>
+                          <Sensitive as="div">{fmtMoneyINR(p.amount || 0)}</Sensitive>
                           <div>{p.createdAt ? formatIstDateTime(p.createdAt) : "—"}</div>
                         </div>
                       ))}
@@ -1290,7 +1291,7 @@ function OrderDrawer({
                             {ev.createdAt ? formatIstDateTime(ev.createdAt) : ""}
                           </div>
 
-                          <div className="what"><b>{ev.type}</b> — {ev.message}</div>
+                          <div className="what"><b>{ev.type}</b> — <Sensitive>{ev.message}</Sensitive></div>
                         </li>
                       ))}
                     </ul>

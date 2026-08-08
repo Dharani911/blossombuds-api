@@ -5,6 +5,7 @@ import html2canvas from "html2canvas";
 import { saveAs } from "file-saver";
 import adminHttp from "../../api/adminHttp";
 import { formatIstDate } from "../../utils/dates";
+import { Sensitive } from "./Sensitive";
 
 type Props = { open: boolean; reviewId: number; onClose: () => void };
 
@@ -205,7 +206,7 @@ export default function ReviewViewModal({ open, reviewId, onClose }: Props) {
                 </div>
               </div>
 
-              <div className="hero-frame">
+              <Sensitive as="div" className="hero-frame">
                 <div className="hero">
                   <div className="hero-inner">
                     {selectedSignedUrl ? (
@@ -230,15 +231,15 @@ export default function ReviewViewModal({ open, reviewId, onClose }: Props) {
                     ))}
                   </div>
                 ) : null}
-              </div>
+              </Sensitive>
 
               <div className="review-text">
                 <div className="stars">{stars}</div>
-                {data.title && <h4>{data.title}</h4>}
-                {data.body && <p>“{data.body}”</p>}
+                {data.title && <h4><Sensitive>{data.title}</Sensitive></h4>}
+                {data.body && <p><Sensitive>“{data.body}”</Sensitive></p>}
                 <div className="meta">
                   <div>
-                    <strong>{data.customerName || `Customer #${data.customerId}`}</strong>
+                    <Sensitive as="strong">{data.customerName || `Customer #${data.customerId}`}</Sensitive>
                     <span> — {formatIstDate(data.createdAt)}</span>
                   </div>
                   <div className="muted small">

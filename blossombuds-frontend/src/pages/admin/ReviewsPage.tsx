@@ -11,6 +11,7 @@ import {
   type Page,
 } from "../../api/adminReviews";
 import ReviewViewModal from "../../components/admin/ReviewViewModal"; // <-- adjust path if needed
+import { Sensitive } from "../../components/admin/Sensitive";
 
 const PRIMARY = "#4A4F41";
 const ACCENT = "#F05D8B";
@@ -194,11 +195,11 @@ export default function ReviewsPage() {
               </div>
               <div className="cell-rating">{Stars(r.rating)}</div>
               <div className="cell-text">
-                <div className="ttl" title={r.title || ""}>{r.title || "—"}</div>
+                <Sensitive as="div" className="ttl" title={r.title || ""}>{r.title || "—"}</Sensitive>
               </div>
-              <div className="cell-cust">
+              <Sensitive as="div" className="cell-cust">
                 {r.customerName ? r.customerName : (r.customerId ? `#${r.customerId}` : "—")}
-              </div>
+              </Sensitive>
               <div className="cell-when">
                 {r.createdAt ? formatIstDateTime(r.createdAt) : "—"}
               </div>

@@ -8,6 +8,7 @@ import {
   type OrderSummary,
 } from "../../api/adminCustomers";
 import { formatIstDateTime } from "../../utils/dates";
+import { Sensitive } from "../../components/admin/Sensitive";
 
 /* ═══════════════════════════ BRAND PALETTE ═══════════════════════════ */
 const PRIMARY = "#4A4F41";
@@ -403,18 +404,18 @@ export default function CustomersPage() {
           {!loading && !err && pageData.map(c => (
             <div className="trow" key={c.id}>
               <div className="cell-id">#{c.id}</div>
-              <div className="cell-customer">
+              <Sensitive as="div" className="cell-customer">
                 <div className="avatar" style={{ background: getAvatarColor(c.id) }}>
                   {getInitials(c.name)}
                 </div>
                 <span className="name">{c.name || "—"}</span>
-              </div>
-              <div className="cell-email" title={c.email || ""}>
+              </Sensitive>
+              <Sensitive as="div" className="cell-email" title={c.email || ""}>
                 {c.email || <span className="muted">—</span>}
-              </div>
-              <div className="cell-phone">
+              </Sensitive>
+              <Sensitive as="div" className="cell-phone">
                 {c.phone || <span className="muted">—</span>}
-              </div>
+              </Sensitive>
               <div className="cell-date">
                 {c.createdAt ? formatIstDateTime(c.createdAt as any) : "—"}
               </div>
@@ -446,11 +447,11 @@ export default function CustomersPage() {
           <div className="drawer-panel animate-slide-in" onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="drawer-header">
-              <div className="drawer-avatar" style={{ background: getAvatarColor(selected.id) }}>
+              <Sensitive as="div" className="drawer-avatar" style={{ background: getAvatarColor(selected.id) }}>
                 {getInitials(selected.name)}
-              </div>
+              </Sensitive>
               <div className="drawer-title">
-                <h3>{selected.name || "Unknown Customer"}</h3>
+                <h3><Sensitive>{selected.name || "Unknown Customer"}</Sensitive></h3>
                 <span className="drawer-id">Customer #{selected.id}</span>
               </div>
               <button className="close-btn" onClick={closeDetail}>×</button>
@@ -479,11 +480,11 @@ export default function CustomersPage() {
                   <div className="info-grid">
                     <div className="info-item">
                       <label>Email</label>
-                      <span>{selected.email || "—"}</span>
+                      <Sensitive as="span">{selected.email || "—"}</Sensitive>
                     </div>
                     <div className="info-item">
                       <label>Phone</label>
-                      <span>{selected.phone || "—"}</span>
+                      <Sensitive as="span">{selected.phone || "—"}</Sensitive>
                     </div>
                     <div className="info-item">
                       <label>Customer Since</label>
@@ -495,9 +496,9 @@ export default function CustomersPage() {
                     </div>
                     <div className="info-item full">
                       <label>Lifetime Value</label>
-                      <span className="big-stat highlight">
+                      <Sensitive as="span" className="big-stat highlight">
                         {fmtMoney(orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0))}
-                      </span>
+                      </Sensitive>
                     </div>
                   </div>
                 </div>
@@ -513,16 +514,16 @@ export default function CustomersPage() {
                   {!addrLoading && addresses.map(a => (
                     <div className="address-card" key={a.id}>
                       <div className="addr-header">
-                        <span className="addr-name">{a.name || "—"}</span>
+                        <Sensitive as="span" className="addr-name">{a.name || "—"}</Sensitive>
                         {a.isDefault && <span className="chip default">Default</span>}
                         {!a.active && <span className="chip inactive">Inactive</span>}
                       </div>
-                      <div className="addr-body">
+                      <Sensitive as="div" className="addr-body">
                         {[a.line1, a.line2, (a as any).districtName, (a as any).stateName, a.pincode, (a as any).countryName]
                           .filter(Boolean)
                           .join(", ") || "—"}
-                      </div>
-                      <div className="addr-phone">{a.phone || "—"}</div>
+                      </Sensitive>
+                      <Sensitive as="div" className="addr-phone">{a.phone || "—"}</Sensitive>
                     </div>
                   ))}
                 </div>
@@ -546,7 +547,7 @@ export default function CustomersPage() {
                             </span>
                           </div>
                           <div className="order-details">
-                            <span className="order-total">{fmtMoney(o.totalAmount ?? 0, o.currency ?? "INR")}</span>
+                            <Sensitive as="span" className="order-total">{fmtMoney(o.totalAmount ?? 0, o.currency ?? "INR")}</Sensitive>
                             <span className="order-date">{o.placedAt ? formatIstDateTime(o.placedAt as any) : "—"}</span>
                           </div>
                         </div>

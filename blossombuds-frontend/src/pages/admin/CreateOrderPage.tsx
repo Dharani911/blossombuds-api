@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { authFetch } from "../../api/authFetch";
+import { Sensitive } from "../../components/admin/Sensitive";
 
 import {
   searchCustomersLite,
@@ -939,8 +940,8 @@ export default function CreateOrderPage() {
                       onClick={() => pickCustomer(c)}
                       className="dd-item"
                     >
-                      <div className="dd-line"><b>{c.id}</b> — {c.name || c.fullName || "Customer"}</div>
-                      <div className="dd-sub">{[c.phone].filter(Boolean).join(" • ")}</div>
+                      <Sensitive as="div" className="dd-line"><b>{c.id}</b> — {c.name || c.fullName || "Customer"}</Sensitive>
+                      <Sensitive as="div" className="dd-sub">{[c.phone].filter(Boolean).join(" • ")}</Sensitive>
                     </button>
                   ))}
                 </div>
@@ -949,7 +950,7 @@ export default function CreateOrderPage() {
           </label>
           <button className="ghost as-btn" type="button" onClick={() => setNewCustOpen(true)}>+ New</button>
         </div>
-        {customer?.id && <div className="muted" style={{ marginTop: 6 }}>Selected: #{customer.id} — {customer.name || customer.fullName || "Customer"}</div>}
+        {customer?.id && <Sensitive as="div" className="muted" style={{ marginTop: 6 }}>Selected: #{customer.id} — {customer.name || customer.fullName || "Customer"}</Sensitive>}
 
         {newCustOpen && (
           <div className="inline-modal">
@@ -1008,10 +1009,10 @@ export default function CreateOrderPage() {
               <div className="cur">
                 <div className="meta">
                   <div className="name">
-                    {selectedAddress.name}{" "}
+                    <Sensitive>{selectedAddress.name}</Sensitive>{" "}
                     <span className="badge">{selectedAddress.isDefault ? "Default" : "Selected"}</span>
                   </div>
-                  <div className="lines">
+                  <Sensitive as="div" className="lines">
                     {selectedAddress.phone ? `${selectedAddress.phone} • ` : ""}
                     {selectedAddress.line1}{selectedAddress.line2 ? `, ${selectedAddress.line2}` : ""}
                     <br />
@@ -1028,7 +1029,7 @@ export default function CreateOrderPage() {
                         countryNameById(selectedAddress.countryId) || "",
                       ].filter(Boolean).join(" • ")
                     )}
-                  </div>
+                  </Sensitive>
                 </div>
                 <div className="btns">
                   <button className="ghost as-btn" onClick={() => setSelectSheetOpen(true)}>Change</button>
@@ -1138,8 +1139,8 @@ export default function CreateOrderPage() {
                 />
               </div>
 
-              <div className="unit-cell">{fmtCurrency(line.unitPrice, currency)}</div>
-              <div className="total-cell">{fmtCurrency((line.quantity || 0) * (line.unitPrice || 0), currency)}</div>
+              <Sensitive as="div" className="unit-cell">{fmtCurrency(line.unitPrice, currency)}</Sensitive>
+              <Sensitive as="div" className="total-cell">{fmtCurrency((line.quantity || 0) * (line.unitPrice || 0), currency)}</Sensitive>
               <div><button type="button" className="ghost sm as-btn" onClick={() => removeLine(line.key)}>Remove</button></div>
             </div>
           ))}
@@ -1150,7 +1151,7 @@ export default function CreateOrderPage() {
       <section className="card sum" style={{ marginTop: 12 }}>
         <div className="section-head">Summary</div>
         <div className="sum-inner">
-          <div className="row-sum"><span>Subtotal</span><span>{fmtCurrency(subtotal, currency)}</span></div>
+          <div className="row-sum"><span>Subtotal</span><Sensitive as="span">{fmtCurrency(subtotal, currency)}</Sensitive></div>
 
           <div className="coupon-row">
             <div className="grow">
@@ -1163,7 +1164,7 @@ export default function CreateOrderPage() {
                 onKeyDown={(e) => { if (e.key === "Enter") applyCoupon(); }}
               />
               {couponErr && <div className="small err-text">{couponErr}</div>}
-              {couponAmt > 0 && <div className="small ok-text">Coupon applied: −{fmtCurrency(couponAmt, currency)}</div>}
+              {couponAmt > 0 && <Sensitive as="div" className="small ok-text">Coupon applied: −{fmtCurrency(couponAmt, currency)}</Sensitive>}
             </div>
             <div className="hstack coupon-btns">
               <button className="ghost as-btn" onClick={applyCoupon} disabled={!coupon.trim() || !customer?.id}>Apply</button>
@@ -1173,20 +1174,20 @@ export default function CreateOrderPage() {
           </div>
 <div className="row-sum">
   <span>Taxable Amount</span>
-  <span>{fmtCurrency(taxableAmount, currency)}</span>
+  <Sensitive as="span">{fmtCurrency(taxableAmount, currency)}</Sensitive>
 </div>
 
 <div className="row-sum">
   <span>GST</span>
-  <span>{fmtCurrency(gstAmount, currency)}</span>
+  <Sensitive as="span">{fmtCurrency(gstAmount, currency)}</Sensitive>
 </div>
           {!isIntl ? (
             <>
               <div className="row-sum">
                 <span>Shipping</span>
-                <span>
+                <Sensitive as="span">
                   {shippingLoading ? "Calculating…" : (shippingErr ? "—" : fmtCurrency(shippingFee || 0, "INR"))}
-                </span>
+                </Sensitive>
               </div>
               <div>
                 <div className="lab">Delivery partner</div>
@@ -1249,7 +1250,7 @@ export default function CreateOrderPage() {
 
           <div className="row-sum total">
             <span>Total</span>
-            <span>{fmtCurrency(grand, currency)}</span>
+            <Sensitive as="span">{fmtCurrency(grand, currency)}</Sensitive>
           </div>
 
           {shippingErr && !isIntl && (
@@ -1294,12 +1295,12 @@ export default function CreateOrderPage() {
                       onClick={() => { setSelectedAddrId(a.id); setSelectSheetOpen(false); }}
                       title={a.isDefault ? "Default address" : "Click to use this address"}
                     >
-                      <div className="addr-icon">{a.name?.[0]?.toUpperCase() || "A"}</div>
+                      <Sensitive as="div" className="addr-icon">{a.name?.[0]?.toUpperCase() || "A"}</Sensitive>
                       <div className="addr-info">
                         <div className="nm">
-                          {a.name}{a.isDefault && <span className="addr-badge">Default</span>}
+                          <Sensitive>{a.name}</Sensitive>{a.isDefault && <span className="addr-badge">Default</span>}
                         </div>
-                        <div className="addr-meta">
+                        <Sensitive as="div" className="addr-meta">
                           {a.phone ? `${a.phone} • ` : ""}
                           {a.line1}{a.line2 ? `, ${a.line2}` : ""}
                           <br />
@@ -1309,7 +1310,7 @@ export default function CreateOrderPage() {
                             a.pincode || "",
                             ctryNm,
                           ].filter(Boolean).join(" • ")}
-                        </div>
+                        </Sensitive>
                       </div>
                     </div>
                   );

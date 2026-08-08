@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { adminLogout } from "../../api/adminAuth";
 import Logo from "../../assets/BB_logo.svg";
+import { DemoModeProvider, useDemoMode } from "../../app/DemoModeContext";
 
 const PRIMARY = "#4A4F41";
 const ACCENT  = "#F05D8B";
@@ -18,6 +19,28 @@ function IconReviews(){ return (<svg width="20" height="20" viewBox="0 0 24 24" 
 function IconSettings(){ return (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0A1.65 1.65 0 0 0 9 3.09V3a2 2 0 1 1 4 0v.09c0 .66.39 1.26 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0c.25.61.85 1 1.51 1H21a2 2 0 1 1 0 4h-.09c-.66 0-1.26.39-1.51 1z"/></svg>); }
 function IconUsers(){ return (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>); }
 function IconLogout(){ return (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>); }
+function IconMail(){ return (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>); }
+function IconEye(){ return (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>); }
+function IconEyeOff(){ return (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a21.62 21.62 0 0 1 5.06-6.06M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a21.6 21.6 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>); }
+
+/** Simple icon-only toggle in the sidebar — click to hide/reveal confidential data.
+ *  Must render as a descendant of DemoModeProvider — AdminLayout itself can't call
+ *  useDemoMode() since it's the component that mounts the provider. */
+function DemoModeToggle() {
+  const { demoMode, toggleDemoMode } = useDemoMode();
+  return (
+    <button
+      className={"ghost demo-toggle" + (demoMode ? " active" : "")}
+      onClick={toggleDemoMode}
+      type="button"
+      title={demoMode ? "Confidential data hidden — click to reveal" : "Click to hide confidential data"}
+      aria-pressed={demoMode}
+      aria-label="Toggle hiding confidential data"
+    >
+      {demoMode ? <IconEyeOff/> : <IconEye/>}
+    </button>
+  );
+}
 function IconWhatsApp() {
   return (
     <svg
@@ -50,10 +73,12 @@ export default function AdminLayout() {
     { to: "/admin/reviews",    label: "Reviews",      icon: <IconReviews/> },
     { to: "/admin/customers",  label: "Customers",    icon: <IconUsers/> },
     { to: "/admin/whatsapp",   label: "WhatsApp CRM", icon: <IconWhatsApp/> },
+    { to: "/admin/email-marketing", label: "Email Marketing", icon: <IconMail/> },
     { to: "/admin/settings",   label: "Settings",     icon: <IconSettings/> },
   ];
 
   return (
+    <DemoModeProvider>
     <div
       className={"adml" + (collapsed ? " adml--collapsed" : "")}
       style={
@@ -97,6 +122,7 @@ export default function AdminLayout() {
       <aside className={"adml-side" + (collapsed ? " collapsed" : "") + (open ? " open" : "")}>
         <div className="side-inner">
           <div className="side-head">
+            <DemoModeToggle/>
             <button className="ghost collapse" onClick={() => setCollapsed(v => !v)} aria-label="Collapse sidebar">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={PRIMARY} strokeWidth="2">
                 <polyline points="15 18 9 12 15 6"/>
@@ -145,6 +171,7 @@ export default function AdminLayout() {
         </div>
       </main>
     </div>
+    </DemoModeProvider>
   );
 }
 
@@ -156,6 +183,15 @@ const css = `
   --ad-gold: ${GOLD};
   --ad-bg: ${BG};
   --ad-ink: rgba(0,0,0,.08);
+  --bb-sensitive-blur: 6px;
+}
+
+/* Demo Mode — visual-only redaction for live client walkthroughs. Not a security boundary. */
+.bb-sensitive--on{
+  filter: blur(var(--bb-sensitive-blur));
+  -webkit-filter: blur(var(--bb-sensitive-blur));
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .adml{
@@ -207,7 +243,13 @@ const css = `
   border-right:1px solid var(--ad-ink);
 }
 .side-inner{ position: sticky; top: var(--admin-topbar-h); padding: 10px 10px 16px; height: calc(100vh - var(--admin-topbar-h)); overflow:auto; }
-.side-head{ display:flex; align-items:center; justify-content:flex-end; padding: 6px; }
+.side-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding: 6px; flex-wrap:wrap; }
+.demo-toggle.active{
+  background: linear-gradient(135deg, rgba(246,195,32,.28), rgba(255,255,255,.95));
+  border-color: var(--ad-gold);
+  color: var(--ad-primary);
+  box-shadow: 0 12px 28px rgba(246,195,32,.3);
+}
 
 .menu{ display:grid; gap:6px; padding: 10px 4px; }
 .mi{

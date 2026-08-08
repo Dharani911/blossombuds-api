@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import http from "../../api/adminHttp";
 import { Link } from "react-router-dom";
+import { Sensitive } from "../../components/admin/Sensitive";
 import {
   ResponsiveContainer,
   AreaChart, Area,
@@ -361,6 +362,7 @@ const markUpdated = () => setLastUpdatedAt(new Date());
                 footer={`Lifetime: ${fmtMoney(metrics.revenue.total)}`}
                 accent={BRAND.gold}
                 icon="💰"
+                sensitive
               />
               <KpiCard
                 title="Total Orders"
@@ -370,6 +372,7 @@ const markUpdated = () => setLastUpdatedAt(new Date());
                 footer={`Lifetime: ${fmtNum(metrics.orders.total)}`}
                 accent={BRAND.accent}
                 icon="🛍️"
+                sensitive
               />
               <KpiCard
                 title="New Customers"
@@ -379,6 +382,7 @@ const markUpdated = () => setLastUpdatedAt(new Date());
                 footer={`Total Base: ${fmtNum(metrics.customers.total)}`}
                 accent={BRAND.green}
                 icon="👥"
+                sensitive
               />
               <KpiCard
                 title="Total Products"
@@ -412,7 +416,7 @@ const markUpdated = () => setLastUpdatedAt(new Date());
               </div>
             </div>
 
-            <div className="chart-canvas">
+            <Sensitive as="div" className="chart-canvas">
               {trendLoading ? (
                 <div className="sk-chart" />
               ) : trendErr ? (
@@ -449,7 +453,7 @@ const markUpdated = () => setLastUpdatedAt(new Date());
                   </AreaChart>
                 </ResponsiveContainer>
               )}
-            </div>
+            </Sensitive>
           </div>
 
           <div className="card chart-box pie-box">
@@ -461,7 +465,7 @@ const markUpdated = () => setLastUpdatedAt(new Date());
               </div>
             </div>
 
-            <div className="chart-canvas flex-center">
+            <Sensitive as="div" className="chart-canvas flex-center">
               {topsLoading ? (
                 <div className="sk-chart small" />
               ) : topsErr ? (
@@ -497,7 +501,7 @@ const markUpdated = () => setLastUpdatedAt(new Date());
               ) : (
                 <div className="empty-msg">No sales data yet</div>
               )}
-            </div>
+            </Sensitive>
           </div>
         </section>
 
@@ -512,7 +516,7 @@ const markUpdated = () => setLastUpdatedAt(new Date());
               </div>
             </div>
 
-            <div className="chart-canvas">
+            <Sensitive as="div" className="chart-canvas">
               {baseLoading ? (
                 <div className="sk-chart" />
               ) : baseErr ? (
@@ -535,7 +539,7 @@ const markUpdated = () => setLastUpdatedAt(new Date());
                   </BarChart>
                 </ResponsiveContainer>
               )}
-            </div>
+            </Sensitive>
           </div>
 
           <div className="card chart-box">
@@ -547,7 +551,7 @@ const markUpdated = () => setLastUpdatedAt(new Date());
               </div>
             </div>
 
-            <div className="chart-canvas">
+            <Sensitive as="div" className="chart-canvas">
               {baseLoading ? (
                 <div className="sk-chart" />
               ) : baseErr ? (
@@ -565,7 +569,7 @@ const markUpdated = () => setLastUpdatedAt(new Date());
                   </BarChart>
                 </ResponsiveContainer>
               )}
-            </div>
+            </Sensitive>
           </div>
         </section>
 
@@ -588,17 +592,17 @@ const markUpdated = () => setLastUpdatedAt(new Date());
                 topProducts.map((p, i) => (
                   <div className="list-item" key={i}>
                     <div className={`rank r-${i + 1}`}>{i + 1}</div>
-                    <div className="item-details">
+                    <Sensitive as="div" className="item-details">
                       <span className="name">{p.label}</span>
                       <span className="qty">{fmtNum(p.value)} units sold</span>
-                    </div>
+                    </Sensitive>
 
-                    <div className="bar-visual" aria-hidden="true">
+                    <Sensitive as="div" className="bar-visual" aria-hidden="true">
                       <div
                         className="fill"
                         style={{ width: `${Math.min((p.value / (topProducts[0]?.value || 1)) * 100, 100)}%` }}
                       />
-                    </div>
+                    </Sensitive>
 
                   </div>
                 ))
@@ -630,11 +634,13 @@ const markUpdated = () => setLastUpdatedAt(new Date());
                       ? `Revenue is up ${metrics.revenue.growth.toFixed(1)}% compared to last period.`
                       : `Revenue dipped by ${Math.abs(metrics.revenue.growth).toFixed(1)}%. Consider a promotion to boost sales.`
                     }
+                    sensitive
                   />
                   <InsightRow
                     icon="🚚"
                     title="Logistics"
                     text={`Shipping spend in this period: ${fmtMoney(metrics.shipping.val)}.`}
+                    sensitive
                   />
                   <InsightRow
                     icon="✨"
@@ -654,7 +660,7 @@ const markUpdated = () => setLastUpdatedAt(new Date());
 /* ---------------------------------------------------------------------------
    SUB-COMPONENTS
 --------------------------------------------------------------------------- */
-function KpiCard({ title, rangeLabel, value, growth, footer, accent, icon }: any) {
+function KpiCard({ title, rangeLabel, value, growth, footer, accent, icon, sensitive }: any) {
   const isPos = growth >= 0;
   return (
     <div className="card kpi-card">
@@ -670,23 +676,23 @@ function KpiCard({ title, rangeLabel, value, growth, footer, accent, icon }: any
         )}
       </div>
       <div className="kpi-main">
-        <div className="val" style={{ color: BRAND.text }}>{value}</div>
+        <Sensitive as="div" disabled={!sensitive} className="val" style={{ color: BRAND.text }}>{value}</Sensitive>
         <div className="sub">{rangeLabel}</div>
       </div>
-      <div className="kpi-foot">
+      <Sensitive as="div" disabled={!sensitive} className="kpi-foot">
         {footer}
-      </div>
+      </Sensitive>
     </div>
   );
 }
 
-function InsightRow({ icon, title, text }: any) {
+function InsightRow({ icon, title, text, sensitive }: any) {
   return (
     <div className="insight-row">
       <div className="i-icon">{icon}</div>
       <div className="i-body">
         <strong>{title}</strong>
-        <p>{text}</p>
+        <Sensitive as="p" disabled={!sensitive}>{text}</Sensitive>
       </div>
     </div>
   );

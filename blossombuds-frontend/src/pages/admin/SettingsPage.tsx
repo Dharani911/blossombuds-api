@@ -11,6 +11,7 @@ import AdminDeliveryPartners from "../../components/admin/AdminDeliveryPartners"
 import AdminDeliveryFeeRules from "../../components/admin/AdminDeliveryFeeRules";
 import AdminDeliveryRegions from "../../components/admin/AdminDeliveryRegions";
 import AdminGlobalSale from "../../components/admin/AdminGlobalSale";
+import { Sensitive } from "../../components/admin/Sensitive";
 
 /* ---- theme tokens ---- */
 const PRIMARY = "#4A4F41";
@@ -452,12 +453,13 @@ export default function SettingsPage() {
                   </div>
                   <div className="cell-val">
                     {r.mode === "view" ? (
-                      <div className="val" title={r.value}>{r.value || "—"}</div>
+                      <Sensitive as="div" className="val" title={r.value}>{r.value || "—"}</Sensitive>
                     ) : (
-                      <input
+                      <Sensitive
+                        as="input"
                         className="in"
                         value={r._value ?? ""}
-                        onChange={(e) =>
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                           setAllRows((rs) =>
                             rs.map((x) =>
                               x.key === r.key ? { ...x, _value: e.target.value } : x
