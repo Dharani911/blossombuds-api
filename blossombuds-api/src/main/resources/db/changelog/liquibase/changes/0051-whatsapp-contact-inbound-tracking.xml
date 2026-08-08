@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+          http://www.liquibase.org/xml/ns/dbchangelog
+          http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.23.xsd">
+
+    <!-- Records when a contact last messaged the business number.
+
+         Meta throttles MARKETING template messages per recipient (error 131049,
+         "not delivered to maintain healthy ecosystem engagement") based on whether that
+         person has ever interacted with the sending number. A contact who has messaged us
+         is reachable; one who never has is very likely to be dropped, regardless of the
+         consent they gave offline.
+
+         Stamping the inbound timestamp lets campaigns target only reachable contacts
+         instead of burning a one-shot campaign on numbers that will silently fail. -->
+    <changeSet id="0051-01-add-last-inbound-at-to-whatsapp-contacts" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="whatsapp_contacts" columnName="last_inbound_at"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="whatsapp_contacts">
+            <column name="last_inbound_at" type="TIMESTAMP WITH TIME ZONE"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="whatsapp_contacts" columnName="last_inbound_at"/>
+        </rollback>
+    </changeSet>
+
+    <!-- Backfill from the raw webhook audit log so contacts who already messaged us are
+         recognised as reachable without waiting for them to message again. -->
+    <changeSet id="0051-02-backfill-last-inbound-at" author="dharani">
+        <sql>
+UPDATE whatsapp_contacts wc
+SET last_inbound_at = sub.latest
+FROM (
+    SELECT '+' || regexp_replace(phone, '\D', '', 'g') AS e164, max(received_at) AS latest
+    FROM whatsapp_message_events
+    WHERE event_type = 'INCOMING_MESSAGE' AND phone IS NOT NULL AND phone &lt;&gt; ''
+    GROUP BY 1
+) sub
+WHERE '+' || regexp_replace(wc.phone, '\D', '', 'g') = sub.e164
+  AND wc.last_inbound_at IS NULL;
+        </sql>
+        <rollback><!-- backfill only; the column drop in 0051-01 covers rollback --></rollback>
+    </changeSet>
+
+    <!-- Registered customers need the same tracking. They opt in by accepting the Terms on the
+         website, which tells Meta nothing — they have still never messaged the business number, so
+         marketing to them is dropped by 131049 exactly like an expo lead. Without this column the
+         ALL_OPTED_IN audience has no way to distinguish reachable customers from unreachable ones. -->
+    <changeSet id="0051-04-add-last-inbound-at-to-preferences" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="customer_whatsapp_preferences" columnName="last_inbound_at"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="customer_whatsapp_preferences">
+            <column name="last_inbound_at" type="TIMESTAMP WITH TIME ZONE"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="customer_whatsapp_preferences" columnName="last_inbound_at"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="0051-05-backfill-preference-last-inbound-at" author="dharani">
+        <sql>
+UPDATE customer_whatsapp_preferences p
+SET last_inbound_at = sub.latest
+FROM (
+    SELECT regexp_replace(phone, '\D', '', 'g') AS digits, max(received_at) AS latest
+    FROM whatsapp_message_events
+    WHERE event_type = 'INCOMING_MESSAGE' AND phone IS NOT NULL AND phone &lt;&gt; ''
+    GROUP BY 1
+) sub
+WHERE regexp_replace(p.phone, '\D', '', 'g') = sub.digits
+  AND p.last_inbound_at IS NULL;
+        </sql>
+        <rollback><!-- backfill only --></rollback>
+    </changeSet>
+
+    <!-- Campaign audience resolution filters on this column, so index it alongside the
+         opted_in/active flags it is always queried with. -->
+    <changeSet id="0051-03-index-last-inbound-at" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists indexName="idx_whatsapp_contacts_last_inbound"/>
+            </not>
+        </preConditions>
+        <createIndex indexName="idx_whatsapp_contacts_last_inbound" tableName="whatsapp_contacts">
+            <column name="last_inbound_at"/>
+        </createIndex>
+        <rollback>
+            <dropIndex indexName="idx_whatsapp_contacts_last_inbound" tableName="whatsapp_contacts"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

@@ -54,6 +54,15 @@ public class CustomerWhatsAppPreference {
     @Column(name = "sms_opted_out_at")
     private OffsetDateTime smsOptedOutAt;
 
+    /**
+     * When this customer last messaged the business WhatsApp number.
+     *
+     * Consent given on the website is invisible to Meta. Marketing templates are dropped (131049)
+     * for recipients with no inbound history against the sending number, so this — not the opt-in
+     * flag — is what predicts whether a marketing campaign will actually reach them.
+     */
+    private OffsetDateTime lastInboundAt;
+
     /** Last consent text shown to the customer. */
     @Column(name = "last_consent_text", columnDefinition = "text")
     private String lastConsentText;

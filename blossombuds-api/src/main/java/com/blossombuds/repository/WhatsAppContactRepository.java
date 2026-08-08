@@ -10,6 +10,13 @@ public interface WhatsAppContactRepository extends JpaRepository<WhatsAppContact
 
     List<WhatsAppContact> findByOptedInTrueAndActiveTrue();
 
+    /** Contacts who have messaged the business number — the ones marketing can actually reach. */
+    List<WhatsAppContact> findByOptedInTrueAndActiveTrueAndLastInboundAtIsNotNull();
+
+    long countByOptedInTrueAndActiveTrueAndLastInboundAtIsNotNull();
+
+    long countByOptedInTrueAndActiveTrue();
+
     List<WhatsAppContact> findAllByActiveTrueOrderByCreatedAtDesc();
 
     Optional<WhatsAppContact> findByPhone(String phone);

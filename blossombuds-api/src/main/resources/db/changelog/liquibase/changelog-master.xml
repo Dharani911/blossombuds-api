@@ -60,4 +60,6 @@
     <include file="db/changelog/liquibase/changes/0048-seed-expo-outreach-v2-template.xml"/>
     <include file="db/changelog/liquibase/changes/0049-add-email-marketing.xml"/>
     <include file="db/changelog/liquibase/changes/0050-link-whatsapp-email-campaigns.xml"/>
+    <include file="db/changelog/liquibase/changes/0051-whatsapp-contact-inbound-tracking.xml"/>
+    <include file="db/changelog/liquibase/changes/0052-archive-test-campaigns.xml"/>
 </databaseChangeLog>

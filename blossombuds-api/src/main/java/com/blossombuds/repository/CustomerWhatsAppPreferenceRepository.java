@@ -18,6 +18,13 @@ public interface CustomerWhatsAppPreferenceRepository extends JpaRepository<Cust
     /** Finds all active customers who opted in to WhatsApp communication. */
     List<CustomerWhatsAppPreference> findByOptedInTrueAndActiveTrue();
 
+    /** Opted-in customers who have messaged the business number — the ones marketing can reach. */
+    List<CustomerWhatsAppPreference> findByOptedInTrueAndActiveTrueAndLastInboundAtIsNotNull();
+
+    long countByOptedInTrueAndActiveTrue();
+
+    long countByOptedInTrueAndActiveTrueAndLastInboundAtIsNotNull();
+
     /** Finds a WhatsApp preference by phone number. */
     Optional<CustomerWhatsAppPreference> findByPhoneAndActiveTrue(String phone);
 
