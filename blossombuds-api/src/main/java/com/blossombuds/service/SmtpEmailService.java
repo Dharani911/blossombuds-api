@@ -1,15 +1,8 @@
 package com.blossombuds.service;
 
-import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.ByteArrayResource;
-import org.springframework.core.io.ClassPathResource;
-import org.springframework.core.io.Resource;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -34,8 +27,7 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class SmtpEmailService implements EmailService {
 
-    //private final JavaMailSender mailSender;
-    private final SettingsService settings; // read brand.support_email / brand.whatsapp / brand.name / brand.url
+    private final SettingsService settings;
 
     @Value("${app.mail.from:noreply@example.com}")
     private String from;
@@ -81,6 +73,11 @@ public class SmtpEmailService implements EmailService {
 
     @Value("${app.mail.apiKey:}")
     private String mailApiKey;
+    /**
+     * Converts marker syntax to HTML. Must receive the raw (un-escaped) source — the marker
+     * URLs are extracted here and only the label text is HTML-escaped. Calling escape() on the
+     * whole string before this method would corrupt URLs that contain & characters.
+     */
     private static String maskToHtml(String src) {
         if (src == null) return "";
 
@@ -99,7 +96,6 @@ public class SmtpEmailService implements EmailService {
         while (m.find()) {
             String label = escape(m.group(1));
             String href = escapeAttr(m.group(2));
-            // Blue link + leading "link" symbol; nbsp keeps spacing tight in clients
             String repl =
                     "<a href=\"" + href + "\" " +
                             "style=\"color:#1a73e8;text-decoration:underline;\">" +
@@ -107,7 +103,46 @@ public class SmtpEmailService implements EmailService {
             m.appendReplacement(sb, repl);
         }
         m.appendTail(sb);
-        return sb.toString();
+        // Escape plain text that remains outside markers
+        return escapeNonMarkup(sb.toString());
+    }
+
+    /** Escapes HTML special characters in plain-text segments only — skips anything that looks
+     *  like it is already a tag (produced by maskToHtml above). */
+    private static String escapeNonMarkup(String html) {
+        StringBuilder out = new StringBuilder(html.length());
+        int i = 0;
+        while (i < html.length()) {
+            char c = html.charAt(i);
+            if (c == '<') {
+                // pass through tags produced by this class (img, a) verbatim
+                int end = html.indexOf('>', i);
+                if (end >= 0) {
+                    out.append(html, i, end + 1);
+                    i = end + 1;
+                } else {
+                    out.append("&lt;");
+                    i++;
+                }
+            } else if (c == '&') {
+                // pass through existing entities (&amp; &lt; &#160; etc.) verbatim
+                int semi = html.indexOf(';', i);
+                if (semi >= 0 && semi - i <= 10) {
+                    out.append(html, i, semi + 1);
+                    i = semi + 1;
+                } else {
+                    out.append("&amp;");
+                    i++;
+                }
+            } else if (c == '>') {
+                out.append("&gt;");
+                i++;
+            } else {
+                out.append(c);
+                i++;
+            }
+        }
+        return out.toString();
     }
 
 
@@ -237,13 +272,6 @@ public class SmtpEmailService implements EmailService {
         );
 
         sendRichMasked(toEmail, subject, body);
-    }
-
-    private String formatPercent(BigDecimal rate) {
-        if (rate == null) {
-            return "0";
-        }
-        return rate.setScale(2, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString();
     }
 
     /** Sends a notification when order status changes, optionally with note and tracking link. */
@@ -423,9 +451,8 @@ public class SmtpEmailService implements EmailService {
     private record HtmlParts(String htmlBody) {}
 
     private HtmlParts renderHtmlEmail(String maskedSource) {
-        // 1) Convert markers to <a> tags
-        String withAnchors = maskToHtml(escape(maskedSource));
-        // 2) Preserve newlines
+        // maskToHtml handles escaping internally — do NOT pre-escape or marker URLs break
+        String withAnchors = maskToHtml(maskedSource);
         String bodyHtml = withAnchors.replace("\n", "<br/>");
         String contact = contactLineHtml();
 
@@ -478,38 +505,6 @@ public class SmtpEmailService implements EmailService {
         );
 
         return new HtmlParts(html);
-    }
-
-    /* ========================= Inline Logo Loader ========================= */
-
-    private record InlineLogo(String cid, byte[] bytes, String contentType) {}
-
-    /*private InlineLogo loadInlineLogo() {
-        // Prefer PNG (better Outlook support), then SVG
-        byte[] bytes = readClassPathBytes(logoPngPath);
-        String ct = "image/png";
-        if (bytes == null) {
-            log.warn("[EMAIL][LOGO] PNG not found at '{}', trying SVG", logoPngPath);
-            bytes = readClassPathBytes(logoSvgPath);
-            ct = (bytes != null) ? "image/svg+xml" : null;
-        }
-        if (bytes == null) {
-            log.warn("[EMAIL][LOGO] Both PNG and SVG logos missing");
-        }
-        return (bytes != null && ct != null) ? new InlineLogo(LOGO_CID, bytes, ct) : null;
-    }*/
-
-    private byte[] readClassPathBytes(String path) {
-        try {
-            Resource r = new ClassPathResource(path);
-            if (!r.exists()) return null;
-            try (var in = r.getInputStream(); var out = new java.io.ByteArrayOutputStream()) {
-                in.transferTo(out);
-                return out.toByteArray();
-            }
-        } catch (Exception e) {
-            return null;
-        }
     }
 
     /* ========================= Links / URL builders ========================= */

@@ -329,14 +329,28 @@ public class WhatsAppCampaignService {
         if ("ALL_OPTED_IN".equalsIgnoreCase(audienceType)) {
             List<CustomerWhatsAppPreference> preferences = preferenceRepository.findByOptedInTrueAndActiveTrue();
 
+            // Bulk-load customer names so personalised templates say "Hi Priya" not "Hi Customer"
+            Set<Long> customerIds = preferences.stream()
+                    .map(CustomerWhatsAppPreference::getCustomerId)
+                    .filter(id -> id != null)
+                    .collect(Collectors.toSet());
+            java.util.Map<Long, String> nameById = customerRepository.findAllById(customerIds)
+                    .stream()
+                    .filter(c -> c.getName() != null && !c.getName().isBlank())
+                    .collect(Collectors.toMap(com.blossombuds.domain.Customer::getId,
+                            c -> c.getName().trim()));
+
             for (CustomerWhatsAppPreference preference : preferences) {
+                String recipientName = preference.getCustomerId() != null
+                        ? nameById.getOrDefault(preference.getCustomerId(), "Customer")
+                        : "Customer";
                 WhatsAppCampaignRecipient recipient = new WhatsAppCampaignRecipient();
                 recipient.setCampaignId(campaign.getId());
                 recipient.setCustomerId(preference.getCustomerId());
                 recipient.setPhone(normalizePhone(preference.getPhone()));
-                recipient.setRecipientName("Customer");
+                recipient.setRecipientName(recipientName);
                 recipient.setStatus("PENDING");
-                recipient.setVariablesJson(toVariablesText("Customer", request));
+                recipient.setVariablesJson(toVariablesText(recipientName, request));
                 recipient.setCreatedBy("admin");
                 recipient.setModifiedBy("admin");
                 recipient.setCreatedAt(OffsetDateTime.now());
@@ -471,22 +485,6 @@ public class WhatsAppCampaignService {
                 + ";paymentLink=" + safe(request.getPaymentLink())
                 + ";offerText=" + safe(request.getOfferText())
                 + ";imageUrl=" + safe(request.getImageUrl());
-    }
-
-    /** Extracts link variable from the simple variables text. */
-    private String extractSecondVariable(String variablesText) {
-        if (isBlank(variablesText)) {
-            return "";
-        }
-
-        String[] parts = variablesText.split(";");
-        for (String part : parts) {
-            if (part.startsWith("link=")) {
-                return part.substring("link=".length());
-            }
-        }
-
-        return "";
     }
 
     /** Normalizes a phone number for WhatsApp Cloud API (strips all non-digits). */
@@ -658,11 +656,6 @@ public class WhatsAppCampaignService {
         if (digits.length() == 12 && digits.startsWith("91")) return "+" + digits;
         if (digits.length() == 13 && digits.startsWith("091")) return "+" + digits.substring(1);
         return digits.isEmpty() ? "" : "+" + digits;
-    }
-
-    private String maskPhone(String phone) {
-        if (phone == null || phone.length() <= 4) return "****";
-        return "****" + phone.substring(phone.length() - 4);
     }
 
     @Getter @Setter

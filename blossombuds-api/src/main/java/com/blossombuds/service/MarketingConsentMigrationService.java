@@ -72,6 +72,11 @@ public class MarketingConsentMigrationService {
             savePreference(customer);
             optedIn++;
 
+            if (customer.getEmail() == null || customer.getEmail().isBlank()) {
+                log.info("[CONSENT_MIGRATION] No email for customerId={}, skipping notice", customer.getId());
+                continue;
+            }
+
             String subject = "We're updating our Terms & Conditions and Privacy Policy";
             String body = buildNoticeBody(customer.getName(), privacyUrl, termsUrl, profileUrl);
 
