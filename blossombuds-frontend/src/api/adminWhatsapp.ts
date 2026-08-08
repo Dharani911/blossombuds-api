@@ -27,6 +27,10 @@ export type WhatsAppCampaign = {
   notes?: string;
   createdAt?: string;
   completedAt?: string;
+  /** When true, sending this campaign also auto-sends a matching email to customers with no phone on file. */
+  alsoEmailPhoneless?: boolean;
+  /** Id of the linked email campaign once sent, if alsoEmailPhoneless was enabled. */
+  linkedEmailCampaignId?: number;
 };
 
 /** One recipient inside a WhatsApp campaign. */
@@ -83,6 +87,9 @@ export type CreateWhatsAppCampaignRequest = {
   paymentLink?: string;
   notes?: string;
   recipients?: ManualWhatsAppRecipient[];
+  /** When true, sending this campaign also auto-sends a matching email to customers with no
+   *  phone on file. Only valid when audienceType is ALL_OPTED_IN. */
+  alsoEmailPhoneless?: boolean;
 };
 
 /** Fetches active WhatsApp templates. */
@@ -232,4 +239,23 @@ export async function uploadWhatsAppCampaignImage(file: File): Promise<string> {
     headers: { "Content-Type": "multipart/form-data" },
   });
   return res.data.url;
+}
+
+/** Result of the one-time pre-feature consent migration. */
+export type ConsentMigrationResult = {
+  eligible: number;
+  optedIn: number;
+  emailFailed: number;
+};
+
+/** Counts customers eligible for the one-time consent migration, without running it. */
+export async function getConsentMigrationEligibleCount(): Promise<number> {
+  const res = await adminHttp.get<{ eligible: number }>("/api/admin/whatsapp/consent-migration/eligible-count");
+  return res.data.eligible;
+}
+
+/** Runs the one-time consent migration: opts in pre-feature customers and emails each the policy notice. */
+export async function runConsentMigration(): Promise<ConsentMigrationResult> {
+  const res = await adminHttp.post("/api/admin/whatsapp/consent-migration/run");
+  return res.data;
 }

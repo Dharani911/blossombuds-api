@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+          http://www.liquibase.org/xml/ns/dbchangelog
+          http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.23.xsd">
+
+    <!-- Lets a WhatsApp campaign also auto-send a matching email to customers with no
+         phone on file, in the same Send action. See EmailCampaign (0049) for the email side. -->
+    <changeSet id="0050-01-add-also-email-phoneless" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="whatsapp_campaigns" columnName="also_email_phoneless"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="whatsapp_campaigns">
+            <column name="also_email_phoneless" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="whatsapp_campaigns" columnName="also_email_phoneless"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="0050-02-add-linked-email-campaign-id" author="dharani">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="whatsapp_campaigns" columnName="linked_email_campaign_id"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="whatsapp_campaigns">
+            <!-- Set once the linked email campaign is created, so a resend/retry of a partially
+                 failed WhatsApp campaign never triggers a second, duplicate email blast. -->
+            <column name="linked_email_campaign_id" type="bigint"/>
+        </addColumn>
+        <addForeignKeyConstraint
+                baseTableName="whatsapp_campaigns"
+                baseColumnNames="linked_email_campaign_id"
+                referencedTableName="email_campaigns"
+                referencedColumnNames="id"
+                constraintName="fk_whatsapp_campaigns_linked_email_campaign"/>
+        <rollback>
+            <dropForeignKeyConstraint baseTableName="whatsapp_campaigns" constraintName="fk_whatsapp_campaigns_linked_email_campaign"/>
+            <dropColumn tableName="whatsapp_campaigns" columnName="linked_email_campaign_id"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

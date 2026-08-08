@@ -41,9 +41,10 @@ export default function RegisterModal() {
   const [phoneResendBusy, setPhoneResendBusy] = useState(false);
   const [phoneResendMsg, setPhoneResendMsg] = useState<string | null>(null);
 
-  // Communication consent (phone path) — both default true; user may uncheck
-  const [smsOptIn, setSmsOptIn] = useState(true);
-  const [waOptIn, setWaOptIn] = useState(true);
+  // Terms & Privacy acceptance — required on both paths. Accepting carries WhatsApp/SMS
+  // marketing consent (see updated Terms & Conditions / Privacy Policy); no separate per-channel
+  // checkbox — customers can opt out anytime from their profile page.
+  const [agreeTerms, setAgreeTerms] = useState(false);
 
   const sheetRef = useRef<HTMLDivElement>(null);
 
@@ -79,12 +80,12 @@ export default function RegisterModal() {
 
   // Email path validations
   const emailOk = /^\S+@\S+\.\S+$/.test(email);
-  const canEmailSubmit = nameOk && emailOk && pwOk && confirmOk;
+  const canEmailSubmit = nameOk && emailOk && pwOk && confirmOk && agreeTerms;
 
   // Phone path validations
   const rawPhone = phone.replace(/\D/g, "");
   const phoneOk = /^[6-9]\d{9}$/.test(rawPhone);
-  const canPhoneSubmit = nameOk && phoneOk;
+  const canPhoneSubmit = nameOk && phoneOk && agreeTerms;
 
   // ── Email path ─────────────────────────────────────────────────────────────
 
@@ -155,8 +156,11 @@ export default function RegisterModal() {
       await customerRegister({
         name,
         phone: rawPhone,
-        smsOptIn,
-        whatsAppOptIn: waOptIn,
+        // Consent is carried by accepting Terms & Conditions / Privacy Policy below (agreeTerms
+        // is required to reach this point) — no separate per-channel checkbox. Customer can opt
+        // out anytime from their profile page.
+        smsOptIn: agreeTerms,
+        whatsAppOptIn: agreeTerms,
       });
       setStep("phone-otp-verify");
     } catch (e: any) {
@@ -310,6 +314,8 @@ export default function RegisterModal() {
                     </small>
                   </label>
 
+                  <TermsAcceptRow checked={agreeTerms} onChange={setAgreeTerms} />
+
                   {err && <div className="error" role="alert">{err}</div>}
 
                   <button className="cta" type="submit" disabled={!canEmailSubmit || busy}>
@@ -383,19 +389,7 @@ export default function RegisterModal() {
                     </small>
                   </label>
 
-                  <div className="consent-block">
-                    <p className="consent-title">Notification preferences</p>
-                    <label className="consent-row">
-                      <input type="checkbox" className="consent-check" checked={smsOptIn}
-                        onChange={(e) => setSmsOptIn(e.target.checked)} />
-                      <span>Receive order updates via <strong>SMS</strong> (OTP, dispatch, delivery)</span>
-                    </label>
-                    <label className="consent-row">
-                      <input type="checkbox" className="consent-check" checked={waOptIn}
-                        onChange={(e) => setWaOptIn(e.target.checked)} />
-                      <span>Receive offers &amp; updates via <strong>WhatsApp</strong></span>
-                    </label>
-                  </div>
+                  <TermsAcceptRow checked={agreeTerms} onChange={setAgreeTerms} />
 
                   {err && <div className="error" role="alert">{err}</div>}
 
@@ -448,6 +442,26 @@ export default function RegisterModal() {
   );
 
   return createPortal(modal, document.body);
+}
+
+/** Required Terms & Privacy acceptance checkbox, shared by both signup paths.
+ *  Accepting carries WhatsApp/SMS marketing consent per the Terms & Conditions / Privacy Policy —
+ *  see those pages for the current wording. Links open in a new tab so signup progress isn't lost. */
+function TermsAcceptRow({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="consent-block">
+      <label className="consent-row">
+        <input type="checkbox" className="consent-check" checked={checked}
+          onChange={(e) => onChange(e.target.checked)} required />
+        <span>
+          I agree to the{" "}
+          <a href="/pages/terms" target="_blank" rel="noopener noreferrer" className="textlink">Terms &amp; Conditions</a>
+          {" "}and{" "}
+          <a href="/pages/privacy" target="_blank" rel="noopener noreferrer" className="textlink">Privacy Policy</a>.
+        </span>
+      </label>
+    </div>
+  );
 }
 
 // ── Icons ──────────────────────────────────────────────────────────────────

@@ -6,6 +6,7 @@ import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.blossombuds.domain.WhatsAppContact;
 import com.blossombuds.dto.WhatsAppDtos;
 import com.blossombuds.repository.WhatsAppContactRepository;
+import com.blossombuds.service.MarketingConsentMigrationService;
 import com.blossombuds.service.WhatsAppCampaignService;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +35,7 @@ public class AdminWhatsAppController {
 
     private final WhatsAppCampaignService whatsAppCampaignService;
     private final WhatsAppContactRepository whatsAppContactRepository;
+    private final MarketingConsentMigrationService marketingConsentMigrationService;
     private final AmazonS3 r2Client;
 
     @Value("${cloudflare.r2.bucket}")
@@ -114,6 +116,21 @@ public class AdminWhatsAppController {
             c.setModifiedAt(java.time.OffsetDateTime.now());
             whatsAppContactRepository.save(c);
         });
+    }
+
+    /** Counts customers eligible for the one-time pre-feature consent migration, without
+     *  sending or writing anything — used by the admin UI to show a number before the confirm dialog. */
+    @GetMapping("/consent-migration/eligible-count")
+    public Map<String, Integer> countConsentMigrationEligible() {
+        return Map.of("eligible", marketingConsentMigrationService.countEligible());
+    }
+
+    /** Runs the one-time consent migration: opts in customers who registered before the WhatsApp
+     *  CRM existed and were never asked, and emails each one the policy-update notice. Safe to
+     *  re-run — only ever touches customers with no existing preference row. */
+    @PostMapping("/consent-migration/run")
+    public MarketingConsentMigrationService.MigrationResult runConsentMigration() {
+        return marketingConsentMigrationService.run();
     }
 
     @Getter @Setter

@@ -38,6 +38,7 @@ public class WhatsAppCampaignService {
     private final WhatsAppContactRepository whatsAppContactRepository;
     private final CustomerRepository customerRepository;
     private final WhatsAppCloudClient whatsAppCloudClient;
+    private final EmailCampaignService emailCampaignService;
 
     /**
      * On startup, reset any campaigns that were left in SENDING (from a previous crash/restart).
@@ -110,12 +111,19 @@ public class WhatsAppCampaignService {
 
         validateAudienceTemplateCompatibility(template.getProviderTemplateName(), audienceType);
 
+        boolean alsoEmailPhoneless = Boolean.TRUE.equals(request.getAlsoEmailPhoneless());
+        if (alsoEmailPhoneless && !"ALL_OPTED_IN".equalsIgnoreCase(audienceType)) {
+            throw new IllegalArgumentException(
+                    "\"Also email customers with no phone number\" is only available for the All Opted-In audience.");
+        }
+
         WhatsAppCampaign campaign = new WhatsAppCampaign();
         campaign.setTitle(request.getTitle().trim());
         campaign.setTemplateId(template.getId());
         campaign.setAudienceType(audienceType);
         campaign.setStatus("DRAFT");
         campaign.setNotes(request.getNotes());
+        campaign.setAlsoEmailPhoneless(alsoEmailPhoneless);
         campaign.setCreatedBy("admin");
         campaign.setModifiedBy("admin");
         campaign.setCreatedAt(OffsetDateTime.now());
@@ -160,6 +168,7 @@ public class WhatsAppCampaignService {
             campaign.setStatus("COMPLETED");
             campaign.setCompletedAt(OffsetDateTime.now());
             campaign.setModifiedAt(OffsetDateTime.now());
+            maybeCreateLinkedEmailCampaign(campaign);
             return campaignRepository.save(campaign);
         }
 
@@ -226,12 +235,62 @@ public class WhatsAppCampaignService {
         campaign.setCompletedAt(OffsetDateTime.now());
         campaign.setModifiedAt(OffsetDateTime.now());
 
+        maybeCreateLinkedEmailCampaign(campaign);
+
         WhatsAppCampaign saved = campaignRepository.save(campaign);
 
         log.info("[WHATSAPP][CAMPAIGN][SEND] Finished campaignId={}, sent={}, failed={}, status={}",
                 campaignId, sent, failed, saved.getStatus());
 
         return saved;
+    }
+
+    /**
+     * If this campaign has "also email phone-less customers" enabled and hasn't already spawned
+     * its linked email campaign, builds a matching email from this campaign's offer text/link/
+     * image (read back from a recipient's variablesJson — the same values every recipient got)
+     * and sends it. Mutates campaign.linkedEmailCampaignId but does not save it — the caller
+     * persists it as part of its own save. Failures here are logged, not propagated: the
+     * WhatsApp send already succeeded and must not be undone by the email side failing.
+     */
+    private void maybeCreateLinkedEmailCampaign(WhatsAppCampaign campaign) {
+        if (!Boolean.TRUE.equals(campaign.getAlsoEmailPhoneless()) || campaign.getLinkedEmailCampaignId() != null) {
+            return;
+        }
+
+        try {
+            List<WhatsAppCampaignRecipient> anyRecipients =
+                    recipientRepository.findByCampaignIdAndActiveTrueOrderByCreatedAtAsc(campaign.getId());
+            String variablesJson = anyRecipients.isEmpty() ? "" : anyRecipients.get(0).getVariablesJson();
+
+            String offerText = getVariableValue(variablesJson, "offerText");
+            String link = getVariableValue(variablesJson, "link");
+            String imageUrl = getVariableValue(variablesJson, "imageUrl");
+
+            StringBuilder body = new StringBuilder();
+            if (!isBlank(imageUrl)) {
+                body.append("{{IMG|").append(imageUrl).append("}}\n\n");
+            }
+            body.append(isBlank(offerText) ? "Check out our latest floral collections!" : offerText);
+            if (!isBlank(link)) {
+                body.append("\n\n{{A|Shop now|").append(link).append("}}");
+            }
+
+            EmailCampaignService.CreateCampaignRequest emailRequest = new EmailCampaignService.CreateCampaignRequest();
+            emailRequest.setTitle(campaign.getTitle() + " (email — no phone on file)");
+            emailRequest.setSubject(campaign.getTitle());
+            emailRequest.setBodyText(body.toString());
+
+            com.blossombuds.domain.EmailCampaign emailCampaign = emailCampaignService.createCampaign(emailRequest);
+            emailCampaign = emailCampaignService.sendCampaign(emailCampaign.getId());
+
+            campaign.setLinkedEmailCampaignId(emailCampaign.getId());
+            log.info("[WHATSAPP][CAMPAIGN][LINKED_EMAIL] whatsappCampaignId={} emailCampaignId={} recipients={}",
+                    campaign.getId(), emailCampaign.getId(), emailCampaign.getTotalRecipients());
+        } catch (Exception ex) {
+            log.warn("[WHATSAPP][CAMPAIGN][LINKED_EMAIL] Failed to create/send linked email for whatsappCampaignId={}: {}",
+                    campaign.getId(), ex.toString());
+        }
     }
 
     /** Builds campaign recipients from audience type or manual recipient list. */
@@ -518,6 +577,10 @@ public class WhatsAppCampaignService {
 
         /** Manual recipient list, used when audienceType is MANUAL. */
         private List<ManualRecipient> recipients;
+
+        /** When true, sending this campaign also auto-sends a matching email to customers with
+         *  no phone on file. Only valid when audienceType is ALL_OPTED_IN. */
+        private Boolean alsoEmailPhoneless;
     }
 
     /** Manual recipient request object for WhatsApp campaigns. */
@@ -650,7 +713,9 @@ public class WhatsAppCampaignService {
                 campaign.getReadCount(),
                 campaign.getNotes(),
                 campaign.getCreatedAt(),
-                campaign.getCompletedAt()
+                campaign.getCompletedAt(),
+                campaign.getAlsoEmailPhoneless(),
+                campaign.getLinkedEmailCampaignId()
         );
     }
 

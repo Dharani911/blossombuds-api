@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import "./AdminWhatsAppPage.css";
+import { Sensitive } from "../../components/admin/Sensitive";
 import {
 createManualWhatsAppPreference,
 disableWhatsAppPreference,
@@ -15,6 +16,8 @@ type WhatsAppPreference,
   getWhatsAppContacts,
   importWhatsAppContacts,
   deactivateWhatsAppContact,
+  getConsentMigrationEligibleCount,
+  runConsentMigration,
   type WhatsAppContact,
   type ImportContactsResult,
   type WhatsAppIntegrationStatus,
@@ -22,6 +25,7 @@ type WhatsAppPreference,
   type WhatsAppCampaign,
   type WhatsAppCampaignRecipient,
   type WhatsAppTemplate,
+  type ConsentMigrationResult,
 } from "../../api/adminWhatsapp";
 
 /** Admin page for creating and sending WhatsApp CRM campaigns. */
@@ -34,6 +38,7 @@ const [integrationStatus, setIntegrationStatus] = useState<WhatsAppIntegrationSt
   const [title, setTitle] = useState("");
   const [templateId, setTemplateId] = useState<number | "">("");
   const [audienceType, setAudienceType] = useState<"MANUAL" | "ALL_OPTED_IN" | "EXPO_CONTACTS">("MANUAL");
+  const [alsoEmailPhoneless, setAlsoEmailPhoneless] = useState(false);
 
   const [recipientName, setRecipientName] = useState("");
   const [recipientPhone, setRecipientPhone] = useState("");
@@ -64,6 +69,9 @@ const [preferenceCustomerId, setPreferenceCustomerId] = useState("");
   const [savedContactsSearch, setSavedContactsSearch] = useState("");
   const [expoContactsModalOpen, setExpoContactsModalOpen] = useState(false);
   const [expoContactsSearch, setExpoContactsSearch] = useState("");
+  const [consentEligibleCount, setConsentEligibleCount] = useState<number | null>(null);
+  const [consentMigrationBusy, setConsentMigrationBusy] = useState(false);
+  const [consentMigrationResult, setConsentMigrationResult] = useState<ConsentMigrationResult | null>(null);
 
   const selectedTemplate = useMemo(
     () => templates.find((t) => t.id === Number(templateId)),
@@ -113,20 +121,31 @@ const [preferenceCustomerId, setPreferenceCustomerId] = useState("");
     }
   }, [providerTemplateName]);
 
+  // "Also email phone-less customers" only makes sense for the All Opted-In audience —
+  // MANUAL is a single test send and EXPO_CONTACTS are external leads with no customer record.
+  React.useEffect(() => {
+    if (audienceType !== "ALL_OPTED_IN") setAlsoEmailPhoneless(false);
+  }, [audienceType]);
+
   // Ref always points to the current templateId so loadData never closes over a stale value.
   const templateIdRef = React.useRef<number | "">(templateId);
   React.useEffect(() => { templateIdRef.current = templateId; }, [templateId]);
 
   /** Loads templates, campaigns, settings status, opted-in contacts, and expo contacts. */
   async function loadData() {
-    const [templateResult, campaignResult, statusResult, preferenceResult, contactsResult] =
+    const [templateResult, campaignResult, statusResult, preferenceResult, contactsResult, consentCountResult] =
       await Promise.allSettled([
         getWhatsAppTemplates(),
         getWhatsAppCampaigns(),
         getWhatsAppIntegrationStatus(),
         getWhatsAppPreferences(),
         getWhatsAppContacts(),
+        getConsentMigrationEligibleCount(),
       ]);
+
+    if (consentCountResult.status === "fulfilled") {
+      setConsentEligibleCount(consentCountResult.value);
+    }
 
     if (templateResult.status === "fulfilled") {
 
@@ -197,6 +216,33 @@ const [preferenceCustomerId, setPreferenceCustomerId] = useState("");
     }
   }
 
+  /** Runs the one-time consent migration for pre-feature customers: opts them in and emails
+   *  each one the policy-update notice. Confirms first — this writes to every eligible customer
+   *  and sends a real email to each, and it's the kind of action you don't want to fire twice
+   *  by accident (though re-running is safe — it only ever picks up customers still untouched). */
+  async function handleRunConsentMigration() {
+    const count = consentEligibleCount ?? "an unknown number of";
+    const confirmed = window.confirm(
+      `Opt in ${count} pre-feature customer(s) and email each the policy-update notice now?\n\n` +
+      `This cannot be undone by re-running — only proceed once the updated Terms & Conditions / ` +
+      `Privacy Policy text is actually live.`
+    );
+    if (!confirmed) return;
+
+    setConsentMigrationBusy(true);
+    setMessage("");
+    try {
+      const result = await runConsentMigration();
+      setConsentMigrationResult(result);
+      setMessage(`Consent migration complete: ${result.optedIn} opted in, ${result.emailFailed} notice email(s) failed to send.`);
+      await loadData();
+    } catch (err: any) {
+      setMessage(err?.response?.data?.message || "Consent migration failed.");
+    } finally {
+      setConsentMigrationBusy(false);
+    }
+  }
+
   /** Loads recipients for the selected campaign. */
   async function loadRecipients(campaignId: number) {
     setSelectedCampaignId(campaignId);
@@ -259,6 +305,7 @@ const [preferenceCustomerId, setPreferenceCustomerId] = useState("");
       trackingLink,
       paymentLink,
       notes,
+      alsoEmailPhoneless: audienceType === "ALL_OPTED_IN" ? alsoEmailPhoneless : undefined,
       recipients:
         audienceType === "MANUAL"
           ? [
@@ -420,6 +467,38 @@ async function handleDisablePreference(id: number) {
           </div>
         </section>
 
+        <section className="whatsapp-section">
+          <div className="whatsapp-card">
+            <div className="whatsapp-card-header">
+              <h2 className="whatsapp-card-title">One-time: notify pre-feature customers</h2>
+              <p className="whatsapp-card-subtitle">
+                Customers who registered before this WhatsApp CRM existed were never asked to opt in.
+                This opts them in per the updated Terms &amp; Conditions / Privacy Policy and emails each
+                one a notice — no click required from them, they can always opt out later on their profile page.
+                Publish the updated Terms &amp; Conditions / Privacy Policy text first, then run this.
+              </p>
+            </div>
+            <div className="whatsapp-card-body" style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 14, color: "#6b7280" }}>
+                {consentEligibleCount === null ? "Loading…" : `${consentEligibleCount} customer(s) currently eligible`}
+              </span>
+              <button
+                className="whatsapp-btn whatsapp-btn-primary"
+                disabled={consentMigrationBusy || !consentEligibleCount}
+                onClick={handleRunConsentMigration}
+              >
+                {consentMigrationBusy ? "Working…" : "Opt in & send notice now"}
+              </button>
+              {consentMigrationResult && (
+                <span style={{ fontSize: 13, color: "#166534" }}>
+                  ✓ Last run: {consentMigrationResult.optedIn} opted in
+                  {consentMigrationResult.emailFailed > 0 && `, ${consentMigrationResult.emailFailed} notice email(s) failed`}
+                </span>
+              )}
+            </div>
+          </div>
+        </section>
+
         {message && <div className="whatsapp-message">{message}</div>}
 
         <main className="whatsapp-layout">
@@ -494,6 +573,18 @@ async function handleDisablePreference(id: number) {
                 {audienceType === "ALL_OPTED_IN" && "Send to all customers who have agreed to receive WhatsApp messages from you."}
                 {audienceType === "EXPO_CONTACTS" && "Send to leads collected at events. Only works with expo outreach templates."}
               </p>
+
+              {audienceType === "ALL_OPTED_IN" && (
+                <label className="whatsapp-audience-hint" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={alsoEmailPhoneless}
+                    onChange={(e) => setAlsoEmailPhoneless(e.target.checked)}
+                  />
+                  Also send this offer by email to customers with no phone number on file
+                  (auto-sent when you send this campaign — no separate step).
+                </label>
+              )}
 
               {audienceType === "MANUAL" && (
                 <div className="whatsapp-section-box whatsapp-section-box-muted">
@@ -572,10 +663,12 @@ async function handleDisablePreference(id: number) {
               </div>
 
               <Field label="Internal notes">
-                <textarea
+                <Sensitive
+                  as="textarea"
+                  unblurOnFocus
                   className="whatsapp-textarea"
                   value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNotes(e.target.value)}
                 />
               </Field>
 
@@ -625,7 +718,11 @@ async function handleDisablePreference(id: number) {
                           <td>#{campaign.id}</td>
                           <td>
                             <div className="whatsapp-table-title">{campaign.title}</div>
-                            <div className="whatsapp-card-subtitle">{campaign.audienceType}</div>
+                            <div className="whatsapp-card-subtitle">
+                              {campaign.audienceType}
+                              {campaign.linkedEmailCampaignId && " · + Email sent to phone-less customers"}
+                              {!campaign.linkedEmailCampaignId && campaign.alsoEmailPhoneless && " · Email will send with this campaign"}
+                            </div>
                           </td>
                           <td>
                             <StatusBadge status={campaign.status} />
@@ -696,10 +793,10 @@ async function handleDisablePreference(id: number) {
                     <tbody>
                       {recipients.map((recipient) => (
                         <tr key={recipient.id}>
-                          <td className="whatsapp-table-title">
+                          <Sensitive as="td" className="whatsapp-table-title">
                             {recipient.recipientName || "Customer"}
-                          </td>
-                          <td>{recipient.phone}</td>
+                          </Sensitive>
+                          <Sensitive as="td">{recipient.phone}</Sensitive>
                           <td>
                             <StatusBadge status={recipient.status} />
                           </td>
@@ -708,7 +805,7 @@ async function handleDisablePreference(id: number) {
                               {recipient.providerMessageId || "—"}
                             </div>
                           </td>
-                          <td>{recipient.errorMessage || "—"}</td>
+                          <Sensitive as="td">{recipient.errorMessage || "—"}</Sensitive>
                         </tr>
                       ))}
 
@@ -887,10 +984,10 @@ async function handleDisablePreference(id: number) {
         <div className="whatsapp-preference-list">
           {filteredPreferences.map(p => (
             <div className="whatsapp-preference-item" key={p.id}>
-              <div>
+              <Sensitive as="div">
                 <strong>{p.phone}</strong>
                 <small>{p.customerId ? `Customer #${p.customerId}` : "Manual contact"}</small>
-              </div>
+              </Sensitive>
               <button
                 className="whatsapp-btn whatsapp-btn-danger"
                 disabled={loading}
@@ -936,8 +1033,8 @@ async function handleDisablePreference(id: number) {
             <tbody>
               {filteredContacts.map(c => (
                 <tr key={c.id} style={{ opacity: c.optedIn ? 1 : 0.5 }}>
-                  <td>{c.phone}</td>
-                  <td>{c.name || "—"}</td>
+                  <Sensitive as="td">{c.phone}</Sensitive>
+                  <Sensitive as="td">{c.name || "—"}</Sensitive>
                   <td>{c.source || "—"}</td>
                   <td><StatusBadge status={c.optedIn ? "OPTED_IN" : "OPTED_OUT"} /></td>
                   <td>{c.optedOutAt ? new Date(c.optedOutAt).toLocaleDateString() : "—"}</td>

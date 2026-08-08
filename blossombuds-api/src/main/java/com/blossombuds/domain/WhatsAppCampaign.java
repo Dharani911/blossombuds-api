@@ -70,6 +70,16 @@ public class WhatsAppCampaign {
     @Column(name = "notes", columnDefinition = "text")
     private String notes;
 
+    /** When true, sending this campaign also auto-creates and sends a matching email campaign
+     *  to customers with no phone on file (only meaningful for audienceType=ALL_OPTED_IN). */
+    @Column(name = "also_email_phoneless", nullable = false)
+    private Boolean alsoEmailPhoneless = Boolean.FALSE;
+
+    /** Id of the linked email campaign once it's been created — prevents a resend/retry of this
+     *  WhatsApp campaign from triggering a second, duplicate email blast. */
+    @Column(name = "linked_email_campaign_id")
+    private Long linkedEmailCampaignId;
+
     /** Whether this campaign record is active. */
     @Column(name = "active", nullable = false)
     private Boolean active = Boolean.TRUE;

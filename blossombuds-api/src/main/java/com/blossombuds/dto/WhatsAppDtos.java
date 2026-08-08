@@ -87,6 +87,12 @@ public class WhatsAppDtos {
 
         /** Campaign completion time. */
         private OffsetDateTime completedAt;
+
+        /** Whether sending this campaign also auto-sends a matching email to phone-less customers. */
+        private Boolean alsoEmailPhoneless;
+
+        /** Id of the linked email campaign once sent, if alsoEmailPhoneless was enabled. */
+        private Long linkedEmailCampaignId;
     }
 
     /** Response DTO for WhatsApp campaign recipient. */

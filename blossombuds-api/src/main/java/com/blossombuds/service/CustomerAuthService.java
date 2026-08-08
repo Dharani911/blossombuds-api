@@ -141,12 +141,15 @@ public class CustomerAuthService {
                 pref.setPhone(normalizedPhone);
                 pref.setOptedIn(waOptIn);
                 pref.setSmsOptedIn(smsOptIn);
-                pref.setSource("SIGNUP");
+                // Consent is carried by accepting Terms & Conditions / Privacy Policy at signup
+                // (frontend requires that checkbox before submitting) — there is no separate
+                // per-channel opt-in step anymore. Source/text reflect that basis explicitly.
+                pref.setSource("SIGNUP_TERMS_ACCEPTANCE");
                 String consentText = (waOptIn && smsOptIn)
-                        ? "I agree to receive order updates and promotions via WhatsApp and SMS"
+                        ? "Agreed to Terms & Conditions and Privacy Policy at signup, which covers WhatsApp and SMS order updates and promotions"
                         : waOptIn
-                            ? "I agree to receive order updates and promotions via WhatsApp"
-                            : "I agree to receive order updates via SMS";
+                            ? "Agreed to Terms & Conditions and Privacy Policy at signup, which covers WhatsApp order updates and promotions"
+                            : "Agreed to Terms & Conditions and Privacy Policy at signup, which covers SMS order updates";
                 pref.setLastConsentText(consentText);
                 if (waOptIn)  pref.setOptedInAt(OffsetDateTime.now());
                 if (smsOptIn) pref.setSmsOptedInAt(OffsetDateTime.now());
