@@ -39,6 +39,8 @@ class CheckoutServiceTest {
     @Mock private ProductRepository productRepo;
     @Mock private SettingsService settingsService;
     @Mock private DeliveryFeeRulesService deliveryFeeService;
+    @Mock private CheckoutPricingService pricingService;
+    @Mock private PromotionService promotionService;
 
     private CheckoutService service;
 
@@ -47,7 +49,8 @@ class CheckoutServiceTest {
         service = new CheckoutService(
                 countryRepo, customerRepo, ciRepo,
                 waBuilder, rzpService, checkoutTxService,
-                productRepo, settingsService, deliveryFeeService);
+                productRepo, settingsService, deliveryFeeService,
+                pricingService, promotionService);
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -77,6 +80,7 @@ class CheckoutServiceTest {
     void startCheckout_returnsRzpDecision_forIndiaCountry() {
         Country india = country("India");
         when(countryRepo.findById(1L)).thenReturn(Optional.of(india));
+        stubPricedCart("500.00", "0.00");
 
         Product p = product(10L, true, true, true);
         when(productRepo.findById(10L)).thenReturn(Optional.of(p));
@@ -195,6 +199,7 @@ class CheckoutServiceTest {
     void startCheckout_acceptsValidIndianNumberWithCountryCode() {
         Country india = country("India");
         when(countryRepo.findById(1L)).thenReturn(Optional.of(india));
+        stubPricedCart("500.00", "0.00");
 
         Product p = product(10L, true, true, true);
         when(productRepo.findById(10L)).thenReturn(Optional.of(p));
@@ -222,6 +227,7 @@ class CheckoutServiceTest {
     void startCheckout_appliesDefaultGstRate10_belowThreshold() {
         Country india = country("India");
         when(countryRepo.findById(1L)).thenReturn(Optional.of(india));
+        stubPricedCart("1000.00", "0.00");
 
         Product p = product(10L, true, true, true);
         when(productRepo.findById(10L)).thenReturn(Optional.of(p));
@@ -249,6 +255,7 @@ class CheckoutServiceTest {
     void startCheckout_appliesReducedGstRate8_aboveThreshold() {
         Country india = country("India");
         when(countryRepo.findById(1L)).thenReturn(Optional.of(india));
+        stubPricedCart("15000.00", "0.00");
 
         Product p = product(10L, true, true, true);
         when(productRepo.findById(10L)).thenReturn(Optional.of(p));
@@ -274,6 +281,7 @@ class CheckoutServiceTest {
     void startCheckout_appliesZeroGst_whenGstDisabled() {
         Country india = country("India");
         when(countryRepo.findById(1L)).thenReturn(Optional.of(india));
+        stubPricedCart("2000.00", "0.00");
 
         Product p = product(10L, true, true, true);
         when(productRepo.findById(10L)).thenReturn(Optional.of(p));
@@ -298,6 +306,7 @@ class CheckoutServiceTest {
     void startCheckout_discountReducesTaxableAmount_beforeGstComputation() {
         Country india = country("India");
         when(countryRepo.findById(1L)).thenReturn(Optional.of(india));
+        stubPricedCart("1000.00", "200.00");
 
         Product p = product(10L, true, true, true);
         when(productRepo.findById(10L)).thenReturn(Optional.of(p));
@@ -323,6 +332,7 @@ class CheckoutServiceTest {
     void startCheckout_shippingFeeAdded_toGrandTotal() {
         Country india = country("India");
         when(countryRepo.findById(1L)).thenReturn(Optional.of(india));
+        stubPricedCart("500.00", "0.00");
 
         Product p = product(10L, true, true, true);
         when(productRepo.findById(10L)).thenReturn(Optional.of(p));
@@ -408,6 +418,21 @@ class CheckoutServiceTest {
         d.setDiscountTotal(new BigDecimal(discount));
         d.setCurrency("INR");
         return d;
+    }
+
+    /**
+     * Stubs the extracted pricing service.
+     *
+     * CheckoutService no longer trusts the itemsSubtotal or discountTotal on the client draft —
+     * it prices the cart from the catalogue via CheckoutPricingService and derives the sale
+     * discount as (originalSubtotal − finalSubtotal). Each test therefore declares the
+     * authoritative figures here rather than through the draft it passes in.
+     */
+    private void stubPricedCart(String originalSubtotal, String saleDiscount) {
+        BigDecimal original = new BigDecimal(originalSubtotal);
+        BigDecimal finalSubtotal = original.subtract(new BigDecimal(saleDiscount));
+        when(pricingService.priceCart(any()))
+                .thenReturn(new CheckoutPricingService.PricedCart(original, finalSubtotal));
     }
 
     private OrderItemDto item(Long productId) {

@@ -80,13 +80,31 @@ WHERE phone ~ '^\+91[6-9][0-9]{9}$';
 
     <!-- Strip spaces from numbers already prefixed with + (e.g. "+91 6385590664" → "+916385590664").
          These are excluded by the NOT LIKE '+%' guard in 0037-01 but would still fail
-         lookup because normalizePhone() strips whitespace before comparing. -->
+         lookup because normalizePhone() strips whitespace before comparing.
+
+         COLLISION GUARD (added): only strip spaces where the resulting value doesn't already
+         exist on another row. Without this, a "+91 6385590664" row collapses onto an existing
+         "+916385590664" row, violates idx_customers_phone_unique, and aborts the whole migration
+         — which blocks application startup on any fresh database. Skipped rows are genuine
+         duplicates left for manual merge/deactivation, exactly as 0037-01 handles them. -->
     <changeSet id="0037-03-strip-spaces-in-e164-customers" author="dharani">
+        <!-- This changeset's SQL was edited after it had already run in production (the collision
+             guard above). Liquibase compares a stored MD5 per changeset, so without this the next
+             production startup aborts with "Validation Failed: 1 changesets check sum" and the
+             application never boots. ANY accepts the recorded checksum as well as the new one:
+             databases that already ran the original statement skip it, fresh databases run the
+             guarded version. Do not remove. -->
+        <validCheckSum>ANY</validCheckSum>
         <sql>
-UPDATE customers
-SET phone = regexp_replace(phone, '\s+', '', 'g')
-WHERE phone LIKE '+%'
-  AND phone ~ '\s';
+UPDATE customers c
+SET phone = regexp_replace(c.phone, '\s+', '', 'g')
+WHERE c.phone LIKE '+%'
+  AND c.phone ~ '\s'
+  AND NOT EXISTS (
+      SELECT 1 FROM customers other
+      WHERE other.id != c.id
+        AND other.phone = regexp_replace(c.phone, '\s+', '', 'g')
+  );
         </sql>
         <rollback><!-- whitespace removal is non-reversible --></rollback>
     </changeSet>

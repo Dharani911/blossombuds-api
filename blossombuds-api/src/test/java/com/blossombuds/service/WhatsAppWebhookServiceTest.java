@@ -64,13 +64,12 @@ class WhatsAppWebhookServiceTest {
         when(messageEventRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         CustomerWhatsAppPreference pref = pref(1L, "+919876543210");
+        // The E.164 form matches first, so handleStop's .or() fallback to the plain-digits form is
+        // never reached — stubbing it would be flagged as an unnecessary stubbing. Likewise
+        // brand.whatsapp: a STOP message routes to handleStop and never to the auto-reply.
         when(preferenceRepository.findByPhoneAndActiveTrue("+919876543210"))
                 .thenReturn(Optional.of(pref));
-        when(preferenceRepository.findByPhoneAndActiveTrue("919876543210"))
-                .thenReturn(Optional.empty());
         when(whatsAppContactRepository.findByPhone(anyString())).thenReturn(Optional.empty());
-        // suppress auto-reply (no brand.whatsapp setting configured)
-        when(settingsService.get("brand.whatsapp")).thenReturn(null);
 
         service.processWebhookPayload(payload);
 
@@ -89,11 +88,11 @@ class WhatsAppWebhookServiceTest {
         String payload = stopPayload("919876543210", "STOP");
         when(messageEventRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(preferenceRepository.findByPhoneAndActiveTrue(anyString())).thenReturn(Optional.empty());
-        when(settingsService.get("brand.whatsapp")).thenReturn(null);
 
+        // As above: the E.164 lookup matches, so the plain-digits fallback and the auto-reply
+        // settings read are both unreachable on the STOP path.
         WhatsAppContact contact = contact("+919876543210");
         when(whatsAppContactRepository.findByPhone("+919876543210")).thenReturn(Optional.of(contact));
-        when(whatsAppContactRepository.findByPhone("919876543210")).thenReturn(Optional.empty());
 
         service.processWebhookPayload(payload);
 
