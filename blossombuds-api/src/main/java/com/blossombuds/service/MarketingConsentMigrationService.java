@@ -63,6 +63,7 @@ public class MarketingConsentMigrationService {
 
         int optedIn = 0;
         int emailFailed = 0;
+        int noEmailOnFile = 0;
 
         String privacyUrl = frontendBase + "/pages/privacy";
         String termsUrl = frontendBase + "/pages/terms";
@@ -73,6 +74,9 @@ public class MarketingConsentMigrationService {
             optedIn++;
 
             if (customer.getEmail() == null || customer.getEmail().isBlank()) {
+                // Opted in but unreachable for the notice — counted and surfaced to the admin rather
+                // than only logged, because "everyone opted in was notified" stops being true here.
+                noEmailOnFile++;
                 log.info("[CONSENT_MIGRATION] No email for customerId={}, skipping notice", customer.getId());
                 continue;
             }
@@ -90,10 +94,10 @@ public class MarketingConsentMigrationService {
             }
         }
 
-        log.info("[CONSENT_MIGRATION] Completed: eligible={}, optedIn={}, emailFailed={}",
-                eligible.size(), optedIn, emailFailed);
+        log.info("[CONSENT_MIGRATION] Completed: eligible={}, optedIn={}, emailFailed={}, noEmailOnFile={}",
+                eligible.size(), optedIn, emailFailed, noEmailOnFile);
 
-        return new MigrationResult(eligible.size(), optedIn, emailFailed);
+        return new MigrationResult(eligible.size(), optedIn, emailFailed, noEmailOnFile);
     }
 
     /** Not @Transactional: called via self-invocation from run() in this same class, which bypasses
@@ -148,11 +152,14 @@ public class MarketingConsentMigrationService {
         private final int eligible;
         private final int optedIn;
         private final int emailFailed;
+        /** Opted in but never notified — no email address on file to send the policy notice to. */
+        private final int noEmailOnFile;
 
-        public MigrationResult(int eligible, int optedIn, int emailFailed) {
+        public MigrationResult(int eligible, int optedIn, int emailFailed, int noEmailOnFile) {
             this.eligible = eligible;
             this.optedIn = optedIn;
             this.emailFailed = emailFailed;
+            this.noEmailOnFile = noEmailOnFile;
         }
     }
 }

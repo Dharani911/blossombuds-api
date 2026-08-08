@@ -4,12 +4,12 @@ import com.blossombuds.domain.Customer;
 import com.blossombuds.domain.CustomerEmailPreference;
 import com.blossombuds.domain.EmailCampaign;
 import com.blossombuds.domain.EmailCampaignRecipient;
-import com.blossombuds.dto.EmailMarketingDtos;
 import com.blossombuds.repository.CustomerEmailPreferenceRepository;
 import com.blossombuds.repository.CustomerRepository;
 import com.blossombuds.repository.EmailCampaignRecipientRepository;
 import com.blossombuds.repository.EmailCampaignRepository;
-import jakarta.annotation.PostConstruct;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
@@ -53,8 +53,11 @@ public class EmailCampaignService {
     /**
      * On startup, reset any campaigns left in SENDING (from a previous crash/restart).
      * Recipients in SENDING are reset to PENDING so they can be retried on the next send call.
+     *
+     * Runs on ApplicationReadyEvent rather than @PostConstruct: the transactional proxy is not in
+     * place during bean initialisation, so @Transactional was silently doing nothing there.
      */
-    @PostConstruct
+    @EventListener(ApplicationReadyEvent.class)
     @Transactional
     public void recoverStuckCampaigns() {
         campaignRepository.findByActiveTrueOrderByCreatedAtDesc().stream()
@@ -82,6 +85,13 @@ public class EmailCampaignService {
     @Transactional(readOnly = true)
     public List<EmailCampaign> listCampaigns() {
         return campaignRepository.findByActiveTrueOrderByCreatedAtDesc();
+    }
+
+    /** Looks up one campaign, used to surface a linked email's outcome on the WhatsApp campaign row. */
+    @Transactional(readOnly = true)
+    public java.util.Optional<EmailCampaign> findCampaign(Long campaignId) {
+        if (campaignId == null) return java.util.Optional.empty();
+        return campaignRepository.findByIdAndActiveTrue(campaignId);
     }
 
     /** Lists recipients for a campaign. */
@@ -298,37 +308,6 @@ public class EmailCampaignService {
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
-    }
-
-    /** Converts an email campaign entity into API response DTO. */
-    public EmailMarketingDtos.CampaignResponse toCampaignResponse(EmailCampaign campaign) {
-        return new EmailMarketingDtos.CampaignResponse(
-                campaign.getId(),
-                campaign.getTitle(),
-                campaign.getSubject(),
-                campaign.getBodyText(),
-                campaign.getStatus(),
-                campaign.getTotalRecipients(),
-                campaign.getSentCount(),
-                campaign.getFailedCount(),
-                campaign.getCreatedAt(),
-                campaign.getCompletedAt()
-        );
-    }
-
-    /** Converts an email campaign recipient entity into API response DTO. */
-    public EmailMarketingDtos.RecipientResponse toRecipientResponse(EmailCampaignRecipient recipient) {
-        return new EmailMarketingDtos.RecipientResponse(
-                recipient.getId(),
-                recipient.getCampaignId(),
-                recipient.getCustomerId(),
-                recipient.getEmail(),
-                recipient.getRecipientName(),
-                recipient.getStatus(),
-                recipient.getErrorMessage(),
-                recipient.getSentAt(),
-                recipient.getFailedAt()
-        );
     }
 
     /** Request object for creating an email campaign. */

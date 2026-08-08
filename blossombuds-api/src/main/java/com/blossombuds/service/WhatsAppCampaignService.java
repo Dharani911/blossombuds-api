@@ -15,10 +15,11 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.blossombuds.dto.WhatsAppDtos;
-import jakarta.annotation.PostConstruct;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -43,8 +44,13 @@ public class WhatsAppCampaignService {
     /**
      * On startup, reset any campaigns that were left in SENDING (from a previous crash/restart).
      * Recipients in SENDING are reset to PENDING so they can be retried on the next send call.
+     *
+     * Runs on ApplicationReadyEvent rather than @PostConstruct: @Transactional is applied by a
+     * proxy that does not exist yet during bean initialisation, so the annotation was silently
+     * inert there and each save committed on its own. Firing after startup means the transaction
+     * is real and a partial recovery cannot leave rows half-reset.
      */
-    @PostConstruct
+    @EventListener(ApplicationReadyEvent.class)
     @Transactional
     public void recoverStuckCampaigns() {
         campaignRepository.findByActiveTrueOrderByCreatedAtDesc().stream()
@@ -78,6 +84,81 @@ public class WhatsAppCampaignService {
     @Transactional(readOnly = true)
     public List<WhatsAppCampaign> listCampaigns() {
         return campaignRepository.findByActiveTrueOrderByCreatedAtDesc();
+    }
+
+    /**
+     * Removes a campaign from the admin list.
+     *
+     * Soft delete, matching the rest of the schema: the row and its recipients stay for audit, and
+     * every query already filters on active. A campaign that has sent messages is a record of what
+     * real customers received — destroying that to tidy a list would be the wrong trade.
+     */
+    @Transactional
+    public void deleteCampaign(Long campaignId) {
+        if (campaignId == null) {
+            throw new IllegalArgumentException("campaignId is required");
+        }
+        WhatsAppCampaign campaign = campaignRepository.findByIdAndActiveTrue(campaignId)
+                .orElseThrow(() -> new IllegalArgumentException("Campaign not found: " + campaignId));
+
+        // Only unsent campaigns may be deleted. Once messages have gone out the campaign is the
+        // record of what real people received — and the delivery-status webhooks still resolve
+        // against its recipient rows. Enforced here as well as in the UI so the rule holds for any
+        // caller, not just the button.
+        if (!"DRAFT".equalsIgnoreCase(campaign.getStatus())) {
+            throw new IllegalStateException(
+                    "Only campaigns that have not been sent can be deleted. This one is "
+                            + campaign.getStatus().toLowerCase() + ".");
+        }
+
+        recipientRepository.findByCampaignIdAndActiveTrueOrderByCreatedAtAsc(campaignId)
+                .forEach(recipient -> {
+                    recipient.setActive(Boolean.FALSE);
+                    recipient.setModifiedBy("admin");
+                    recipient.setModifiedAt(OffsetDateTime.now());
+                    recipientRepository.save(recipient);
+                });
+
+        campaign.setActive(Boolean.FALSE);
+        campaign.setModifiedBy("admin");
+        campaign.setModifiedAt(OffsetDateTime.now());
+        campaignRepository.save(campaign);
+
+        log.info("[WHATSAPP][CAMPAIGN][DELETE] Soft-deleted campaignId={} status={}",
+                campaignId, campaign.getStatus());
+    }
+
+    /**
+     * Renders the message exactly as a recipient would receive it: the approved template body with
+     * {{1}}, {{2}} … replaced by the values this campaign actually sends.
+     *
+     * The stored bodyPreview carries the placeholders, and buildTemplateVariables already knows the
+     * per-template ordering, so the two combine into a faithful preview without duplicating any
+     * of that ordering logic here.
+     */
+    @Transactional(readOnly = true)
+    public String renderPreview(Long campaignId) {
+        if (campaignId == null) {
+            throw new IllegalArgumentException("campaignId is required");
+        }
+        WhatsAppCampaign campaign = campaignRepository.findByIdAndActiveTrue(campaignId)
+                .orElseThrow(() -> new IllegalArgumentException("Campaign not found: " + campaignId));
+        WhatsAppTemplate template = templateRepository.findByIdAndActiveTrue(campaign.getTemplateId())
+                .orElseThrow(() -> new IllegalArgumentException("Template not found for campaign: " + campaignId));
+
+        String body = template.getBodyPreview() == null ? "" : template.getBodyPreview();
+
+        List<WhatsAppCampaignRecipient> recipients =
+                recipientRepository.findByCampaignIdAndActiveTrueOrderByCreatedAtAsc(campaignId);
+        if (recipients.isEmpty()) {
+            return body;
+        }
+
+        List<String> variables = buildTemplateVariables(recipients.get(0), template);
+        for (int i = 0; i < variables.size(); i++) {
+            body = body.replace("{{" + (i + 1) + "}}", variables.get(i));
+        }
+        return body;
     }
 
     /** Lists recipients for a campaign. */
@@ -132,6 +213,15 @@ public class WhatsAppCampaignService {
         campaign = campaignRepository.save(campaign);
 
         List<WhatsAppCampaignRecipient> recipients = buildRecipients(campaign, request);
+
+        // Refuse to create an empty campaign. Previously this saved happily with totalRecipients=0,
+        // then Send reported "COMPLETED" without dispatching anything — two success messages and
+        // zero delivered messages, with nothing in the UI explaining why.
+        if (recipients.isEmpty()) {
+            throw new IllegalArgumentException(
+                    emptyAudienceMessage(audienceType, Boolean.TRUE.equals(request.getWarmOnly())));
+        }
+
         recipientRepository.saveAll(recipients);
 
         campaign.setTotalRecipients(recipients.size());
@@ -157,6 +247,16 @@ public class WhatsAppCampaignService {
         WhatsAppCampaign campaign = campaignRepository.findByIdAndActiveTrue(campaignId)
                 .orElseThrow(() -> new IllegalArgumentException("Campaign not found: " + campaignId));
 
+        // Refuse to re-enter a send that is already running. The admin UI disables the button, but
+        // it cannot stop a second browser tab or a click after the 120s client timeout fires while
+        // the server is still working. Without this, two overlapping runs each see
+        // linkedEmailCampaignId == null (it is only written at the end) and both send a full email
+        // blast, and each can pick up recipients the other has not marked SENDING yet.
+        if ("SENDING".equalsIgnoreCase(campaign.getStatus())) {
+            throw new IllegalStateException(
+                    "This campaign is already sending. Wait for it to finish before sending again.");
+        }
+
         WhatsAppTemplate template = templateRepository.findByIdAndActiveTrue(campaign.getTemplateId())
                 .orElseThrow(() -> new IllegalArgumentException("Template not found for campaign: " + campaignId));
 
@@ -164,7 +264,18 @@ public class WhatsAppCampaignService {
                 recipientRepository.findByCampaignIdAndStatusAndActiveTrueOrderByCreatedAtAsc(campaignId, "PENDING");
 
         if (recipients.isEmpty()) {
-            log.warn("[WHATSAPP][CAMPAIGN][SEND] No pending recipients for campaignId={}", campaignId);
+            // Distinguish "already sent" from "never had anyone to send to". Both used to land on
+            // COMPLETED, so a campaign that dispatched nothing looked identical to a successful one.
+            long total = recipientRepository.countByCampaignIdAndActiveTrue(campaignId);
+            if (total == 0) {
+                log.warn("[WHATSAPP][CAMPAIGN][SEND] Campaign has no recipients at all, refusing to send campaignId={}",
+                        campaignId);
+                throw new IllegalStateException(
+                        "This campaign has no recipients, so there is nothing to send. "
+                                + "Create a new campaign once the audience is populated.");
+            }
+            log.warn("[WHATSAPP][CAMPAIGN][SEND] No pending recipients for campaignId={} (all {} already processed)",
+                    campaignId, total);
             campaign.setStatus("COMPLETED");
             campaign.setCompletedAt(OffsetDateTime.now());
             campaign.setModifiedAt(OffsetDateTime.now());
@@ -220,8 +331,21 @@ public class WhatsAppCampaignService {
             recipientRepository.save(recipient);
         }
 
-        campaign.setSentCount((campaign.getSentCount() == null ? 0 : campaign.getSentCount()) + sent);
-        campaign.setFailedCount((campaign.getFailedCount() == null ? 0 : campaign.getFailedCount()) + failed);
+        // Recompute absolutely from the recipient rows rather than incrementing the counters this
+        // method loaded before the send loop began. Delivery webhooks arriving mid-send also write
+        // these fields; incrementing a stale in-memory value silently discarded their updates.
+        // Statuses downstream of SENT (DELIVERED, READ) still count as sent — see
+        // WhatsAppWebhookService.refreshCampaignCounts, which uses the same definition.
+        long delivered = recipientRepository.countByCampaignIdAndStatusAndActiveTrue(campaignId, "DELIVERED");
+        long read = recipientRepository.countByCampaignIdAndStatusAndActiveTrue(campaignId, "READ");
+        long sentTotal = recipientRepository.countByCampaignIdAndStatusAndActiveTrue(campaignId, "SENT")
+                + delivered + read;
+        long failedTotal = recipientRepository.countByCampaignIdAndStatusAndActiveTrue(campaignId, "FAILED");
+
+        campaign.setSentCount((int) sentTotal);
+        campaign.setFailedCount((int) failedTotal);
+        campaign.setDeliveredCount((int) delivered);
+        campaign.setReadCount((int) read);
 
         // Reflect true outcome: FAILED if all failed, PARTIAL if some failed, COMPLETED if all sent
         if (sent == 0) {
@@ -255,6 +379,18 @@ public class WhatsAppCampaignService {
      */
     private void maybeCreateLinkedEmailCampaign(WhatsAppCampaign campaign) {
         if (!Boolean.TRUE.equals(campaign.getAlsoEmailPhoneless()) || campaign.getLinkedEmailCampaignId() != null) {
+            return;
+        }
+
+        // Re-read the persisted value: the campaign instance in hand was loaded before the send
+        // loop and may not reflect a linked email another run already created. Cheap insurance
+        // against emailing every phone-less customer twice.
+        boolean alreadyLinked = campaignRepository.findByIdAndActiveTrue(campaign.getId())
+                .map(fresh -> fresh.getLinkedEmailCampaignId() != null)
+                .orElse(false);
+        if (alreadyLinked) {
+            log.info("[WHATSAPP][CAMPAIGN][LINKED_EMAIL] campaignId={} already has a linked email, skipping",
+                    campaign.getId());
             return;
         }
 
@@ -327,7 +463,16 @@ public class WhatsAppCampaignService {
         }
 
         if ("ALL_OPTED_IN".equalsIgnoreCase(audienceType)) {
-            List<CustomerWhatsAppPreference> preferences = preferenceRepository.findByOptedInTrueAndActiveTrue();
+            // Opt-in, not restriction, by default: send to everyone who consented.
+            //
+            // 131049 is a per-recipient cap on marketing volume, weighted by engagement — not a
+            // hard gate. Contacts who have never messaged the business number DO receive marketing
+            // much of the time, so filtering them out by default would silently shrink the audience.
+            // The filter is here for when failure rates are high and you want the reliable subset.
+            boolean warmOnly = Boolean.TRUE.equals(request.getWarmOnly());
+            List<CustomerWhatsAppPreference> preferences = warmOnly
+                    ? preferenceRepository.findByOptedInTrueAndActiveTrueAndLastInboundAtIsNotNull()
+                    : preferenceRepository.findByOptedInTrueAndActiveTrue();
 
             // Bulk-load customer names so personalised templates say "Hi Priya" not "Hi Customer"
             Set<Long> customerIds = preferences.stream()
@@ -340,14 +485,24 @@ public class WhatsAppCampaignService {
                     .collect(Collectors.toMap(com.blossombuds.domain.Customer::getId,
                             c -> c.getName().trim()));
 
+            // Deduplicate by the digits actually sent to Meta. The table's unique index is on
+            // customer_id, not phone, so the same number stored in two formats ("+919…" on the
+            // customer row, "919…" on a manually added test row) would otherwise message that
+            // person twice in one campaign.
+            Set<String> seenPhones = new java.util.HashSet<>();
+
             for (CustomerWhatsAppPreference preference : preferences) {
+                String normalizedPhone = normalizePhone(preference.getPhone());
+                if (isBlank(normalizedPhone) || !seenPhones.add(normalizedPhone)) {
+                    continue;
+                }
                 String recipientName = preference.getCustomerId() != null
                         ? nameById.getOrDefault(preference.getCustomerId(), "Customer")
                         : "Customer";
                 WhatsAppCampaignRecipient recipient = new WhatsAppCampaignRecipient();
                 recipient.setCampaignId(campaign.getId());
                 recipient.setCustomerId(preference.getCustomerId());
-                recipient.setPhone(normalizePhone(preference.getPhone()));
+                recipient.setPhone(normalizedPhone);
                 recipient.setRecipientName(recipientName);
                 recipient.setStatus("PENDING");
                 recipient.setVariablesJson(toVariablesText(recipientName, request));
@@ -368,7 +523,11 @@ public class WhatsAppCampaignService {
                     .map(this::last10)
                     .collect(Collectors.toSet());
 
-            List<WhatsAppContact> contacts = whatsAppContactRepository.findByOptedInTrueAndActiveTrue();
+            // Opt-in filter, off by default — see the ALL_OPTED_IN branch for the reasoning.
+            boolean warmOnly = Boolean.TRUE.equals(request.getWarmOnly());
+            List<WhatsAppContact> contacts = warmOnly
+                    ? whatsAppContactRepository.findByOptedInTrueAndActiveTrueAndLastInboundAtIsNotNull()
+                    : whatsAppContactRepository.findByOptedInTrueAndActiveTrue();
             int skipped = 0;
 
             for (WhatsAppContact contact : contacts) {
@@ -391,8 +550,13 @@ public class WhatsAppCampaignService {
                 recipients.add(recipient);
             }
 
-            log.info("[WHATSAPP][CAMPAIGN][EXPO] contacts={} skipped(registered)={} queued={}",
-                    contacts.size(), skipped, recipients.size());
+            if (recipients.isEmpty()) {
+                log.warn("[WHATSAPP][CAMPAIGN][EXPO] Resolved ZERO recipients — contacts={} skipped(registered)={}",
+                        contacts.size(), skipped);
+            } else {
+                log.info("[WHATSAPP][CAMPAIGN][EXPO] contacts={} skipped(registered)={} queued={}",
+                        contacts.size(), skipped, recipients.size());
+            }
             return recipients;
         }
 
@@ -409,11 +573,47 @@ public class WhatsAppCampaignService {
 
         for (String part : parts) {
             if (part.startsWith(prefix)) {
-                return part.substring(prefix.length());
+                return unescapeVariable(part.substring(prefix.length()));
             }
         }
 
         return "";
+    }
+
+    /**
+     * Escapes the delimiters used by {@link #toVariablesText}. Values are stored in a flat
+     * "key=value;key=value" string, so an offer text like "20% off; today only" used to be
+     * truncated at the semicolon — and a customer name containing ';' or '=' would corrupt every
+     * variable after it, which matters now that real names are read from the database rather than
+     * the literal "Customer". After escaping, no value contains a raw delimiter.
+     */
+    private String escapeVariable(String value) {
+        if (value == null || value.isEmpty()) return "";
+        return value.replace("\\", "\\\\")
+                .replace(";", "\\s")
+                .replace("=", "\\e");
+    }
+
+    /** Reverses {@link #escapeVariable}. Values written before escaping existed round-trip
+     *  unchanged unless they contain a backslash, which none of these fields realistically do. */
+    private String unescapeVariable(String value) {
+        if (value == null || value.isEmpty()) return "";
+        StringBuilder out = new StringBuilder(value.length());
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c == '\\' && i + 1 < value.length()) {
+                char next = value.charAt(++i);
+                switch (next) {
+                    case 's' -> out.append(';');
+                    case 'e' -> out.append('=');
+                    case '\\' -> out.append('\\');
+                    default -> out.append(c).append(next);
+                }
+            } else {
+                out.append(c);
+            }
+        }
+        return out.toString();
     }
     /** Builds template variables for the selected campaign recipient. */
     /** Builds template variables in the exact order expected by the selected Meta template. */
@@ -477,14 +677,14 @@ public class WhatsAppCampaignService {
     /** Stores basic variables as a simple text format for the first version. */
     /** Stores template variables as a simple semicolon-separated text for the first CRM version. */
     private String toVariablesText(String name, CreateCampaignRequest request) {
-        return "name=" + safe(name)
-                + ";link=" + safe(request.getLink())
-                + ";orderCode=" + safe(request.getOrderCode())
-                + ";trackingNumber=" + safe(request.getTrackingNumber())
-                + ";trackingLink=" + safe(request.getTrackingLink())
-                + ";paymentLink=" + safe(request.getPaymentLink())
-                + ";offerText=" + safe(request.getOfferText())
-                + ";imageUrl=" + safe(request.getImageUrl());
+        return "name=" + escapeVariable(safe(name))
+                + ";link=" + escapeVariable(safe(request.getLink()))
+                + ";orderCode=" + escapeVariable(safe(request.getOrderCode()))
+                + ";trackingNumber=" + escapeVariable(safe(request.getTrackingNumber()))
+                + ";trackingLink=" + escapeVariable(safe(request.getTrackingLink()))
+                + ";paymentLink=" + escapeVariable(safe(request.getPaymentLink()))
+                + ";offerText=" + escapeVariable(safe(request.getOfferText()))
+                + ";imageUrl=" + escapeVariable(safe(request.getImageUrl()));
     }
 
     /** Normalizes a phone number for WhatsApp Cloud API (strips all non-digits). */
@@ -523,6 +723,40 @@ public class WhatsAppCampaignService {
             throw new IllegalArgumentException(
                 "The \"" + providerTemplateName + "\" template can only be sent to opted-in registered customers, not to Expo Contacts.");
         }
+    }
+
+    /**
+     * Explains, per audience, why nothing matched — so the admin sees a cause rather than an
+     * empty campaign that later claims to have completed successfully.
+     */
+    private String emptyAudienceMessage(String audienceType, boolean warmOnly) {
+        String filterHint = warmOnly
+                ? " You have \"only send to contacts who have messaged us\" ticked — untick it to "
+                  + "include everyone who opted in."
+                : "";
+
+        if ("EXPO_CONTACTS".equalsIgnoreCase(audienceType)) {
+            long optedIn = whatsAppContactRepository.countByOptedInTrueAndActiveTrue();
+            if (optedIn == 0) {
+                return "No expo contacts are opted in. Import contacts before sending an expo campaign.";
+            }
+            if (warmOnly) {
+                return "None of your " + optedIn + " opted-in expo contact(s) have messaged the business "
+                        + "number yet." + filterHint;
+            }
+            return "All " + optedIn + " opted-in expo contact(s) were skipped because their phone numbers "
+                    + "belong to registered customers. Expo campaigns deliberately exclude registered "
+                    + "customers — reach them with the All Opted-In audience instead.";
+        }
+        if ("ALL_OPTED_IN".equalsIgnoreCase(audienceType)) {
+            long optedIn = preferenceRepository.countByOptedInTrueAndActiveTrue();
+            if (optedIn == 0) {
+                return "No customers are currently opted in to WhatsApp marketing, so this campaign "
+                        + "would reach nobody.";
+            }
+            return "None of your " + optedIn + " opted-in customer(s) matched this audience." + filterHint;
+        }
+        return "This campaign resolved to zero recipients.";
     }
 
     /** Checks whether a string is null or blank. */
@@ -579,6 +813,10 @@ public class WhatsAppCampaignService {
         /** When true, sending this campaign also auto-sends a matching email to customers with
          *  no phone on file. Only valid when audienceType is ALL_OPTED_IN. */
         private Boolean alsoEmailPhoneless;
+
+        /** EXPO_CONTACTS only. Defaults to true: restrict the audience to contacts who have
+         *  messaged the business number, since Meta drops marketing templates to the rest. */
+        private Boolean warmOnly;
     }
 
     /** Manual recipient request object for WhatsApp campaigns. */
@@ -603,7 +841,7 @@ public class WhatsAppCampaignService {
     @Transactional
     public ImportResult importContacts(String source, List<ContactEntry> entries) {
         if (entries == null || entries.isEmpty()) {
-            return new ImportResult(0, 0, 0);
+            return new ImportResult(0, 0, 0, 0);
         }
 
         // Compare by last 10 digits so "+919876543210" matches "9876543210" in customer DB
@@ -612,7 +850,7 @@ public class WhatsAppCampaignService {
                 .map(this::last10)
                 .collect(Collectors.toSet());
 
-        int imported = 0, skippedRegistered = 0, skippedDuplicate = 0;
+        int imported = 0, skippedRegistered = 0, skippedDuplicate = 0, reactivated = 0;
 
         for (ContactEntry entry : entries) {
             if (entry == null || isBlank(entry.getPhone())) continue;
@@ -625,8 +863,28 @@ public class WhatsAppCampaignService {
                 continue;
             }
 
-            if (whatsAppContactRepository.existsByPhone(normalized)) {
-                skippedDuplicate++;
+            // An existing row may be an active contact (a real duplicate) or one deactivated by a
+            // STOP reply or an admin opt-out. Treating both as duplicates left opt-outs permanently
+            // un-importable, with no way for the admin to re-add someone who asked to come back.
+            java.util.Optional<WhatsAppContact> existing = whatsAppContactRepository.findByPhone(normalized);
+            if (existing.isPresent()) {
+                WhatsAppContact contact = existing.get();
+                if (Boolean.TRUE.equals(contact.getOptedIn()) && Boolean.TRUE.equals(contact.getActive())) {
+                    skippedDuplicate++;
+                    continue;
+                }
+                // Re-opt-in on explicit re-import: the admin is asserting fresh consent for this batch.
+                contact.setOptedIn(Boolean.TRUE);
+                contact.setActive(Boolean.TRUE);
+                contact.setOptedOutAt(null);
+                contact.setSource(isBlank(source) ? "IMPORT" : source.trim().toUpperCase());
+                if (!isBlank(entry.getName())) {
+                    contact.setName(entry.getName().trim());
+                }
+                contact.setModifiedBy("admin");
+                contact.setModifiedAt(OffsetDateTime.now());
+                whatsAppContactRepository.save(contact);
+                reactivated++;
                 continue;
             }
 
@@ -642,10 +900,10 @@ public class WhatsAppCampaignService {
             imported++;
         }
 
-        log.info("[WHATSAPP][CONTACTS][IMPORT] source={} imported={} skippedRegistered={} skippedDuplicate={}",
-                source, imported, skippedRegistered, skippedDuplicate);
+        log.info("[WHATSAPP][CONTACTS][IMPORT] source={} imported={} reactivated={} skippedRegistered={} skippedDuplicate={}",
+                source, imported, reactivated, skippedRegistered, skippedDuplicate);
 
-        return new ImportResult(imported, skippedRegistered, skippedDuplicate);
+        return new ImportResult(imported, skippedRegistered, skippedDuplicate, reactivated);
     }
 
     /** Normalizes a raw phone string to E.164 (+91XXXXXXXXXX for Indian numbers). */
@@ -669,11 +927,14 @@ public class WhatsAppCampaignService {
         private final int imported;
         private final int skippedRegistered;
         private final int skippedDuplicate;
+        /** Previously opted-out contacts brought back by an explicit re-import. */
+        private final int reactivated;
 
-        public ImportResult(int imported, int skippedRegistered, int skippedDuplicate) {
+        public ImportResult(int imported, int skippedRegistered, int skippedDuplicate, int reactivated) {
             this.imported = imported;
             this.skippedRegistered = skippedRegistered;
             this.skippedDuplicate = skippedDuplicate;
+            this.reactivated = reactivated;
         }
     }
 
@@ -693,6 +954,18 @@ public class WhatsAppCampaignService {
 
     /** Converts a WhatsApp campaign entity into API response DTO. */
     public WhatsAppDtos.CampaignResponse toCampaignResponse(WhatsAppCampaign campaign) {
+        // Inline the linked email campaign's outcome. The standalone Email Marketing page was
+        // removed, so this row is the only place those results are visible.
+        Integer emailTotal = null, emailSent = null, emailFailed = null;
+        if (campaign.getLinkedEmailCampaignId() != null) {
+            var linked = emailCampaignService.findCampaign(campaign.getLinkedEmailCampaignId());
+            if (linked.isPresent()) {
+                emailTotal = linked.get().getTotalRecipients();
+                emailSent = linked.get().getSentCount();
+                emailFailed = linked.get().getFailedCount();
+            }
+        }
+
         return new WhatsAppDtos.CampaignResponse(
                 campaign.getId(),
                 campaign.getTitle(),
@@ -708,7 +981,10 @@ public class WhatsAppCampaignService {
                 campaign.getCreatedAt(),
                 campaign.getCompletedAt(),
                 campaign.getAlsoEmailPhoneless(),
-                campaign.getLinkedEmailCampaignId()
+                campaign.getLinkedEmailCampaignId(),
+                emailTotal,
+                emailSent,
+                emailFailed
         );
     }
 

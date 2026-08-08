@@ -246,7 +246,7 @@ class WhatsAppCampaignServiceTest {
         when(recipientRepository.findByCampaignIdAndStatusAndActiveTrueOrderByCreatedAtAsc(10L, "PENDING"))
                 .thenReturn(List.of(r));
         when(recipientRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(whatsAppCloudClient.sendTemplateMessage(anyString(), anyString(), anyString(), anyList()))
+        when(whatsAppCloudClient.sendTemplateMessage(anyString(), anyString(), anyString(), anyList(), nullable(String.class)))
                 .thenReturn(WhatsAppCloudClient.SendResult.success("wamid.ok", false));
         when(campaignRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -268,7 +268,7 @@ class WhatsAppCampaignServiceTest {
         when(recipientRepository.findByCampaignIdAndStatusAndActiveTrueOrderByCreatedAtAsc(11L, "PENDING"))
                 .thenReturn(List.of(r));
         when(recipientRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(whatsAppCloudClient.sendTemplateMessage(anyString(), anyString(), anyString(), anyList()))
+        when(whatsAppCloudClient.sendTemplateMessage(anyString(), anyString(), anyString(), anyList(), nullable(String.class)))
                 .thenReturn(WhatsAppCloudClient.SendResult.failed("Meta error"));
         when(campaignRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -303,7 +303,7 @@ class WhatsAppCampaignServiceTest {
         when(recipientRepository.findByCampaignIdAndActiveTrueOrderByCreatedAtAsc(12L))
                 .thenReturn(List.of(r));
         when(recipientRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(whatsAppCloudClient.sendTemplateMessage(anyString(), anyString(), anyString(), anyList()))
+        when(whatsAppCloudClient.sendTemplateMessage(anyString(), anyString(), anyString(), anyList(), nullable(String.class)))
                 .thenReturn(WhatsAppCloudClient.SendResult.success("wamid.ok", false));
 
         EmailCampaign emailCampaign = new EmailCampaign();
@@ -337,7 +337,7 @@ class WhatsAppCampaignServiceTest {
         when(recipientRepository.findByCampaignIdAndStatusAndActiveTrueOrderByCreatedAtAsc(13L, "PENDING"))
                 .thenReturn(List.of(r));
         when(recipientRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(whatsAppCloudClient.sendTemplateMessage(anyString(), anyString(), anyString(), anyList()))
+        when(whatsAppCloudClient.sendTemplateMessage(anyString(), anyString(), anyString(), anyList(), nullable(String.class)))
                 .thenReturn(WhatsAppCloudClient.SendResult.success("wamid.ok", false));
         when(campaignRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 

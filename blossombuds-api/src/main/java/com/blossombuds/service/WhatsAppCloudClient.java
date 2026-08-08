@@ -5,9 +5,11 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -20,7 +22,23 @@ public class WhatsAppCloudClient {
 
     private final SettingsService settingsService;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    /**
+     * A bare {@code new RestTemplate()} uses SimpleClientHttpRequestFactory, which has no connect
+     * or read timeout at all. Campaign sending is a sequential loop of blocking calls, so a single
+     * unresponsive connection to Meta would hang the whole run indefinitely and strand the campaign
+     * in SENDING until the app restarts. Bounded so a bad call fails that one recipient and moves on.
+     */
+    private final RestTemplate restTemplate = buildRestTemplate();
+
+    private static RestTemplate buildRestTemplate() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(CONNECT_TIMEOUT);
+        factory.setReadTimeout(READ_TIMEOUT);
+        return new RestTemplate(factory);
+    }
+
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration READ_TIMEOUT = Duration.ofSeconds(30);
 
     /** Sends a WhatsApp template message without a header image. */
     public SendResult sendTemplateMessage(
