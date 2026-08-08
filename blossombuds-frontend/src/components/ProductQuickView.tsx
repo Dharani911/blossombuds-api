@@ -189,26 +189,27 @@ useEffect(() => {
     setNotifyDone(false);
   }
 }, [p?.id, (p as any)?.inStock]);
-  // Treat option value's price as ABSOLUTE (not delta)
-  function readValuePrice(v: any): number | undefined {
-    const cand = [v?.price, v?.finalPrice, v?.absolutePrice, v?.amount];
-    for (const c of cand) if (typeof c === "number") return Number(c);
-    if (typeof v?.priceDelta === "number") return Number(v.priceDelta);
+  // Reads {original, final} as a PAIR from an option value's own pricing. The backend already
+  // computes and discounts per-value pricing (ProductOptionValueDto.originalPrice/finalPrice —
+  // there is no plain "price" field), so this must never re-apply a discount percent on top of
+  // finalPrice — doing that compounded the discount (e.g. a 10% sale showing as ~19% off because
+  // the already-discounted finalPrice got treated as the pre-discount price and discounted again).
+  function readValuePriceRange(v: any): { original: number; final: number } | undefined {
+    if (!v) return undefined;
+    const op = v?.originalPrice;
+    const fp = v?.finalPrice;
+    if (typeof op === "number" || typeof fp === "number") {
+      const original = typeof op === "number" ? op : Number(fp);
+      const final = typeof fp === "number" ? fp : Number(op);
+      return { original, final };
+    }
+    // Legacy/fallback shapes without discount-aware fields — no discount info available,
+    // so original === final (never guess a discount from a flat number).
+    const flat = [v?.price, v?.absolutePrice, v?.amount, v?.priceDelta];
+    for (const c of flat) if (typeof c === "number") return { original: c, final: c };
     return undefined;
   }
 
-  // compute unit price from the selected (visible) value that has a price
-  const unitPrice = useMemo(() => {
-    for (const o of opts) {
-      const vId = sel[o.id];
-      const v: any = (o.values || []).find(
-        (x) => x.id === vId && (x as any)?.visible !== false
-      );
-      const vp = readValuePrice(v);
-      if (typeof vp === "number") return vp;
-    }
-    return Number(p?.price ?? 0);
-  }, [opts, sel, p?.price]);
   const isExcluded = Boolean((p as any)?.excludeFromGlobalDiscount); // true => NO discount
   const discountEligible = !isExcluded;
 
@@ -221,46 +222,37 @@ useEffect(() => {
     }
   }
 
-  // derive discount percent from backend if available
-  const discountPercent = useMemo(() => {
-    if (!p) return 0;
-
-    // if backend provides it, prefer it
-    const pct = Number((p as any)?.discountPercentOff ?? 0);
-    if (Number.isFinite(pct) && pct > 0) return pct;
-
-    // else compute from originalPrice/finalPrice if available
-    const op = (p as any)?.originalPrice;
-    const fp = (p as any)?.finalPrice;
-    const original = Number(op ?? p.price ?? 0);
-    const final = Number(fp ?? 0);
-
-    if (original > 0 && final > 0 && final < original) {
-      const computed = (1 - final / original) * 100;
-      return Math.round(computed * 100) / 100; // keep 2 decimals
-    }
-    return 0;
-  }, [p]);
-
-  // Apply discount percent to the currently selected unitPrice (base or option absolute price)
+  // {original, final} from the selected (visible) option value's own pricing, else from the
+  // base product's own originalPrice/finalPrice (also already discount-aware from the backend).
   const displayPrices = useMemo(() => {
-    const original = Number(unitPrice ?? 0);
-
-    if (!discountEligible || discountPercent <= 0) {
-      return {
-        showDiscount: false,
-        original,
-        final: original,
-      };
+    let range: { original: number; final: number } | undefined;
+    for (const o of opts) {
+      const vId = sel[o.id];
+      const v: any = (o.values || []).find(
+        (x) => x.id === vId && (x as any)?.visible !== false
+      );
+      range = readValuePriceRange(v);
+      if (range) break;
+    }
+    if (!range) {
+      const base = Number(p?.price ?? 0);
+      const op = Number((p as any)?.originalPrice ?? base);
+      const fp = Number((p as any)?.finalPrice ?? base);
+      range = { original: op || base, final: fp || base };
     }
 
-    const final = Math.max(0, Math.round((original * (100 - discountPercent)) ) / 100);
-    return {
-      showDiscount: final < original,
-      original,
-      final,
-    };
-  }, [unitPrice, discountEligible, discountPercent]);
+    if (!discountEligible || !(range.final < range.original)) {
+      return { showDiscount: false, original: range.original, final: range.original };
+    }
+    return { showDiscount: true, original: range.original, final: range.final };
+  }, [opts, sel, p, discountEligible]);
+
+  // Derived from the actual displayed price pair, not the base product's discountPercentOff —
+  // so the badge always matches what's shown, even if a specific option's rounding differs slightly.
+  const discountPercent = useMemo(() => {
+    if (!displayPrices.showDiscount || displayPrices.original <= 0) return 0;
+    return Math.round((1 - displayPrices.final / displayPrices.original) * 10000) / 100;
+  }, [displayPrices]);
 
     const priceText = useMemo(() => formatINR(displayPrices.final), [displayPrices.final]);
     const originalPriceText = useMemo(() => formatINR(displayPrices.original), [displayPrices.original]);

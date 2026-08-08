@@ -919,12 +919,15 @@ const grandTotal = useMemo(() => {
   async function onPlaceDomestic() {
     if (!user?.id) { setErr("Please login to continue."); return; }
     setCheckingCart(true);
+      // Use what refresh() actually returns, not the pre-refresh `items`/`itemsRef` — those are
+      // captured in this closure and won't reflect the refresh that just ran (see CartProvider.refresh).
+      let freshItems: any[] = itemsRef.current as any[];
       try {
-        await refresh(true); // ✅ re-check right now
+        freshItems = await refresh(true); // ✅ re-check right now
       } finally {
         setCheckingCart(false);
       }
-    if ((itemsRef.current as any[]).some(it => it?.unavailable === true || it?.inStock === false)) {
+    if (freshItems.some(it => it?.unavailable === true || it?.inStock === false)) {
       setErr("Some items are out of stock. Please remove them from cart to continue.");
       return;
     }
@@ -941,8 +944,8 @@ const grandTotal = useMemo(() => {
     setErr(null);
     setSubmitting(true);
 
-    // 1) Build order items payload (server DTO)
-    const orderItems: OrderItemDto[] = items.map((it) => {
+    // 1) Build order items payload (server DTO) — from the just-refreshed cart, not stale state
+    const orderItems: OrderItemDto[] = freshItems.map((it) => {
       const parsedId = Number(String(it.id).split(":")[0]);
       const pid = (it as any).productId ?? (Number.isFinite(parsedId) ? parsedId : undefined);
       return {
@@ -955,18 +958,51 @@ const grandTotal = useMemo(() => {
       };
     });
 
+    // Totals (subtotal/tax/GST/grand total) all derive from cart items too — recompute them from
+    // freshItems instead of reusing the render-time subtotal/taxableAmount/gstAmount/grandTotal
+    // useMemos, which are exactly as stale as `items` for the same closure reason.
+    const freshSubtotal = Number(
+      freshItems
+        .filter((it: any) => !it.unavailable)
+        .reduce((sum: number, it: any) => sum + Number(it.price) * Number(it.qty), 0)
+        .toFixed(2)
+    );
+    // Pre-discount subtotal (original list price × qty), same fresh source. The gap between this
+    // and freshSubtotal is whatever the global sale saved — previously computed nowhere, so the
+    // order's discountTotal only ever reflected a coupon and silently missed the sale discount.
+    const freshOriginalSubtotal = Number(
+      freshItems
+        .filter((it: any) => !it.unavailable)
+        .reduce((sum: number, it: any) => sum + Number(it.originalPrice ?? it.price) * Number(it.qty), 0)
+        .toFixed(2)
+    );
+    const freshSaleDiscount = Math.max(0, Number((freshOriginalSubtotal - freshSubtotal).toFixed(2)));
+    // Combined so the order records one real "Discount" figure (coupon + sale) instead of just
+    // the coupon. itemsSubtotal below switches to the pre-discount total to match: taxable amount
+    // still nets out to the exact same charged total as before (freshSubtotal - couponAmt) —
+    // this only changes what's shown as the breakdown, not what the customer is actually charged.
+    const combinedDiscountTotal = Number((discountTotal + freshSaleDiscount).toFixed(2));
+    const freshTaxableAmount = Number(Math.max(0, freshOriginalSubtotal - combinedDiscountTotal).toFixed(2));
+    const freshGstRate = international
+      ? 0
+      : (freshTaxableAmount > GST_THRESHOLD_AMOUNT ? GST_RATE_ABOVE_THRESHOLD : GST_RATE_DEFAULT);
+    const freshGstAmount = international ? 0 : Number(((freshTaxableAmount * freshGstRate) / 100).toFixed(2));
+    const freshGrandTotal = Number(
+      (freshTaxableAmount + freshGstAmount + (international ? 0 : Number(shippingFee || 0))).toFixed(2)
+    );
+
     const partnerName = partners.find(p => p.id === partnerId)?.name;
 
-    // 2) Build order payload (use previewed shippingFee + computed grandTotal)
+    // 2) Build order payload (use previewed shippingFee + freshly recomputed totals)
     const order: OrderDto = {
       customerId: Number(user?.id),
-      itemsSubtotal: subtotal,
+      itemsSubtotal: freshOriginalSubtotal,
       shippingFee: shippingFee || 0,
-      discountTotal,
-      taxableAmount,
-      gstRate,
-      gstAmount,
-      grandTotal,
+      discountTotal: combinedDiscountTotal,
+      taxableAmount: freshTaxableAmount,
+      gstRate: freshGstRate,
+      gstAmount: freshGstAmount,
+      grandTotal: freshGrandTotal,
       currency: "INR",
       deliveryPartnerId: typeof partnerId === "number" ? partnerId : undefined,
       courierName: partnerName,
