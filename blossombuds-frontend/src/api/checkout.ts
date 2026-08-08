@@ -41,6 +41,11 @@ export type OrderItemDto = {
   lineTotal?: number | string;
   optionsJson?: string;
   optionsText?: string;
+  /**
+   * IDs of the selected product-option values. The server prices the order from these
+   * (never from unitPrice/lineTotal), so they must be sent for any product with paid options.
+   */
+  selectedValueIds?: number[];
 };
 
 export type CheckoutRequest = {

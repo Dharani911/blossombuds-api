@@ -43,6 +43,8 @@ public class CheckoutService {
     private final ProductRepository productRepo;
     private final SettingsService settingsService;
     private final DeliveryFeeRulesService deliveryFeeService;
+    private final CheckoutPricingService pricingService;
+    private final PromotionService promotionService;
     private static final BigDecimal GST_THRESHOLD_AMOUNT =
             BigDecimal.valueOf(10000).setScale(2, RoundingMode.HALF_UP);
 
@@ -143,8 +145,10 @@ public class CheckoutService {
         // India: validate shipping phone before touching DB or Razorpay
         validateShipPhone(orderDraft.getShipPhone());
 
-        // India: backend-authoritative pricing before creating intent/Razorpay order
-        applyBackendGstTotals(orderDraft, country);
+        // India: backend-authoritative pricing before creating intent/Razorpay order.
+        // Resolve every price from the catalogue — the client's itemsSubtotal/discountTotal
+        // and per-line unitPrice/lineTotal are never trusted for money.
+        applyBackendPricingAndGstTotals(orderDraft, items, country);
 
         BigDecimal grand = nvl(orderDraft.getGrandTotal());
         String currency = normCurrency(orderDraft.getCurrency());
@@ -290,12 +294,48 @@ public class CheckoutService {
 
         return GST_RATE_DEFAULT;
     }
-    /** Applies backend-authoritative GST totals to the order draft before Razorpay order creation. */
-    private void applyBackendGstTotals(OrderDto orderDraft, Country country) {
-        BigDecimal itemsSubtotal = nvl(orderDraft.getItemsSubtotal());
-        BigDecimal discountTotal = nvl(orderDraft.getDiscountTotal());
-        if (discountTotal.signum() < 0) discountTotal = BigDecimal.ZERO;
+    /**
+     * Prices the cart from the catalogue, derives the discount through the validating coupon
+     * path, then applies GST and shipping — all server-side. The client's itemsSubtotal,
+     * discountTotal, unitPrice, and lineTotal are ignored; only productId/quantity/options are used.
+     */
+    private void applyBackendPricingAndGstTotals(OrderDto orderDraft, List<OrderItemDto> items, Country country) {
+        // 1) Authoritative line pricing (also overwrites each item's unitPrice/lineTotal).
+        CheckoutPricingService.PricedCart priced = pricingService.priceCart(items);
+        BigDecimal itemsSubtotal = priced.getOriginalSubtotal();   // pre-sale, pre-coupon
+        BigDecimal saleDiscount = priced.saleDiscount();           // original − final
+        BigDecimal finalSubtotal = priced.getFinalSubtotal();      // post-sale, pre-coupon
 
+        // 2) Coupon: re-validate and recompute server-side; never trust a client-sent amount.
+        BigDecimal couponDiscount = BigDecimal.ZERO;
+        String couponCode = orderDraft.getCouponCode();
+        if (couponCode != null && !couponCode.isBlank()) {
+            int itemCount = 0;
+            for (OrderItemDto it : items) {
+                if (it != null && it.getQuantity() != null) itemCount += it.getQuantity();
+            }
+            // Throws IllegalArgumentException (→ 400) if the coupon is expired, exhausted,
+            // below its minimum, or otherwise invalid — closing the "preview-only" gap.
+            couponDiscount = nvl(promotionService.previewDiscount(
+                    couponCode.trim(), orderDraft.getCustomerId(), finalSubtotal, itemCount));
+            if (couponDiscount.signum() < 0) couponDiscount = BigDecimal.ZERO;
+        }
+
+        BigDecimal discountTotal = saleDiscount.add(couponDiscount);
+        // Never let the discount exceed the pre-discount subtotal.
+        if (discountTotal.compareTo(itemsSubtotal) > 0) discountTotal = itemsSubtotal;
+        discountTotal = discountTotal.setScale(2, RoundingMode.HALF_UP);
+
+        // Persist the authoritative figures back onto the draft for intent storage + order creation.
+        orderDraft.setItemsSubtotal(itemsSubtotal);
+        orderDraft.setDiscountTotal(discountTotal);
+
+        applyGstAndShipping(orderDraft, country, itemsSubtotal, discountTotal);
+    }
+
+    /** Applies GST and shipping to already-authoritative subtotal/discount figures. */
+    private void applyGstAndShipping(OrderDto orderDraft, Country country,
+                                     BigDecimal itemsSubtotal, BigDecimal discountTotal) {
         BigDecimal shippingFee = resolveCheckoutShippingFee(orderDraft, country, itemsSubtotal);
 
         BigDecimal taxableAmount = itemsSubtotal.subtract(discountTotal);

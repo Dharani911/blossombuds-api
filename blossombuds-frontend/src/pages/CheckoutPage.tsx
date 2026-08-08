@@ -948,6 +948,20 @@ const grandTotal = useMemo(() => {
     const orderItems: OrderItemDto[] = freshItems.map((it) => {
       const parsedId = Number(String(it.id).split(":")[0]);
       const pid = (it as any).productId ?? (Number.isFinite(parsedId) ? parsedId : undefined);
+
+      // Selected option-value IDs. The server prices from these, so they must be sent.
+      // Prefer the explicit field; fall back to parsing them out of the cart id "pid:1,2,3".
+      let selectedValueIds: number[] | undefined = Array.isArray((it as any).selectedValueIds)
+        ? (it as any).selectedValueIds.filter((n: any) => Number.isFinite(Number(n))).map(Number)
+        : undefined;
+      if (!selectedValueIds?.length) {
+        const seg = String(it.id).split(":")[1];
+        if (seg && seg !== "base") {
+          const parsed = seg.split(",").map((x) => Number(x)).filter((n) => Number.isFinite(n));
+          if (parsed.length) selectedValueIds = parsed;
+        }
+      }
+
       return {
         productId: pid,
         productName: it.name,
@@ -955,6 +969,7 @@ const grandTotal = useMemo(() => {
         unitPrice: it.price,
         lineTotal: (Number(it.price) * Number(it.qty)).toFixed(2),
         optionsText: it.variant || undefined,
+        selectedValueIds,
       };
     });
 
