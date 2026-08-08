@@ -19,23 +19,37 @@ class WhatsAppTransactionalServiceImplTest {
     @Mock
     private WhatsAppCloudClient cloudClient;
 
+    /** Every send is now recorded in the shared message-event log so delivery statuses can be
+     *  attributed back to a template; transactional sends used to leave no trace at all. */
+    @Mock
+    private com.blossombuds.repository.WhatsAppMessageEventRepository messageEventRepository;
+
     private WhatsAppTransactionalServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        service = new WhatsAppTransactionalServiceImpl(cloudClient);
+        service = new WhatsAppTransactionalServiceImpl(cloudClient, messageEventRepository);
     }
 
     // ──────────────────────────────────────────────────────────────────────────
     // sendOrderConfirmation
     // ──────────────────────────────────────────────────────────────────────────
 
+    /**
+     * The Meta-approved body is:
+     *   "Hi {{1}}, ... *Order:* BB{{2}} ... *Total Paid:* {{3}}"
+     *
+     * Three variables, and the template supplies the "BB" prefix itself. This previously sent two
+     * variables with a "BB"-prefixed code, so every order confirmation was rejected by Meta with
+     * error 132000 (parameter count mismatch) and would have rendered "BBBB261234" if it hadn't.
+     */
     @Test
-    void sendOrderConfirmation_callsCorrectTemplate_withNameAndBBPrefixedCode() {
+    void sendOrderConfirmation_sendsThreeVariables_withBareCodeAndTotal() {
         when(cloudClient.sendTemplateMessage(anyString(), anyString(), anyString(), anyList()))
                 .thenReturn(WhatsAppCloudClient.SendResult.success("wamid.abc123", false));
 
-        service.sendOrderConfirmation("919876543210", "Priya", "261234");
+        service.sendOrderConfirmation("919876543210", "Priya", "261234",
+                new java.math.BigDecimal("1499.5"), "INR");
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<String>> varsCaptor = ArgumentCaptor.forClass(List.class);
@@ -43,20 +57,35 @@ class WhatsAppTransactionalServiceImplTest {
                 eq("919876543210"), eq("order_confirmation"), eq("en"), varsCaptor.capture());
 
         List<String> vars = varsCaptor.getValue();
-        assertThat(vars).hasSize(2);
+        assertThat(vars).hasSize(3);
         assertThat(vars.get(0)).isEqualTo("Priya");
-        assertThat(vars.get(1)).isEqualTo("BB261234");   // must have BB prefix
+        assertThat(vars.get(1)).isEqualTo("261234");        // bare — template renders the BB prefix
+        assertThat(vars.get(2)).isEqualTo("INR 1499.50");   // matches the SMS channel's formatting
+    }
+
+    @Test
+    void sendOrderConfirmation_defaultsCurrencyToInr_whenBlank() {
+        when(cloudClient.sendTemplateMessage(anyString(), anyString(), anyString(), anyList()))
+                .thenReturn(WhatsAppCloudClient.SendResult.success("wamid.x", false));
+
+        service.sendOrderConfirmation("919876543210", "Priya", "261234",
+                new java.math.BigDecimal("200"), "");
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<String>> cap = ArgumentCaptor.forClass(List.class);
+        verify(cloudClient).sendTemplateMessage(anyString(), anyString(), anyString(), cap.capture());
+        assertThat(cap.getValue().get(2)).isEqualTo("INR 200.00");
     }
 
     @Test
     void sendOrderConfirmation_skips_whenPhoneBlank() {
-        service.sendOrderConfirmation("", "Priya", "261234");
+        service.sendOrderConfirmation("", "Priya", "261234", java.math.BigDecimal.TEN, "INR");
         verifyNoInteractions(cloudClient);
     }
 
     @Test
     void sendOrderConfirmation_skips_whenPhoneNull() {
-        service.sendOrderConfirmation(null, "Priya", "261234");
+        service.sendOrderConfirmation(null, "Priya", "261234", java.math.BigDecimal.TEN, "INR");
         verifyNoInteractions(cloudClient);
     }
 
@@ -65,7 +94,7 @@ class WhatsAppTransactionalServiceImplTest {
         when(cloudClient.sendTemplateMessage(anyString(), anyString(), anyString(), anyList()))
                 .thenReturn(WhatsAppCloudClient.SendResult.success("wamid.x", false));
 
-        service.sendOrderConfirmation("919876543210", null, "261234");
+        service.sendOrderConfirmation("919876543210", null, "261234", java.math.BigDecimal.TEN, "INR");
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<String>> cap = ArgumentCaptor.forClass(List.class);
@@ -80,7 +109,7 @@ class WhatsAppTransactionalServiceImplTest {
 
         // must not throw
         org.junit.jupiter.api.Assertions.assertDoesNotThrow(() ->
-                service.sendOrderConfirmation("919876543210", "Priya", "261234"));
+                service.sendOrderConfirmation("919876543210", "Priya", "261234", java.math.BigDecimal.TEN, "INR"));
     }
 
     // ──────────────────────────────────────────────────────────────────────────

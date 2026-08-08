@@ -4,7 +4,14 @@ package com.blossombuds.service;
 public interface WhatsAppTransactionalService {
 
     /** Sends order confirmation to the customer's WhatsApp. */
-    void sendOrderConfirmation(String phone, String customerName, String orderCode);
+    /**
+     * Sends the order_confirmation template.
+     *
+     * The Meta-approved body takes three variables — name, order code and total paid — and supplies
+     * the "BB" prefix itself (`*Order:* BB{{2}}`), so pass the bare code.
+     */
+    void sendOrderConfirmation(String phone, String customerName, String orderCode,
+                               java.math.BigDecimal grandTotal, String currency);
 
     /** Sends dispatched notification with tracking number and URL. */
     void sendOrderDispatched(String phone, String customerName, String orderCode,

@@ -277,6 +277,7 @@ public class OrderService {
 
         // send confirmation via email, WhatsApp, and SMS
         var cust = customerRepository.findById(o.getCustomerId()).orElse(null);
+        boolean emailQueued = false, phoneQueued = false;
         if (cust != null) {
             if (!isBlank(cust.getEmail())) {
                 emailService.sendOrderConfirmation(
@@ -285,16 +286,32 @@ public class OrderService {
                         o.getTaxableAmount(), o.getGstRate(), o.getGstAmount(),
                         o.getShippingFee(), o.getGrandTotal()
                 );
+                emailQueued = true;
+            } else {
+                log.warn("[ORDER][PAID][SKIP] No email on customer — order confirmation email not sent: orderId={}, customerId={}",
+                        o.getId(), cust.getId());
             }
             if (!isBlank(cust.getPhone())) {
                 final String phone = cust.getPhone(), name = cust.getName(),
                         publicCode = o.getPublicCode(), currency = o.getCurrency();
                 final BigDecimal grandTotal = o.getGrandTotal();
                 runAfterCommit(() -> smsService.sendOrderConfirmation(phone, name, publicCode, grandTotal, currency));
-                runAfterCommit(() -> whatsAppService.sendOrderConfirmation(phone, name, publicCode));
+                runAfterCommit(() -> whatsAppService.sendOrderConfirmation(phone, name, publicCode, grandTotal, currency));
+                phoneQueued = true;
+            } else {
+                // The single most likely reason a customer never receives the WhatsApp/SMS order
+                // confirmation: no phone on the account (Google sign-ups, email-only registration).
+                log.warn("[ORDER][PAID][SKIP] No phone on customer — order confirmation WhatsApp/SMS not sent: orderId={}, customerId={}",
+                        o.getId(), cust.getId());
             }
+        } else {
+            log.warn("[ORDER][PAID][SKIP] Customer not found — no order confirmation sent at all: orderId={}, customerId={}",
+                    o.getId(), o.getCustomerId());
         }
-        log.info("[ORDER][PAID] Paid order created and confirmation sent: orderId={}, customerId={}", o.getId(), o.getCustomerId());
+        // Report what was actually queued rather than asserting "confirmation sent" unconditionally,
+        // which made a silent skip indistinguishable from a successful send in the logs.
+        log.info("[ORDER][PAID] Paid order created: orderId={}, customerId={}, emailQueued={}, whatsappSmsQueued={}",
+                o.getId(), o.getCustomerId(), emailQueued, phoneQueued);
         return o;
     }
 
@@ -345,7 +362,7 @@ public class OrderService {
                     publicCode = order.getPublicCode(), currency = order.getCurrency();
             final BigDecimal grandTotal = order.getGrandTotal();
             runAfterCommit(() -> smsService.sendOrderConfirmation(phone, name, publicCode, grandTotal, currency));
-            runAfterCommit(() -> whatsAppService.sendOrderConfirmation(phone, name, publicCode));
+            runAfterCommit(() -> whatsAppService.sendOrderConfirmation(phone, name, publicCode, grandTotal, currency));
         }
         return order;
     }
