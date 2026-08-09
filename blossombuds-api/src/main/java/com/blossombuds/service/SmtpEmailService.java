@@ -65,8 +65,13 @@ public class SmtpEmailService implements EmailService {
     private static final Pattern IMG_MARKER = Pattern.compile("\\{\\{IMG\\|([^}]+)}}");
 
     // Marker: {{A|Label|URL}}  -> HTML: 🔗 Label (blue) ; Plain: just "Label"
-    // HTTP client reused for all calls
-    private final HttpClient httpClient = HttpClient.newHttpClient();
+    // HTTP client reused for all calls. A connect timeout is essential: these sends run
+    // synchronously on the request thread (order confirmation, registration OTP, etc.), so an
+    // unreachable/slow mail provider would otherwise hang the request until the OS TCP timeout
+    // (minutes) and, with enough of them, exhaust the Tomcat thread pool.
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(java.time.Duration.ofSeconds(10))
+            .build();
 
     @Value("${app.mail.apiUrl:https://api.resend.com/emails}")
     private String mailApiUrl;
@@ -439,6 +444,10 @@ public class SmtpEmailService implements EmailService {
                     .uri(URI.create(apiUrl))
                     .header("Authorization", "Bearer " + apiKey)
                     .header("Content-Type", "application/json")
+                    // Request timeout bounds the whole send; without it a slow provider blocks the
+                    // request thread indefinitely. On timeout this throws, is caught by callers, and
+                    // (for registration) the customer is still created — the OTP can be resent.
+                    .timeout(java.time.Duration.ofSeconds(20))
                     .POST(HttpRequest.BodyPublishers.ofString(json))
                     .build();
 

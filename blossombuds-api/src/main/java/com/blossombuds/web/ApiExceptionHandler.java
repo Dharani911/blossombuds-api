@@ -104,7 +104,14 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<?> handleConflict(DataIntegrityViolationException ex, HttpServletRequest req) {
-        return build(HttpStatus.CONFLICT, "Conflict / integrity constraint", req, null);
+        // Most common cause on public endpoints is a duplicate email/phone that slipped past the
+        // service-level pre-check (e.g. a legacy phone stored in a different format). Give the user
+        // an actionable message instead of the raw constraint text. Full detail is logged.
+        log.warn("Data integrity violation at {} {}: {}", req.getMethod(), req.getRequestURI(),
+                ex.getMostSpecificCause() != null ? ex.getMostSpecificCause().getMessage() : ex.getMessage());
+        return build(HttpStatus.CONFLICT,
+                "This appears to already exist — for example an email or phone number that is already registered. Please try logging in, or use different details.",
+                req, null);
     }
 
     /* ---------- 500 fallback ---------- */
