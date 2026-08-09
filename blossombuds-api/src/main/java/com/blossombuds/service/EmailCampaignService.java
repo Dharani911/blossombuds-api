@@ -45,6 +45,16 @@ public class EmailCampaignService {
     @org.springframework.beans.factory.annotation.Value("${app.backend.baseUrl}")
     private String unsubscribeBaseUrl;
 
+    /**
+     * Runaway guard only: the largest single campaign the app will attempt, purely to stop an
+     * accidental mass send. A campaign always sends to its <b>entire</b> audience — this never trims.
+     * Set well above the real audience (a festive blast to the full no-phone list is ~3,300), so it
+     * does not block legitimate campaigns; the actual delivery limit is the mail provider's quota,
+     * not this. Configurable via {@code mail.marketing.max-recipients}; default 10,000.
+     */
+    @org.springframework.beans.factory.annotation.Value("${mail.marketing.max-recipients:10000}")
+    private int marketingMaxRecipients;
+
     /** Pacing between sends — Resend and most HTTP mail providers rate-limit; a small fixed
      *  delay avoids bursting the request thread. Not needed for the sub-100 recipient campaigns
      *  this audience rule typically produces, but cheap insurance if the phone-less segment grows. */
@@ -93,6 +103,12 @@ public class EmailCampaignService {
      * real people who would receive an email campaign — unlike a cumulative sum of past sends,
      * which double-counts anyone mailed more than once.
      */
+    /** The per-campaign recipient safety ceiling (see {@link #marketingMaxRecipients}). Shown on
+     *  the dashboard so an operator can see the audience against the cap before sending. */
+    public int maxRecipientsPerCampaign() {
+        return marketingMaxRecipients;
+    }
+
     @Transactional(readOnly = true)
     public long countAudience() {
         Set<Long> unsubscribedCustomerIds = preferenceRepository.findByUnsubscribedTrue()
@@ -185,6 +201,18 @@ public class EmailCampaignService {
             campaign.setCompletedAt(OffsetDateTime.now());
             campaign.setModifiedAt(OffsetDateTime.now());
             return campaignRepository.save(campaign);
+        }
+
+        // Safety ceiling only: a campaign always sends to its FULL audience. This blocks a single
+        // campaign that is abnormally large (a likely accidental mass send) without ever trimming a
+        // normal send. At this business's scale the email audience is well under the cap.
+        if (recipients.size() > marketingMaxRecipients) {
+            log.warn("[EMAIL][CAMPAIGN][SEND] Above safety cap | campaignId={} recipients={} cap={}",
+                    campaignId, recipients.size(), marketingMaxRecipients);
+            throw new IllegalArgumentException(
+                    "This campaign has " + recipients.size() + " recipients, above the safety cap of " +
+                    marketingMaxRecipients + " per campaign. Sending is blocked to prevent an accidental " +
+                    "mass send. Raise mail.marketing.max-recipients if this is intentional.");
         }
 
         campaign.setStatus("SENDING");

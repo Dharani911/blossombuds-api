@@ -404,6 +404,24 @@ async function handleDisablePreference(id: number) {
           <StatCard label="Messages sent" value={stats.sent} />
           <StatCard label="Failed" value={stats.failed} danger />
         </section>
+
+        {/* A campaign always sends to the full email audience. The cap is only a safety ceiling
+            against an accidental mass send; we warn only in the rare case the audience exceeds it. */}
+        {audience && (
+          <p
+            style={{
+              margin: "10px 2px 0",
+              fontSize: 13,
+              color: audience.emailAudience > audience.emailCampaignCap ? "#b45309" : "#6b7280",
+            }}
+          >
+            Campaigns send to all <strong>{audience.emailAudience}</strong> in the email audience
+            {" "}(safety cap {audience.emailCampaignCap} per campaign)
+            {audience.emailAudience > audience.emailCampaignCap && (
+              <> — this audience exceeds the cap, so the send will be blocked. Raise the cap if intentional.</>
+            )}
+          </p>
+        )}
         {/* Connection health. The four underlying settings are developer concerns — an operator
             only needs to know whether they can send, so the detail is collapsed behind a toggle
             and only surfaces by default when something is actually wrong. */}
@@ -515,14 +533,19 @@ async function handleDisablePreference(id: number) {
               </p>
 
               {audienceType === "ALL_OPTED_IN" && (
-                <label className="whatsapp-audience-hint" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                <label
+                  className="whatsapp-audience-hint"
+                  style={{ display: "flex", alignItems: "center", gap: 8, cursor: "not-allowed", opacity: 0.55 }}
+                  title="Email sending is being switched to a new provider — available again shortly."
+                >
                   <input
                     type="checkbox"
-                    checked={alsoEmailPhoneless}
-                    onChange={(e) => setAlsoEmailPhoneless(e.target.checked)}
+                    checked={false}
+                    disabled
+                    readOnly
                   />
                   Also send this offer by email to customers with no phone number on file
-                  (auto-sent when you send this campaign — no separate step).
+                  {" "}<em>(temporarily unavailable — email sending is being set up)</em>
                 </label>
               )}
 

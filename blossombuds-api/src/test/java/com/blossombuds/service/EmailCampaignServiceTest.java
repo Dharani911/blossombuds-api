@@ -35,6 +35,9 @@ class EmailCampaignServiceTest {
                 campaignRepository, recipientRepository,
                 preferenceRepository, customerRepository, emailService);
         ReflectionTestUtils.setField(service, "unsubscribeBaseUrl", "https://api.blossombuds.com");
+        // Ample default cap so existing send tests aren't blocked by the safety ceiling;
+        // the cap-specific test below overrides this.
+        ReflectionTestUtils.setField(service, "marketingMaxRecipients", 100000);
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -71,6 +74,46 @@ class EmailCampaignServiceTest {
         when(preferenceRepository.findByUnsubscribedTrue()).thenReturn(List.of());
 
         assertThat(service.countAudience()).isEqualTo(0L);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Per-campaign safety cap (campaigns always send to the full audience)
+    // ──────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void maxRecipientsPerCampaign_returnsConfiguredCap() {
+        ReflectionTestUtils.setField(service, "marketingMaxRecipients", 1000);
+        assertThat(service.maxRecipientsPerCampaign()).isEqualTo(1000);
+    }
+
+    @Test
+    void sendCampaign_refusesWhenAudienceExceedsSafetyCap() {
+        ReflectionTestUtils.setField(service, "marketingMaxRecipients", 1000);
+
+        EmailCampaign campaign = new EmailCampaign();
+        campaign.setId(5L);
+        campaign.setSubject("Sub");
+        campaign.setBodyText("Body");
+        when(campaignRepository.findByIdAndActiveTrue(5L)).thenReturn(Optional.of(campaign));
+
+        // 1001 recipients > cap 1000 → refuse (never a partial send)
+        List<EmailCampaignRecipient> pending = new java.util.ArrayList<>();
+        for (int i = 0; i < 1001; i++) {
+            EmailCampaignRecipient r = new EmailCampaignRecipient();
+            r.setId((long) i);
+            r.setEmail("c" + i + "@example.com");
+            r.setStatus("PENDING");
+            pending.add(r);
+        }
+        when(recipientRepository.findByCampaignIdAndStatusAndActiveTrueOrderByCreatedAtAsc(5L, "PENDING"))
+                .thenReturn(pending);
+
+        assertThatThrownBy(() -> service.sendCampaign(5L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("safety cap");
+
+        // Nothing was sent and the campaign was not marked SENDING.
+        verify(emailService, never()).sendMarketingEmailSync(anyString(), anyString(), anyString());
     }
 
     // ──────────────────────────────────────────────────────────────────────────

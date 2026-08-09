@@ -73,6 +73,19 @@ public class SmtpEmailService implements EmailService {
 
     @Value("${app.mail.apiKey:}")
     private String mailApiKey;
+
+    /**
+     * Optional SEPARATE provider account for MARKETING email. Point this at a different Resend
+     * account/key so a large campaign draws down its own quota and rate limit — order confirmations,
+     * OTPs, and status updates (which use {@link #mailApiKey}) then keep flowing no matter how big a
+     * campaign gets. Defaults to the main account when unset, i.e. a single-account setup behaves
+     * exactly as before.
+     */
+    @Value("${app.mail.marketing.apiUrl:${app.mail.apiUrl:https://api.resend.com/emails}}")
+    private String marketingApiUrl;
+
+    @Value("${app.mail.marketing.apiKey:${app.mail.apiKey:}}")
+    private String marketingApiKey;
     /**
      * Converts marker syntax to HTML. Must receive the raw (un-escaped) source — the marker
      * URLs are extracted here and only the label text is HTML-escaped. Calling escape() on the
@@ -392,12 +405,20 @@ public class SmtpEmailService implements EmailService {
     }
 
     /** Synchronous core sender shared by the fire-and-forget {@link #sendRichMasked} and by
-     *  {@link #sendMarketingEmailSync}, which needs the real outcome rather than a logged one. */
+     *  {@link #sendMarketingEmailSync}, which needs the real outcome rather than a logged one.
+     *  Uses the transactional provider account (order/OTP mail). */
     private EmailSendResult sendRichMaskedSync(String toEmail, String subject, String maskedBodyWithMarkers) {
+        return sendRichMaskedSync(toEmail, subject, maskedBodyWithMarkers, mailApiKey, mailApiUrl);
+    }
+
+    /** Core sender against a specific provider account, so marketing can be isolated from
+     *  transactional mail (see {@link #marketingApiKey}). */
+    private EmailSendResult sendRichMaskedSync(String toEmail, String subject, String maskedBodyWithMarkers,
+                                               String apiKey, String apiUrl) {
         String plainMasked = maskToPlain(maskedBodyWithMarkers);
 
-        if (mailApiKey == null || mailApiKey.isBlank()) {
-            log.error("[EMAIL][SEND] mailApiKey not configured – cannot send email to='{}'", toEmail);
+        if (apiKey == null || apiKey.isBlank()) {
+            log.error("[EMAIL][SEND] mail api key not configured – cannot send email to='{}'", toEmail);
             return EmailSendResult.failed("Email provider not configured");
         }
 
@@ -415,8 +436,8 @@ public class SmtpEmailService implements EmailService {
             String json = objectMapper.writeValueAsString(payload);
 
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(mailApiUrl))
-                    .header("Authorization", "Bearer " + mailApiKey)
+                    .uri(URI.create(apiUrl))
+                    .header("Authorization", "Bearer " + apiKey)
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(json))
                     .build();
@@ -442,7 +463,9 @@ public class SmtpEmailService implements EmailService {
 
     @Override
     public EmailSendResult sendMarketingEmailSync(String toEmail, String subject, String bodyWithMarkers) {
-        return sendRichMaskedSync(toEmail, subject, bodyWithMarkers);
+        // Marketing goes through the marketing provider account (falls back to the main account when
+        // not separately configured), so a large campaign never starves transactional email.
+        return sendRichMaskedSync(toEmail, subject, bodyWithMarkers, marketingApiKey, marketingApiUrl);
     }
 
 

@@ -223,13 +223,19 @@ public class AdminWhatsAppController {
     public AudienceSummaryResponse audienceSummary() {
         long whatsAppOptedIn = preferenceRepository.countByOptedInTrueAndActiveTrue();
         long emailAudience = emailCampaignService.countAudience();
-        return new AudienceSummaryResponse(whatsAppOptedIn, emailAudience);
+        int emailCampaignCap = emailCampaignService.maxRecipientsPerCampaign();
+        return new AudienceSummaryResponse(whatsAppOptedIn, emailAudience, emailCampaignCap);
     }
 
-    /** Distinct, de-duplicated audience sizes per channel (see {@link #audienceSummary()}). */
+    /**
+     * Distinct, de-duplicated audience sizes per channel (see {@link #audienceSummary()}), plus the
+     * per-campaign recipient safety cap ({@code emailCampaignCap}). A campaign always sends to its
+     * full audience; the cap only blocks an abnormally large send.
+     */
     public record AudienceSummaryResponse(
             long whatsAppOptedIn,
-            long emailAudience
+            long emailAudience,
+            int emailCampaignCap
     ) {}
 
     /** Imports a batch of external contacts, skipping registered customers and duplicates. */

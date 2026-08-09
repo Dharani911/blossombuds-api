@@ -101,6 +101,8 @@ export type CampaignAudienceSummary = {
   whatsAppOptedIn: number;
   /** Distinct customers eligible for the email fallback (no phone, has email), minus unsubscribed. */
   emailAudience: number;
+  /** Per-campaign recipient safety cap; a campaign always sends to its full audience below this. */
+  emailCampaignCap: number;
 };
 
 /** Fetches the distinct, de-duplicated audience size per channel for the dashboard header. */
